@@ -1,0 +1,1 @@
+Slor is an easy-to-use benchmarking tool for S3 storage systems.
