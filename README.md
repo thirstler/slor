@@ -1,1 +1,4 @@
-Slor is an easy-to-use benchmarking tool for S3 storage systems.
+Slor
+====
+
+Slor (S3 Load Ruler) is an easy-to-use benchmarking and load generation tool for S3 storage systems. 
