@@ -6,7 +6,8 @@ import time
 import json
 from shared import *
 
-class SlorControl():
+
+class SlorControl:
 
     config = None
     conn = []
@@ -19,48 +20,92 @@ class SlorControl():
             sys.stdout.write("{0}\n".format(message))
             sys.stdout.flush()
         else:
-            pass # fuck, I don't know...
-    
+            pass  # fuck, I don't know...
+
     def print_msg(self, message):
-        if not "message" in message: return False
-        print("{0}: {1}".format("unknown" if not "source" in message else message["source"], message["message"]))
+        if not "message" in message:
+            return False
+        print(
+            "{0}: {1}".format(
+                "unknown" if not "source" in message else message["source"],
+                message["message"],
+            )
+        )
 
     def connect_to_workers(self):
         ret_val = True
         for hostport in self.config["worker_list"]:
-            self.log("=== worker system '{0}:{1}' ===".format(hostport["host"], hostport["port"]))
+            self.log(
+                "=== worker system '{0}:{1}' ===".format(
+                    hostport["host"], hostport["port"]
+                )
+            )
             try:
-                self.conn.append(Client( (hostport["host"], hostport["port"])))
+                self.conn.append(Client((hostport["host"], hostport["port"])))
                 self.conn[-1].send({"command": "sysinfo"})
                 resp = self.conn[-1].recv()
                 self.log(self.check_worker_info(resp))
 
             except ConnectionRefusedError:
-                sys.stderr.write("  connection refused on {0}:{1}, exiting\n".format(hostport["host"], hostport["port"]))
+                sys.stderr.write(
+                    "  connection refused on {0}:{1}, exiting\n".format(
+                        hostport["host"], hostport["port"]
+                    )
+                )
                 ret_val = False
             except socket.timeout:
-                sys.stderr.write("  timeout connecting to {0}:{1}, exiting\n".format(hostport["host"], hostport["port"]))
+                sys.stderr.write(
+                    "  timeout connecting to {0}:{1}, exiting\n".format(
+                        hostport["host"], hostport["port"]
+                    )
+                )
                 ret_val = False
             except OSError as e:
-                sys.stderr.write("  {2} for {0}:{1}, exiting\n".format(hostport["host"], hostport["port"], e))
+                sys.stderr.write(
+                    "  {2} for {0}:{1}, exiting\n".format(
+                        hostport["host"], hostport["port"], e
+                    )
+                )
                 ret_val = False
             except Exception as e:
-                sys.stderr.write("  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(hostport["host"], hostport["port"], e))
+                sys.stderr.write(
+                    "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
+                        hostport["host"], hostport["port"], e
+                    )
+                )
                 ret_val = False
 
         return ret_val
 
-
     def check_worker_info(self, data):
         print("  Hostname: {0}".format(data["uname"].node))
-        print("  OS: {0} release {1}".format(data["uname"].system, data["uname"].release))
+        print(
+            "  OS: {0} release {1}".format(data["uname"].system, data["uname"].release)
+        )
         if data["slor_version"] != SLOR_VERSION:
-            print("  \033[1;31mwarning\033[0m: version mismatch; controller is {0} worker is {1}".format(SLOR_VERSION, data["slor_version"]))
+            print(
+                "  \033[1;31mwarning\033[0m: version mismatch; controller is {0} worker is {1}".format(
+                    SLOR_VERSION, data["slor_version"]
+                )
+            )
         if data["sysload"][0] >= 1:
-            print("  \033[1;31mwarning\033[0m: worker 1m sysload is > 1 ({0})".format(data["sysload"][0]))
+            print(
+                "  \033[1;31mwarning\033[0m: worker 1m sysload is > 1 ({0})".format(
+                    data["sysload"][0]
+                )
+            )
         for iface in data["net"]:
-            if (data["net"][iface].errin + data["net"][iface].errout + data["net"][iface].dropin +data["net"][iface].dropout) > 0:
-                print("  \033[1;31mwarning\033[0m: iface {0} has dropped packets or errors".format(iface))
+            if (
+                data["net"][iface].errin
+                + data["net"][iface].errout
+                + data["net"][iface].dropin
+                + data["net"][iface].dropout
+            ) > 0:
+                print(
+                    "  \033[1;31mwarning\033[0m: iface {0} has dropped packets or errors".format(
+                        iface
+                    )
+                )
 
     def exec(self):
 
@@ -82,7 +127,8 @@ class SlorControl():
         # Create the workloads
         for target in self.config["worker_list"]:
             stage_cfg = self.mk_stage(target, stage)
-            if stage_cfg: workloads.append(stage_cfg)
+            if stage_cfg:
+                workloads.append(stage_cfg)
             else:
                 return
 
@@ -91,7 +137,7 @@ class SlorControl():
             self.conn[i].send({"command": "workload", "config": workloads[i]})
 
         donestack = len(workloads)
-        
+
         while True:
 
             for i in range(0, len(workloads)):
@@ -106,13 +152,12 @@ class SlorControl():
 
                     except EOFError:
                         pass
-            
+
             if donestack == 0:
                 print("all threads done?")
                 break
 
             time.sleep(0.1)
-
 
     def mk_stage(self, target, stage):
 
@@ -130,9 +175,12 @@ class SlorControl():
                 "region": self.config["region"],
                 "run_time": self.config["run_time"],
                 "sz_range": self.config["sz_range"],
-                "prepare_sz": int(self.config["ttl_prepare_sz"] / len(self.config["worker_list"]))
+                "prepare_sz": int(
+                    self.config["ttl_prepare_sz"] / len(self.config["worker_list"])
+                ),
             }
         return config
+
 
 ###############################################################################
 ###############################################################################
@@ -140,19 +188,19 @@ class SlorControl():
 ##
 def calc_prepare_size(sizerange, runtime, iops):
     if len(sizerange) > 1:
-        avgsz = ((sizerange[1] - sizerange[0])/2) + sizerange[0]
+        avgsz = ((sizerange[1] - sizerange[0]) / 2) + sizerange[0]
     else:
         avgsz = sizerange[0]
 
-    return(avgsz * iops * runtime)
+    return avgsz * iops * runtime
 
 
 def parse_size_range(stringval):
-    
+
     if not "-" in stringval:
         sz = parse_size(stringval)
-        return( (sz,sz,sz) )
-    
+        return (sz, sz, sz)
+
     else:
         vals = stringval.split("-")
         low = int(parse_size(vals[0].strip()))
@@ -176,14 +224,14 @@ def parse_worker_list(stringval):
 
 def generate_tasks(args):
 
-    choose_any = ("read" "write" "delete" "head" "mixed")
+    choose_any = "read" "write" "delete" "head" "mixed"
     loads = tuple(args.loads.split(","))
     mix_prof_obj = {}
     for l in loads:
         if l not in choose_any:
-            sys.stderr.write("\"{0}\" is not a load option\n".format(l))
+            sys.stderr.write('"{0}" is not a load option\n'.format(l))
             sys.exit(1)
-    
+
     if "mixed" in loads:
         perc = 0
         mix_prof_obj = json.loads(args.mix_profile)
@@ -192,16 +240,23 @@ def generate_tasks(args):
         if perc != 100:
             sys.stderr.write("your mixed load profile vaules don't equal 100\n")
             sys.exit(1)
-    
+
     # Arrange the load order
     actions = ()
-    if len(loads) == 1 and  "write" in loads: pass
-    else: actions += ("prepare",)
-    if "write" in loads: actions += ("write",)
-    if "read" in loads: actions += ("blowout", "read")
-    if "head" in loads: actions += ("head",)
-    if "mixed" in loads: actions += ("blowout", "mixed")
-    if "delete" in loads: actions += ("delete",) # debateable, might want cache overwritten as well?
+    if len(loads) == 1 and "write" in loads:
+        pass
+    else:
+        actions += ("prepare",)
+    if "write" in loads:
+        actions += ("write",)
+    if "read" in loads:
+        actions += ("blowout", "read")
+    if "head" in loads:
+        actions += ("head",)
+    if "mixed" in loads:
+        actions += ("blowout", "mixed")
+    if "delete" in loads:
+        actions += ("delete",)  # debateable, might want cache overwritten as well?
 
     return {"loadorder": actions, "mixed_profile": mix_prof_obj}
 
@@ -210,7 +265,7 @@ def run():
     parser = argparse.ArgumentParser(
         description="Slor (S3 Load Ruler) is a distributed load generation and benchmarking tool for S3 storage"
     )
-    parser.add_argument("controller") # Make argparse happy
+    parser.add_argument("controller")  # Make argparse happy
     parser.add_argument(
         "--bucket-prefix",
         default=DEFAULT_BUCKET_PREFIX,
@@ -248,32 +303,36 @@ def run():
         default=DEFAULT_SESSION_COUNT,
         help="number of simultanious HTTP sessions per worker - num_workers * num_threads will equal total thread count (defaults to {0})".format(
             DEFAULT_SESSION_COUNT
-        )
+        ),
     )
     parser.add_argument(
         "--cachemem-size",
         default="0",
-        help="total amount of memory available in the target cluster for page cache and read caches; post-prepare stage will write this value to overwhelm caches for a cold read stage"
+        help="total amount of memory available in the target cluster for page cache and read caches; post-prepare stage will write this value to overwhelm caches for a cold read stage",
     )
     parser.add_argument(
         "--iop-limit",
         default=DEFAULT_UPPER_IOP_LIMIT,
-        help="maximum expected IOP/s value that you can expect to hit given the workload; needed to determine the size of the prepare data given the load run-time"
+        help="maximum expected IOP/s value that you can expect to hit given the workload; needed to determine the size of the prepare data given the load run-time",
     )
     parser.add_argument(
         "--loads",
         default=DEFAULT_TESTS,
-        help="specify the loads you want to run; any (or all) of read, write, delete, head, mixed"
+        help="specify the loads you want to run; any (or all) of read, write, delete, head, mixed",
     )
     parser.add_argument(
         "--mix-profile",
         default=DEFAULT_MIX_PROFILE,
-        help="profile of mixed load percentages in JASON format, eg: '{0}'".format(DEFAULT_MIX_PROFILE)
+        help="profile of mixed load percentages in JASON format, eg: '{0}'".format(
+            DEFAULT_MIX_PROFILE
+        ),
     )
     parser.add_argument(
         "--bucket-count",
         default=DEFAULT_BUCKET_COUNT,
-        help="number of buckets to distribute over, defaults to '{0}'".format(DEFAULT_BUCKET_COUNT)
+        help="number of buckets to distribute over, defaults to '{0}'".format(
+            DEFAULT_BUCKET_COUNT
+        ),
     )
     args = parser.parse_args()
 
@@ -291,8 +350,12 @@ def run():
         "worker_list": parse_worker_list(args.worker_list),
         "worker_thr": int(args.worker_threads),
         "ttl_sz_cache": parse_size(args.cachemem_size),
-        "ttl_prepare_sz": calc_prepare_size(parse_size_range(args.object_size), int(args.stage_time), int(args.iop_limit)),
-        "tasks": tasks
+        "ttl_prepare_sz": calc_prepare_size(
+            parse_size_range(args.object_size),
+            int(args.stage_time),
+            int(args.iop_limit),
+        ),
+        "tasks": tasks,
     }
 
     handle = SlorControl(root_config)
