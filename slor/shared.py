@@ -1,12 +1,11 @@
 import platform
 import psutil
 
-
 SLOR_VERSION = 0.1
 
 # Defaults
 DEFAULT_PROFILE_DEF = "default"
-DEFAULT_ENDPOINT = "https://s3.us-east-1.amazonaws.com"
+DEFAULT_ENDPOINT = "https://s3.amazonaws.com"
 DEFAULT_REGION = "us-east-1"
 DEFAULT_BUCKET_PREFIX = "slor-"
 DEFAULT_BENCH_LEN = "300"
@@ -35,13 +34,12 @@ WORKER_SOCKET_TIMEOUT = 300
 FORCE_VERSION_MATCH = True
 WORKER_REPORT_TIMER = 5
 WORKER_ROUTINE_TYPES = ("prepare", "read", "readwrite", "write", "mixed", "overrun")
+OBJECT_PREFIX_LOC = "keys"
 
 ###############################################################################
 ###############################################################################
 ## Shared routines
 ##
-
-
 def parse_size(stringval):
     pwr = 10
     sipwr = 3

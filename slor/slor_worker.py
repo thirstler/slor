@@ -8,46 +8,15 @@ from shared import *
 import signal
 import boto3
 import random
+from prepare import SlorPrepare
 
-###############################################################################
-###############################################################################
-## Worker routines
-##
-
-
+# wraper function for starting worker processes
 def worker_t(socket, config, id):
     """
     Multi-processed entry
     """
-    wc = SlorWorklett(socket, config, id)
-    wc.exec()
-
-
-class SlorWorklett:
-
-    sock = None
-    config = None
-    id = None
-
-    def __init__(self, socket, config, id):
-        self.sock = socket
-        self.id = id
-        try:
-            config["prepare_sz"] = (config["prepare_sz"] / config["threads"]) + 1
-        except:
-            pass  # whatever
-        self.config = config
-
-    def exec(self):
-
-        if self.config["type"] == "prepare":
-            self.prepare()
-
-    def prepare(self):
-        # s3 = boto3.client('s3')
-        # data = random.randbytes(range(self.config["sz_range"][0], self.config["sz_range"][1]))
-
-        print(len(self.config["mapslice"]))
+    if config["type"] == "prepare":
+        wc = SlorPrepare(socket, config, id).exec()
 
 
 class SlorWorkerHandle:
@@ -75,7 +44,9 @@ class SlorWorkerHandle:
         self.sysinf = basic_sysinfo()
 
         while True:
+
             while self.sock.poll():
+
                 cmd_buffer = self.sock.recv()
 
                 # Everything should be commands at this point
@@ -89,6 +60,43 @@ class SlorWorkerHandle:
         # loops and whatever else are done. Close shop.
         self.sock.close()
 
+
+    def init_buckets(self, config):
+        '''
+        Not sure this belongs here but only one worker needs to setup buckets
+        and no worker threads are necessary to execute it. Loading up boto3
+        just for this is annoying, but whatever.
+        '''
+        retval = True
+        if config["verify"] == True: verify_tls=True
+        elif config["verify"].to_lower() == 'false':  verify_tls=False
+        else: verify_tls=config["verify"]
+
+        client = boto3.Session(
+            aws_access_key_id=config["access_key"],
+            aws_secret_access_key=config["secret_key"],
+            region_name=config["region"]
+        ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
+
+        for b in range(0, int(config["bucket_count"])):
+            bn = "{0}{1}".format(config["bucket_prefix"], b)
+            try: 
+                client.head_bucket(Bucket=bn)
+                print("present: {0}".format(bn))
+            except:
+                print("creating {0}".format(bn))
+                try:
+                    client.create_bucket(
+                        Bucket=bn,
+                        CreateBucketConfiguration={
+                            'LocationConstraint': config["region"]
+                        }
+                    )
+                except:
+                    retval = False
+        return retval
+
+
     def mk_read_map(self, config):
 
         objcount = int(config["prepare_sz"] / config["sz_range"][2]) + 1
@@ -96,12 +104,18 @@ class SlorWorkerHandle:
         self.log_to_controller("building readmap ({0} objects)".format(objcount))
 
         for z in range(0, objcount):
-            self.readmap.append((uuid.uuid4(), False))
+            self.readmap.append(("{0}{1}".format(config["bucket_prefix"], random.randrange(0, config["bucket_count"])), "{0}/{1}".format(OBJECT_PREFIX_LOC, str(uuid.uuid4()), False)))
 
         # to make things simple
         self.log_to_controller("done building readmap")
 
         return config
+
+
+    def message_handler(self, message):
+        message["w_id"] = self.sysinf["uname"].node
+        self.sock.send(message)
+
 
     def process_control(self, config):
 
@@ -139,8 +153,7 @@ class SlorWorkerHandle:
             # scan for messages
             for t in self.pipes:
                 while t[0].poll():
-                    # Relay back to the controller
-                    self.log_to_controller(t[0].recv())
+                    self.message_handler(t[0].recv())
 
             if running == False:
                 break
@@ -184,8 +197,12 @@ class SlorWorkerHandle:
             inf_msg["status"] = "done"
             self.sock.send(inf_msg)
             return
+        elif cmd_buffer["command"] == "init":
+            if self.init_buckets(cmd_buffer["config"]):
+                self.sock.send({"message": "bucket(s) initialized", "source": self.sysinf["uname"].node})
+            else:
+                self.sock.send({"error": True, "message": "failed to initialize buckets", "source": self.sysinf["uname"].node})
         elif cmd_buffer["command"] == "workload":
-            print(cmd_buffer)
             self.workload_director(cmd_buffer)
 
     def log_to_controller(self, message):

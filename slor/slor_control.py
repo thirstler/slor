@@ -22,16 +22,6 @@ class SlorControl:
         else:
             pass  # fuck, I don't know...
 
-    def print_msg(self, message):
-        if not "message" in message:
-            return False
-        print(
-            "{0}: {1}".format(
-                "unknown" if not "source" in message else message["source"],
-                message["message"],
-            )
-        )
-
     def connect_to_workers(self):
         ret_val = True
         for hostport in self.config["worker_list"]:
@@ -132,6 +122,15 @@ class SlorControl:
             else:
                 return
 
+        # initialze buckets using the first worker, also functions as a 
+        # quick test
+        self.conn[0].send({"command": "init", "config": workloads[0]})
+        if self.conn[0].poll(60):
+            self.conn[0].recv()
+        else:
+            sys.stderr.write("timout waiting for buckets to initilize.\n")
+            sys.exit(1)
+
         # Send to hosts
         for i in range(0, len(workloads)):
             self.conn[i].send({"command": "workload", "config": workloads[i]})
@@ -145,10 +144,7 @@ class SlorControl:
                     try:
                         mesg = self.conn[i].recv()
 
-                        if "status" in mesg and mesg["status"] == "done":
-                            donestack -= 1
-                        if "message" in mesg:
-                            self.print_msg(mesg)
+                        print(mesg)
 
                     except EOFError:
                         pass
@@ -171,9 +167,11 @@ class SlorControl:
                 "access_key": self.config["access_key"],
                 "secret_key": self.config["secret_key"],
                 "endpoint": self.config["endpoint"],
-                "ca": self.config["ca"],
+                "verify": self.config["verify"],
                 "region": self.config["region"],
                 "run_time": self.config["run_time"],
+                "bucket_count": self.config["bucket_count"],
+                "bucket_prefix": self.config["bucket_prefix"],
                 "sz_range": self.config["sz_range"],
                 "prepare_sz": int(
                     self.config["ttl_prepare_sz"] / len(self.config["worker_list"])
@@ -275,7 +273,11 @@ def run():
     )
     parser.add_argument("--profile", default=DEFAULT_PROFILE_DEF)
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
-    parser.add_argument("--ca-bundle", default=False)
+    parser.add_argument(
+        "--verify",
+        default=True,
+        help='verify HTTPS certs, defaults to "true"; set to "false" or a path to a CA bundle (bundle needs to be present on all worker hosts',
+    )
     parser.add_argument("--region", default=DEFAULT_REGION)
     parser.add_argument("--access-key", required=True)
     parser.add_argument("--secret-key", required=True)
@@ -342,11 +344,12 @@ def run():
         "access_key": args.access_key,
         "secret_key": args.secret_key,
         "endpoint": args.endpoint,
-        "ca": args.ca_bundle,
+        "verify": args.verify,
         "region": args.region,
         "sz_range": parse_size_range(args.object_size),
         "run_time": int(args.stage_time),
-        "bucket_count": args.bucket_count,
+        "bucket_count": int(args.bucket_count),
+        "bucket_prefix": args.bucket_prefix,
         "worker_list": parse_worker_list(args.worker_list),
         "worker_thr": int(args.worker_threads),
         "ttl_sz_cache": parse_size(args.cachemem_size),
