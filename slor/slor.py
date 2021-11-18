@@ -12,12 +12,14 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if sys.argv[1] == "controller":
-        import slor_control
-        slor_control.run()
-        
+        import control
+
+        control.run()
+
     elif sys.argv[1] == "worker":
-        import slor_worker
-        slor_worker.run()
+        import worker
+
+        worker.run()
 
     else:
         sys.stderr.write(ROOT_HELP)
