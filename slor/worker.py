@@ -91,33 +91,33 @@ class SlorWorkerHandle:
             verify_tls = False
         else:
             verify_tls = config["verify"]
-
+        
         if config["endpoint"][-13:] == "amazonaws.com":
-            # Use the regional endpoint for AWS to determine location
             client = boto3.Session(
                 aws_access_key_id=config["access_key"],
                 aws_secret_access_key=config["secret_key"],
-            ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
+                region_name=config["region"],
+            ).client("s3", verify=verify_tls)
+            for bn in config["bucket_list"]:
+                try:
+                    client.head_bucket(Bucket=bn)
+                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                except:
+                    client.create_bucket(Bucket=bn)
+
         else:
-            # Use the regional endpoint for AWS
             client = boto3.Session(
                 aws_access_key_id=config["access_key"],
                 aws_secret_access_key=config["secret_key"],
                 region_name=config["region"],
             ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
 
-        for bn in config["bucket_list"]:
-
-            # Barf, head_bucket() raises an expection when it's something other
-            # than a 200.
-            try:
-                client.head_bucket(Bucket=bn)
-                self.log_to_controller("Warning: bucket present ({0})".format(bn))
-            except:
-                self.log_to_controller("creating {0}".format(bn))
-                if config["endpoint"][-13:] == "amazonaws.com":
-                    client.create_bucket(Bucket=bn)
-                else:
+            for bn in config["bucket_list"]:
+                try:
+                    client.head_bucket(Bucket=bn)
+                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                except:
+                    self.log_to_controller("creating {0}".format(bn))
                     client.create_bucket(
                         Bucket=bn,
                         CreateBucketConfiguration={
@@ -126,7 +126,7 @@ class SlorWorkerHandle:
                     )
 
     def log_to_controller(self, message):
-        """If the message is a simple string just console log it"""
+        """If the message is a string then it will be echoed to the console on the controller"""
         if type(message) is str:
             message = {"message": message}
         message["w_id"] = self.sysinf["uname"].node

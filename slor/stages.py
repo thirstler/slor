@@ -48,7 +48,6 @@ class SlorRead(SlorProcess):
                         key="read",
                         data_type="timers",
                         value=self.timing_data,
-                        label="read times",
                         time_ms=int(td["finish"] * 1000),
                     )
                     self.timing_data.clear()
@@ -98,18 +97,17 @@ class SlorWrite(SlorProcess):
             td = {"t_id": self.id, "start": time.time()}
             try:
                 data = self.put_object(
-                    "{0}{0}".format(
+                    "{0}{1}".format(
                         self.config["bucket_prefix"],
-                        random.randint(0, self.config["bucket_count"]),
+                        random.randint(0, (self.config["bucket_count"]-1))
                     ),
                     "{0}/{1}".format(DEFAULT_WRITE_PREFIX, str(uuid.uuid4())),
                     body_data,
                 )
                 td["status"] = "success"
             except Exception as e:
-                # No need to retry, log failure and move on
                 td["status"] = "failed"
-                sys.stderr.write(str(e))
+                sys.stderr.write("{0}\n".format(str(e)))
             tm = td["finish"] = time.time()
             self.timing_data.append(td)
             count_ttl += 1
@@ -122,7 +120,6 @@ class SlorWrite(SlorProcess):
                     key="write",
                     data_type="timers",
                     value=self.timing_data,
-                    label="write times",
                     time_ms=int(td["finish"] * 1000),
                 )
                 self.timing_data.clear()
@@ -213,19 +210,20 @@ class SlorPrepare(SlorProcess):
             for i in range(0, PREPARE_RETRIES):
                 try:
                     self.put_object(skey[0], skey[1], body_data)
+                    break
                 except Exception as e:
                     sys.stderr.write("retry: {0}".format(str(e)))
                     continue
-                break
+                sys.stderr.write("ERROR: object failed to write: {0}/{0}".format(skey[0], skey[1]))
+                
 
             # Report-in every now and then
             if (nownow - tm) >= WORKER_REPORT_TIMER or count == maplen:
                 self.msg_to_worker(
                     type="stat",
-                    key="prepare_complete",
+                    key="prepare",
                     data_type="counter",
                     value=count,
-                    label="objects complete",
                     time_ms=int(nownow * 1000),
                 )
                 tm = nownow

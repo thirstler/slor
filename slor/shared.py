@@ -39,6 +39,8 @@ WORKER_REPORT_TIMER = 5  # seconds
 WORKER_ROUTINE_TYPES = ("prepare", "read", "readwrite", "write", "mixed", "overrun")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
+SHOW_STATS_EVERY = 5
+STATS_DB_DIR = "/dev/shm"
 
 ###############################################################################
 ###############################################################################
@@ -88,7 +90,7 @@ def basic_sysinfo():
     }
 
 
-def get_profile(profile):
+def get_keys(profile):
     """
     Just open the ~/.aws/credentials file and get the creds, this is
     easier than digging around in boto3
@@ -96,18 +98,19 @@ def get_profile(profile):
     config = configparser.ConfigParser()
     config.read("{0}/.aws/credentials".format(os.environ["HOME"]))
 
-    if (
+    if profile not in config or (
         "aws_access_key_id" not in config[profile]
         or "aws_secret_access_key" not in config[profile]
     ):
-        # Environment?
+        # Environment? Grab it here 
         access_key = os.environ.get("AWS_ACCESS_KEY_ID")
         secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
         if access_key is None or secret_key is None:
-            sys.stderr.write("Boned: no access/secret keys found\n")
+            sys.stderr.write("Nope: no access/secret keys found\n")
             return ("", "")
     else:
         access_key = config[profile]["aws_access_key_id"]
         secret_key = config[profile]["aws_secret_access_key"]
+        
 
     return (access_key, secret_key)
