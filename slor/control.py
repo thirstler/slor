@@ -69,16 +69,16 @@ def generate_tasks(args):
         actions += ("write",)
     else:
         actions += ("prepare",)
-    if "write" in loads:
-        actions += ("write",)
-    if "read" in loads:
-        actions += ("blowout", "read")
-    if "head" in loads:
-        actions += ("head",)
-    if "mixed" in loads:
-        actions += ("blowout", "mixed")
-    if "delete" in loads:
-        actions += ("delete",)  # debateable, might want cache overwritten as well?
+        if "write" in loads:
+            actions += ("write",)
+        if "read" in loads:
+            actions += ("blowout", "read")
+        if "head" in loads:
+            actions += ("head",)
+        if "mixed" in loads:
+            actions += ("blowout", "mixed")
+        if "delete" in loads:
+            actions += ("delete",)  # debateable, might want cache overwritten as well?
 
     return {"loadorder": actions, "mixed_profile": mix_prof_obj}
 
@@ -88,6 +88,9 @@ def run():
         description="Slor (S3 Load Ruler) is a distributed load generation and benchmarking tool for S3 storage"
     )
     parser.add_argument("controller")  # Make argparse happy
+    parser.add_argument(
+        "--verbose", action="store_true", default=False, help="verbose output"
+    )
     parser.add_argument(
         "--name", default="generic", help="name for this workload/benchmark"
     )
@@ -116,6 +119,13 @@ def run():
         ),
     )
     parser.add_argument(
+        "--key-length",
+        default=DEFAULT_KEY_LENGTH,
+        help="key length(s) to use, can be single number or range (e.g. 10,50) - defaults to {0}".format(
+            DEFAULT_KEY_LENGTH
+        ),
+    )
+    parser.add_argument(
         "--object-size",
         default=DEFAULT_OBJECT_SIZE,
         help="object size to use; accepts values with common suffixes (1MB, 1MiB) and ranges (1KB-12MiB) - defaults to {0}".format(
@@ -124,7 +134,7 @@ def run():
     )
     parser.add_argument(
         "--worker-list",
-        default=DEFAULT_WORKER_LIST,
+        required=True,
         help="comma-delimited list of running worker hosts (in host:port format); 9256 is assumed if port is excluded",
     )
     parser.add_argument(
@@ -169,20 +179,28 @@ def run():
     if not args.access_key and not args.secret_key:
         args.access_key, args.secret_key = get_keys(args.profile)
 
-    # Must be AWS if no endpoint is given, to keep the boto3 easy we need to
+    # Must be AWS if no endpoint is given, to keep boto3 easy we should
     # construct the AWS endpoint explicitly.
     if args.endpoint == "":
         args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
+
+    key_sz = args.key_length.split(",")
+    if len(key_sz) == 1:
+        key_sz = (int(key_sz[0]), int(key_sz[0]))
+    else:
+        key_sz = (int(key_sz[0]), int(key_sz[1]))
 
     tasks = generate_tasks(args)
 
     root_config = {
         "name": args.name,
+        "verbose": args.verbose,
         "access_key": args.access_key,
         "secret_key": args.secret_key,
         "endpoint": args.endpoint,
         "verify": args.verify,
         "region": args.region,
+        "key_sz": key_sz,
         "sz_range": parse_size_range(args.object_size),
         "run_time": int(args.stage_time),
         "bucket_count": int(args.bucket_count),

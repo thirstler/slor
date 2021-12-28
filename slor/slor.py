@@ -5,13 +5,10 @@ from shared import *
 
 if __name__ == "__main__":
 
-    try:
-        sys.argv[1]
-    except:
+    if len(sys.argv) < 2:
         sys.stderr.write(ROOT_HELP)
-        sys.exit(1)
 
-    if sys.argv[1] == "controller":
+    elif sys.argv[1] == "controller":
         import control
 
         control.run()

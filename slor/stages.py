@@ -2,10 +2,10 @@ from process import SlorProcess
 from shared import *
 import random
 import time
-import uuid
-
+import os
 
 class SlorRead(SlorProcess):
+
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
@@ -14,45 +14,15 @@ class SlorRead(SlorProcess):
     def exec(self):
 
         self.set_s3_client(self.config)
-
-        start = tm = time.time()
-        stop = start + self.config["run_time"]
-        count_ttl = 0
+        self.start_benchmark()
+        self.start_sample()
+        stop = False
         rerun = 0
 
+        # Wrap-around when out of keys to read
         while True:
 
-            if tm >= stop: break
-
-            for i, pkey in enumerate(self.config["mapslice"]):
-
-                ##
-                # Execute the GET and gather timing 
-                td = {"t_id": self.id, "start": time.time()}
-                try:
-                    data = self.get_object(pkey[0], pkey[1])
-                    td["status"] = "success"
-                except Exception as e:
-                    # No need to retry, log failure and move on
-                    td["status"] = "failed"
-                    sys.stderr.write(str(e))
-                tm = td["finish"] = time.time()
-                self.timing_data.append(td)
-                count_ttl += 1
-
-                ##
-                # Log the GETs if it's time or if out of time
-                if (td["finish"] - tm) >= WORKER_REPORT_TIMER or tm >= stop:
-                    self.msg_to_worker(
-                        type="stat",
-                        key="read",
-                        data_type="timers",
-                        value=self.timing_data,
-                        time_ms=int(td["finish"] * 1000),
-                    )
-                    self.timing_data.clear()
-                    if tm >= stop: break
-
+            if stop: break
 
             if rerun > 0:
                 self.msg_to_worker(
@@ -60,7 +30,35 @@ class SlorRead(SlorProcess):
                         rerun
                     )
                 )
+
+            for i, pkey in enumerate(self.config["mapslice"]):
+
+                self.nownow = time.time()
+                try:
+                    self.start_io()
+                    self.get_object(pkey[0], pkey[1])
+                    self.stop_io()
+
+                except Exception as e:
+                    sys.stderr.write("retry: {0}".format(str(e)))
+                    self.fail_count += 1
+                    continue
+                
+                if self.nownow >= self.benchmark_stop:
+                    self.stop_sample()
+                    self.stop_benchmark()
+                    self.log_stats(final=True)
+                    stop = True
+                    break
+
+                elif (self.nownow - self.sample_start) >= WORKER_REPORT_TIMER:
+
+                    self.stop_sample()
+                    self.log_stats()
+                    self.start_sample()
+
             rerun += 1
+
 
 class SlorWrite(SlorProcess):
 
@@ -77,53 +75,53 @@ class SlorWrite(SlorProcess):
 
         start = tm = time.time()
         stop = start + self.config["run_time"]
-        count_ttl = 0
-        rerun = 0
 
-        junk = random.randbytes(int(szrange[1]))
-        
+        junk = bytearray(os.urandom(int(szrange[1])))
+
         while True:
 
-            if tm >= stop: break
+            if tm >= stop:
+                break
 
             body_data = (
-                junk[:random.randint(int(szrange[0]), int(szrange[1]))]
+                junk[: random.randint(int(szrange[0]), int(szrange[1]))]
                 if is_rand_range
                 else junk
             )
 
             ##
-            # Execute the PUT and gather timing 
-            td = {"t_id": self.id, "start": time.time()}
+            # Execute the PUT and gather timing
+            td = {"start": time.time()}
             try:
                 data = self.put_object(
                     "{0}{1}".format(
                         self.config["bucket_prefix"],
-                        random.randint(0, (self.config["bucket_count"]-1))
+                        random.randint(0, (self.config["bucket_count"] - 1)),
                     ),
-                    "{0}/{1}".format(DEFAULT_WRITE_PREFIX, str(uuid.uuid4())),
+                    gen_key(
+                        key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX
+                    ),
                     body_data,
                 )
-                td["status"] = "success"
+                td["status"] = True
             except Exception as e:
-                td["status"] = "failed"
+                td["status"] = False
                 sys.stderr.write("{0}\n".format(str(e)))
             tm = td["finish"] = time.time()
             self.timing_data.append(td)
-            count_ttl += 1
 
             ##
             # Log the PUTs if it's time or if out of time
             if (td["finish"] - tm) >= WORKER_REPORT_TIMER or tm >= stop:
-                self.msg_to_worker(
-                    type="stat",
-                    key="write",
-                    data_type="timers",
-                    value=self.timing_data,
-                    time_ms=int(td["finish"] * 1000),
-                )
+                ops_sec = self.assess_per_sec(self.timing_data)
+
+                self.msg_to_worker(type="stat", stage="write", value=ops_sec, time=tm)
                 self.timing_data.clear()
-                if tm >= stop: break
+                if tm >= stop:
+                    break
+
+    def process(self, td):
+        pass
 
 
 class SlorReadWrite(SlorProcess):
@@ -193,37 +191,49 @@ class SlorPrepare(SlorProcess):
         self.set_s3_client(self.config)
         szrange = self.config["sz_range"]
         is_rand_range = False if szrange[0] == szrange[1] else True
-        tm = time.time()
-        maplen = self.config["mapslice"]
+        maplen = len(self.config["mapslice"])
+
+        # Takes too much effort to generate random data on-the-fly, going to
+        # pull random offsets from a pool
+        pool = bytearray(os.urandom(int(szrange[1]) * 2))
+
+        self.start_benchmark()
+        self.start_sample()
         for count, skey in enumerate(self.config["mapslice"]):
+
+            self.nownow = time.time()  # Does anyone really know what time it is?
 
             if self.check_for_messages() == "stop":
                 break
 
-            nownow = time.time()
             body_data = (
-                random.randbytes(random.randint(int(szrange[0]), int(szrange[1])))
+                pool[: random.randint(int(szrange[0]), int(szrange[1]))]
                 if is_rand_range
-                else random.randbytes(int(szrange[0]))
+                else pool
             )
 
             for i in range(0, PREPARE_RETRIES):
+
                 try:
                     self.put_object(skey[0], skey[1], body_data)
+                    self.inc_io_count()
                     break
                 except Exception as e:
                     sys.stderr.write("retry: {0}".format(str(e)))
+                    self.fail_count += 1
                     continue
-                sys.stderr.write("ERROR: object failed to write: {0}/{0}".format(skey[0], skey[1]))
-                
+
+                sys.stderr.write(
+                    "ERROR: object failed to write: {0}/{0}".format(skey[0], skey[1])
+                )
+
+            if self.benchmark_count == maplen:
+                self.stop_sample()
+                self.stop_benchmark()
+                self.log_stats(final=True)
 
             # Report-in every now and then
-            if (nownow - tm) >= WORKER_REPORT_TIMER or count == maplen:
-                self.msg_to_worker(
-                    type="stat",
-                    key="prepare",
-                    data_type="counter",
-                    value=count,
-                    time_ms=int(nownow * 1000),
-                )
-                tm = nownow
+            elif (self.nownow - self.sample_start) >= WORKER_REPORT_TIMER:
+                self.stop_sample()
+                self.log_stats()
+                self.start_sample()

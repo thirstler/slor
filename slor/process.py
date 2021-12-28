@@ -1,15 +1,79 @@
 import boto3
 import sys
-
+import time
 
 class SlorProcess:
 
     sock = None
     config = None
-    id = None
+    id = None             # Process ID (unique to the worker, not the whole distributed job)
     s3client = None
     stop = False
-    timing_data = []
+
+    nownow = 0            # Current time
+    fail_count = 0
+    benchmark_start = 0   # benchmark start time
+    benchmark_iops = 0    # operations per second for this bench (total average)
+    benchmark_count = 0   # I/O count, total for benchmark
+    benchmark_stop = 0    # When this benchmark is _supposed_ to stop
+    sample_start = 0      # reporting sample start time
+    sample_iops = 0       # operations per second for this sample
+    sample_count = 0      # I/O count for reporting sample
+    sample_ttc = []       # Array of time-to-complete I/O timings
+    unit_start = 0        # Start of individual I/O 
+    unit_time = 0         # Time to complete I/O
+
+    def log_stats(self, final=False):
+
+        stats = {
+            "count": self.benchmark_count,
+            "iops": self.sample_iops,
+            "failures": self.fail_count,
+            "resp": self.sample_ttc,
+        }
+        if final:
+            stats["final"] = True
+            stats["benchmark_iops"] = self.benchmark_iops
+
+        self.msg_to_worker(
+            type="stat",
+            stage=self.config["type"],
+            value=stats,
+            time_ms=int(self.nownow * 1000)
+        )
+
+    def start_benchmark(self):
+        self.benchmark_start = time.time()
+        self.benchmark_iops = 0
+        self.benchmark_count = 0
+        self.fail_count = 0
+        self.benchmark_stop = self.benchmark_start + self.config["run_time"]
+
+    def stop_benchmark(self):
+        self.benchmark_iops = float(self.benchmark_count) / (time.time() - self.benchmark_start)
+        self.benchmark_iops = 0
+        self.benchmark_count = 0
+
+    def inc_io_count(self):
+        self.benchmark_count += 1
+        self.sample_count += 1
+
+    def start_sample(self):
+        self.sample_start = time.time()
+        self.sample_iops = 0
+        self.sample_count = 0
+        self.sample_ttc.clear()
+
+    def stop_sample(self):
+        self.sample_iops = float(self.sample_count) / (time.time() - self.sample_start)
+
+    def start_io(self):
+        self.unit_start = time.time()
+    
+    def stop_io(self):
+        self.unit_time = time.time() - self.unit_start
+        self.sample_ttc.append(self.unit_time)
+        self.inc_io_count()
 
     def check_for_messages(self):
 
@@ -35,22 +99,25 @@ class SlorProcess:
             region_name=config["region"],
         ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
 
+    def assess_per_sec(self, td):
+        count = 0
+        t_time = 0.0
+        for count, val in enumerate(td):
+            t_time += val["finish"] - val["start"]
+        return (count + 1) / t_time
+
     def msg_to_worker(
         self,
         type="message",
-        data_type="string",
         value=None,
-        key=None,
-        label=None,
+        stage=None,
         time_ms=None,
     ):
-        mesg = {"type": type, "data_type": data_type, "value": value, "t_id": self.id}
-        if key != None:
-            mesg["key"] = key
+        mesg = {"type": type, "value": value, "t_id": self.id}
+        if stage != None:
+            mesg["stage"] = stage
         if time_ms != None:
             mesg["time"] = time_ms
-        if label != None:
-            mesg["label"] = label
 
         try:
             self.sock.send(mesg)
@@ -72,7 +139,6 @@ class SlorProcess:
         return resp
 
     def get_object(self, bucket, key, version_id=None):
-
         if version_id != None:
             resp = self.s3client.get_object(
                 Bucket=bucket, Key=key, VersionId=version_id

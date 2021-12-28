@@ -2,6 +2,9 @@ import platform
 import psutil
 import configparser
 import os, sys
+import math
+import random
+import string
 
 SLOR_VERSION = 0.1
 
@@ -20,7 +23,9 @@ DEFAULT_TESTS = "read,write,head,mixed,delete"
 DEFAULT_MIX_PROFILE = '{"read": 60, "write": 25, "delete": 5, "head": 10 }'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
-DEFAULT_WRITE_PREFIX = "write"
+DEFAULT_WRITE_PREFIX = "write/"
+DEFAULT_KEY_LENGTH = "40"
+DEFAULT_READMAP_PREFIX = "read/"
 
 # Root help message
 ROOT_HELP = """
@@ -41,12 +46,14 @@ OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
 SHOW_STATS_EVERY = 5
 STATS_DB_DIR = "/dev/shm"
+PROGRESS_TITLE_LEN = 10
 
 ###############################################################################
 ###############################################################################
 ## Globally shared routines
 ##
 def parse_size(stringval):
+    """Parse human input for size values"""
     pwr = 10
     sipwr = 3
 
@@ -102,7 +109,7 @@ def get_keys(profile):
         "aws_access_key_id" not in config[profile]
         or "aws_secret_access_key" not in config[profile]
     ):
-        # Environment? Grab it here 
+        # Environment? Grab it here
         access_key = os.environ.get("AWS_ACCESS_KEY_ID")
         secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
         if access_key is None or secret_key is None:
@@ -111,6 +118,38 @@ def get_keys(profile):
     else:
         access_key = config[profile]["aws_access_key_id"]
         secret_key = config[profile]["aws_secret_access_key"]
-        
 
     return (access_key, secret_key)
+
+
+def progress(num, of, size=80, file=sys.stdout, title="", final=False, info=""):
+    """Ultra simple progress bar"""
+
+    if len(title) > PROGRESS_TITLE_LEN:
+        title = title[:PROGRESS_TITLE_LEN]
+    else:
+        title = "{0}:{1}".format(title, " " * (PROGRESS_TITLE_LEN - len(title)))
+    pra = size - (len(title) + len(info) + 7)
+    if pra < 1:
+        file.write("\rnospace")
+        return
+    width = math.floor((num / of) * pra)
+    perc_done = math.floor((num / of) * 100)
+    file.write(
+        "\r{0}|{1}{2}| {3}%{4}".format(title, "|" * width, "-" * (pra - width), perc_done, info)
+    )
+    if final:
+        file.write("\n")
+    file.flush()
+
+
+def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_lowercase):
+    if type(key_desc) == int:
+        key_desc = (key_desc, key_desc)
+    return "{0}{1}".format(
+        prefix,
+        "".join(
+            random.choice(chars)
+            for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1]  else random.randrange(key_desc[0], key_desc[1]) )
+        ),
+    )

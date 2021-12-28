@@ -2,13 +2,9 @@ import argparse
 from multiprocessing import Process, Array, Pipe
 from multiprocessing.connection import Client, Listener
 import time
-import uuid
 from shared import *
-import signal
 import boto3
-import random
 from stages import *
-import sys
 
 
 def _worker_t(socket, config, id):
@@ -91,20 +87,27 @@ class SlorWorkerHandle:
             verify_tls = False
         else:
             verify_tls = config["verify"]
-        
+
+        # AWS is entirely dependent on the endpoint to determin region and
+        # location constraint.
         if config["endpoint"][-13:] == "amazonaws.com":
             client = boto3.Session(
                 aws_access_key_id=config["access_key"],
                 aws_secret_access_key=config["secret_key"],
-                region_name=config["region"],
             ).client("s3", verify=verify_tls)
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn)
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
                 except:
-                    client.create_bucket(Bucket=bn)
+                    try:
+                        client.create_bucket(Bucket=bn)
+                    except:
+                        self.log_to_controller(
+                            "Problem creating bucket: {0}".format(bn)
+                        )
 
+        # Generic S3 compatible
         else:
             client = boto3.Session(
                 aws_access_key_id=config["access_key"],
@@ -118,15 +121,22 @@ class SlorWorkerHandle:
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
                 except:
                     self.log_to_controller("creating {0}".format(bn))
-                    client.create_bucket(
-                        Bucket=bn,
-                        CreateBucketConfiguration={
-                            "LocationConstraint": config["region"]
-                        },
-                    )
+                    try:
+                        client.create_bucket(
+                            Bucket=bn,
+                            CreateBucketConfiguration={
+                                "LocationConstraint": config["region"]
+                            },
+                        )
+                    except:
+                        self.log_to_controller(
+                            "Problem creating bucket: {0}".format(bn)
+                        )
 
     def log_to_controller(self, message):
         """If the message is a string then it will be echoed to the console on the controller"""
+        if not message:
+            return
         if type(message) is str:
             message = {"message": message}
         message["w_id"] = self.sysinf["uname"].node
@@ -165,7 +175,7 @@ class SlorWorkerHandle:
             self.procs[-1].start()
 
         ##
-        # Monitoring and retrun the responces
+        # Monitoring and retrun the responses
         while True:
             running = False
 
@@ -178,10 +188,7 @@ class SlorWorkerHandle:
                 while t[0].poll(0.01):
 
                     # Basically everything is sent back to the controller
-                    resp = t[0].recv()
-                    resp = self.process_thread_resp(resp)
-                    if resp:
-                        self.log_to_controller(resp)
+                    self.log_to_controller(self.process_thread_resp(t[0].recv()))
 
             # Mark active if any threads are active
             for t in self.procs:
@@ -191,8 +198,6 @@ class SlorWorkerHandle:
             # Batch of threads are exited, break
             if running == False:
                 break
-
-            # time.sleep(0.01)
 
         # Make sure everyone is done (redundant)
         for n in self.procs:

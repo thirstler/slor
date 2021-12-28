@@ -9,6 +9,7 @@ import os.path
 import uuid
 import stat_handler
 
+
 class SlorControl:
 
     config = None
@@ -40,7 +41,9 @@ class SlorControl:
             c.close()
 
     def print_config(self):
-        print("################################################################################")
+        print(
+            "################################################################################"
+        )
         print("# SLOR Configuration:")
         print("Workload name:      {0}".format(self.config["name"]))
         print("User key:           {0}".format(self.config["access_key"]))
@@ -49,7 +52,12 @@ class SlorControl:
         print("Bucket prefix:      {0}".format(self.config["bucket_prefix"]))
         print("Num buckets:        {0}".format(self.config["bucket_count"]))
         print("Driver processes:   {0}".format(len(self.config["worker_list"])))
-        print("Procs per driver:   {0} ({1} workers)".format(self.config["worker_thr"], (int(self.config["worker_thr"]) * len(self.config["worker_list"]))))
+        print(
+            "Procs per driver:   {0} ({1} workers)".format(
+                self.config["worker_thr"],
+                (int(self.config["worker_thr"]) * len(self.config["worker_list"])),
+            )
+        )
         print(
             "Prepared data size: {0}".format(
                 human_readable(self.config["ttl_prepare_sz"])
@@ -61,13 +69,16 @@ class SlorControl:
             )
         )
         print("Stats database:     {0}".format(self.db_file))
-        print("Workloads:")
+        print("Stages:")
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
             if stage == "mixed":
                 sys.stdout.write("                    {0}: {1} (".format(i, stage))
                 for j, m in enumerate(self.config["tasks"]["mixed_profile"]):
-                    sys.stdout.write("{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m]))
-                    if (j+1) < len(self.config["tasks"]["mixed_profile"]): sys.stdout.write(", ")
+                    sys.stdout.write(
+                        "{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m])
+                    )
+                    if (j + 1) < len(self.config["tasks"]["mixed_profile"]):
+                        sys.stdout.write(", ")
                 print(")")
             else:
                 print("                    {0}: {1}".format(i, stage))
@@ -77,11 +88,11 @@ class SlorControl:
     def connect_to_workers(self):
         ret_val = True
         for hostport in self.config["worker_list"]:
-            print("################################################################################")
             print(
-                "# worker system ({0}:{1})".format(
-                    hostport["host"], hostport["port"]
-                )
+                "################################################################################"
+            )
+            print(
+                "# worker system ({0}:{1})".format(hostport["host"], hostport["port"])
             )
             try:
                 self.conn.append(Client((hostport["host"], hostport["port"])))
@@ -157,11 +168,23 @@ class SlorControl:
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": workloads[i]})
 
-        stat_view = stat_handler.stat_handle(self.db_file, SHOW_STATS_EVERY)
-        
-        self.print_message("running stage ({0})".format(stage))
+        if stage == "prepare":  # Database derived status handler
+            stat_view = stat_handler.dbStats(
+                self.db_file, SHOW_STATS_EVERY, len(self.readmap), stage
+            )
+        elif stage == "read" or stage == "write" or stage == "mixed":
+            stat_view = stat_handler.timingStats(
+                SHOW_STATS_EVERY, time.time(), self.config["run_time"], stage=stage
+            )
+        else:
+            self.print_message("stage: {0}".format(stage))
+            stat_view = stat_handler.textStats(stage=stage)
 
-        """ Primary Loop"""
+        self.print_message("running stage ({0})".format(stage), verbose=True)
+
+        """
+        Primary Loop - monitors the workers by polling messages from them
+        """
         donestack = len(workloads)
         while True:
 
@@ -178,15 +201,21 @@ class SlorControl:
             stat_view.trigger()
 
             if donestack == 0:
-                self.print_message("threads complete for this stage ({0})".format(stage))
+                time.sleep(1)
+                stat_view.trigger(final=True)
+                self.print_message(
+                    "threads complete for this stage ({0})".format(stage), verbose=True
+                )
                 break
 
             time.sleep(0.01)
 
-    def mk_read_map(self):
+    def mk_read_map(self, key_desc={"min": 40, "max": 40}):
 
         if len(self.readmap) > 0:
-            self.print_message("readmap of {0} entries exists".format(len(self.readmap)))
+            self.print_message(
+                "readmap of {0} entries exists".format(len(self.readmap))
+            )
             return
 
         objcount = int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
@@ -201,29 +230,34 @@ class SlorControl:
                         self.config["bucket_prefix"],
                         random.randrange(0, self.config["bucket_count"]),
                     ),
-                    "{0}/{1}".format(OBJECT_PREFIX_LOC, str(uuid.uuid4()), False),
+                    gen_key(
+                        key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
+                    ),
                 )
             )
 
         self.print_message("done")
 
+    def print_message(self, message, verbose=False):
+        if verbose == True and self.config["verbose"] != True:
+            return
+        print(str(message))
 
-    def print_message(self, message): self.process_message(message)
     def process_message(self, message):
-        '''
+        """
         Filters messages from workers and take the appropriate action
-        '''
+        """
         try:
-            if type(message) == str: print(message)
+            if type(message) == str:
+                print(message)
             elif "message" in message:
                 print("{0}: {1}".format(message["w_id"], message["message"]))
             elif "type" in message and message["type"] == "stat":
                 self.store_stat(message)
             else:
-                pass # ignore
-        except:
-            print(str(message()))
-
+                pass  # ignore
+        except Exception as e:
+            print(str(e))
 
     def check_status(self, mesg):
         if "status" in mesg and mesg["status"] == "done":
@@ -236,7 +270,7 @@ class SlorControl:
             message["w_id"],
             message["t_id"],
             message["time"],
-            message["key"],
+            message["stage"],
             json.dumps(message),
         )
         self.db_cursor.execute(sql)
@@ -248,17 +282,25 @@ class SlorControl:
             self.db_file = "{0}/{1}.db".format(STATS_DB_DIR, self.config["name"])
             vcount = 1
             while os.path.exists(self.db_file):
-                self.db_file = "{0}/{1}_{2}.db".format(STATS_DB_DIR, self.config["name"], vcount)
+                self.db_file = "{0}/{1}_{2}.db".format(
+                    STATS_DB_DIR, self.config["name"], vcount
+                )
                 vcount += 1
             self.db_conn = sqlite3.connect(self.db_file)
             self.db_cursor = self.db_conn.cursor()
 
     def mk_data_store(self, sysinf):
         self.db_cursor.execute(
-            "CREATE TABLE {0} (t_id int, ts int, key string, data json)".format(
+            "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
                 sysinf["uname"].node
             )
         )
+        self.db_cursor.execute(
+            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(sysinf["uname"].node)
+        )
+        # self.db_cursor.execute(
+        #    "CREATE INDEX {0}_stage_i ON {0} (stage)".format(sysinf["uname"].node)
+        # )
 
     def mk_stage(self, target, stage, wid):
 
