@@ -5,136 +5,107 @@ import json
 from shared import *
 
 
-class textStats:
-    def __init__(self, stage="unknown"):
-        pass
+class rtStatViewer:
 
-    def trigger(self, final=False):
-        pass
-
-
-class timingStats:
-    """
-    Used for temporal progress (how much longer?)
-    """
-
-    start_time = 0
-    end_time = 0
-    nownow = 0
+    progress_type = None
+    progress_timeout = None
+    progress_time_len = None
+    progress_time_start = None
+    progress_count = None
     stage = None
-    last_print = 0
-    peak = False
+    window = 0
+    data = {}
+    last_seen = 0
+    config = None
 
-    def __init__(self, timing, start_time, run_len, stage="unknown"):
-        self.start_time = start_time
-        self.end_time = start_time + run_len
-        self.timing = timing
-        self.run_len = run_len
+    def __init__(self, config):
+        self.config = config
+    
+    def clear(self):
+        self.data.clear()
+        # Create data data structure to hold current stats
+        for stage in self.config["tasks"]["loadorder"]:
+            self.data[stage] = {}
+            for worker in self.config["worker_node_names"]:
+                self.data[stage][worker] = {}
+                for t in range(0, self.config["worker_thr"]):
+                    self.data[stage][worker][t] = {}
+
+    def set_stage(self, stage):
+        self.clear()
         self.stage = stage
 
-    def trigger(self, final=False):
-        self.nownow = time.time()
-        if (self.nownow - self.last_print) > self.timing:
-            self.print_frame()
-            self.last_print = self.nownow
+    def store(self, message):
+        self.data[message["stage"]][message["w_id"]][message["t_id"]].update(message["value"])
+        #print(message["value"])
 
-    def print_frame(self):
-        if self.peak:
-            return
-        file = sys.stdout
-        final = False
-        s_done = math.ceil(self.nownow - self.start_time)
-        if s_done >= self.run_len:
-            s_done = self.run_len
-            self.peak = True
+    def set_progress_time(self, time_length):
+        self.progress_type = "time"
+        self.progress_time_start = time.time()
+        self.progress_time_len = time_length
+        self.progress_timeout = self.progress_time_start + time_length
 
-        progress(s_done, self.run_len, title=(self.stage), file=file, final=self.peak)
+    def set_progress_count(self, count_length):
+        self.progress_type = "count"
+        self.progress_count = count_length
 
 
-class dbStats:
-    """
-    Stat handler. Information for real-time output to the console is queried
-    from the stats database rather than from in-memory state.
-    """
+    def show(self, disply_rate, now=time.time(), final=False):
+        
+        if (now - self.last_seen) < disply_rate:
+            if final == False: return
+        
+        ops_sec = 0
+        count = 0
+        avg_resp = 0
+        perc_complete = 0
+        failures = 0
+        num = 0 # input to progress bar
+        of = 0  # input to progress bar
+        for worker in self.data[self.stage]:
+            for process in self.data[self.stage][worker]:
+                me = self.data[self.stage][worker][process]
+                if "count" in me: count += me["count"]
+                if "iops" in me: ops_sec += me["iops"]
+                if "failures" in me: failures += me["failures"]
+                resp = 0
+                if "resp" in me:
+                    for r in me["resp"]:
+                        resp += r
+                    avg_resp = resp/len(me["resp"])
 
-    db_conn = None
-    db_cursor = None
-    last_print = 0
-    timing = 0
-    frame = None
-    frame_start = None
-    last_count = 0
-    maplen = 0
-    stage = None
 
-    def __init__(self, db_file, timing, readmap_len, stage):
-        self.frame = {}
-        self.timing = timing
-        self.maplen = readmap_len
-        self.stage = stage
-        try:
-            self.db_conn = sqlite3.connect(db_file)
-            self.db_cursor = self.db_conn.cursor()
-        except:
-            print("error accessing db file ({0}) no stats will print".format(db_file))
+        if self.progress_type == "time":
+            num = time.time() - self.progress_time_start
+            of = self.progress_time_len
+            if of > self.progress_timeout:
+                of == self.progress_timeout
 
-    def trigger(self, final=False):
-        nownow = time.time()
-        if ((nownow - self.last_print) > self.timing) or final == True:
-            self.process()
-            self.last_print = nownow
+        elif self.progress_type == "count":
+            num = count
+            of = self.progress_count
 
-    def process(self):
-        query = "SELECT name FROM sqlite_master WHERE type='table'"
-        then = int((time.time() - self.timing) * 1000)
-        for table in self.db_cursor.execute(query).fetchall():
-            query = "SELECT stage, data, ts FROM {0} WHERE ts > {1} AND stage='{2}' ORDER BY ts".format(
-                table[0], then, self.stage
-            )
-            for stat in self.db_cursor.execute(query):
-                if stat[0] == "prepare":
-                    self.proc_prep(stat[1])
+        else: pass # you should never get here
 
-        self.print_frame()
+        if num > of: of = num
+        self.progress(num, of, ops_sec, resp*1000, title=self.stage, final=final)
+        self.last_seen = now
+    
+    def progress(self, num, of,  ops, resp, title="", final=False, bar_width=35):
+        """Ultra simple progress bar"""
+        file=sys.stdout
 
-    def proc_prep(self, data_json):
-        """
-        This seems deeply fucked to me but I don't have any better ideas.
-        """
-        data = json.loads(data_json)
-        if data["stage"] not in self.frame:
-            self.frame[data["stage"]] = {}
-        if data["w_id"] not in self.frame[data["stage"]]:
-            self.frame[data["stage"]][data["w_id"]] = {}
-        if data["t_id"] not in self.frame[data["stage"]][data["w_id"]]:
-            self.frame[data["stage"]][data["w_id"]][data["t_id"]] = {}
-
-        if "time" not in self.frame[data["stage"]][data["w_id"]][data["t_id"]]:
-            self.frame[data["stage"]][data["w_id"]][data["t_id"]] = {
-                "time": data["time"],
-                "count": data["value"]["count"],
-            }
+        if len(title) > PROGRESS_TITLE_LEN:
+            title = title[:PROGRESS_TITLE_LEN]
         else:
-            # There will be repeats in the time window queried, simply store
-            # over the existing data when the timestamp is bigger, latest one
-            # wins.
-            if (
-                self.frame[data["stage"]][data["w_id"]][data["t_id"]]["time"]
-                < data["time"]
-            ):
-                self.frame[data["stage"]][data["w_id"]][data["t_id"]] = {
-                    "time": data["time"],
-                    "count": data["value"]["count"],
-                }
+            title = "{0}:{1}".format(title, " " * (PROGRESS_TITLE_LEN - len(title)))
+        
+        width = math.floor( (num / of) * bar_width)
+        perc_done = math.floor((num / of) * 100)
 
-    def print_frame(self):
-        file = sys.stdout
-        for stage in self.frame:
-            if stage == "prepare":
-                total = 0
-                for wrkr in self.frame["prepare"]:
-                    for thr in self.frame["prepare"][wrkr]:
-                        total += self.frame["prepare"][wrkr][thr]["count"]
-                rate = float(total - self.last_count) / SHOW_STATS_EVERY
-                progress(total, self.maplen, title=stage, file=file, info=" [{0:.1f} op/s]".format(rate))
-                self.last_count = total
+        file.write(
+            "\r{0:<10}|{1}{2}|{3:>4}% [{4:>9.2f} op/s] [{4:>9.2f} ms]".format(title, "|" * width, "-" * (bar_width - width), perc_done, ops, resp)
+        )
+        if final:
+            file.write("\n")
+        file.flush()

@@ -46,11 +46,10 @@ def parse_worker_list(stringval):
 
 def generate_tasks(args):
 
-    choose_any = ("prepare", "init", "read", "write", "delete", "head", "mixed")
     loads = tuple(args.loads.split(","))
     mix_prof_obj = {}
     for l in loads:
-        if l not in choose_any:
+        if l not in LOAD_TYPES:
             sys.stderr.write('"{0}" is not a load option\n'.format(l))
             sys.exit(1)
 
@@ -60,7 +59,7 @@ def generate_tasks(args):
         for l in mix_prof_obj:
             perc += float(mix_prof_obj[l])
         if perc != 100:
-            sys.stderr.write("your mixed load profile vaules don't equal 100\n")
+            sys.stderr.write("your mixed load profile values don't equal 100\n")
             sys.exit(1)
 
     # Arrange the load order
@@ -79,6 +78,8 @@ def generate_tasks(args):
             actions += ("blowout", "mixed")
         if "delete" in loads:
             actions += ("delete",)  # debateable, might want cache overwritten as well?
+        if "cleanup" in loads:
+            actions += ("cleanup",)
 
     return {"loadorder": actions, "mixed_profile": mix_prof_obj}
 

@@ -36,23 +36,26 @@ README.md for more information.
 
 """
 
-# Low-level config
+# Low-level config (changing may or may not break things)
 LOG_TO_CONSOLE = True
 WORKER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 WORKER_REPORT_TIMER = 5  # seconds
-WORKER_ROUTINE_TYPES = ("prepare", "read", "readwrite", "write", "mixed", "overrun")
+LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup")
+PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
+PROGRESS_BY_TIME = ("read", "readwrite", "write", "mixed", "blowout")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
-SHOW_STATS_EVERY = 5
+SHOW_STATS_RATE = 1 # seconds
 STATS_DB_DIR = "/dev/shm"
 PROGRESS_TITLE_LEN = 10
+
 
 ###############################################################################
 ###############################################################################
 ## Globally shared routines
 ##
-def parse_size(stringval):
+def parse_size(stringval: str) -> float:
     """Parse human input for size values"""
     pwr = 10
     sipwr = 3
@@ -143,7 +146,7 @@ def progress(num, of, size=80, file=sys.stdout, title="", final=False, info=""):
     file.flush()
 
 
-def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_lowercase):
+def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_lowercase) -> str:
     if type(key_desc) == int:
         key_desc = (key_desc, key_desc)
     return "{0}{1}".format(

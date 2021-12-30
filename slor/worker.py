@@ -118,9 +118,9 @@ class SlorWorkerHandle:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn)
-                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    #self.log_to_controller("Warning: bucket present ({0})".format(bn))
                 except:
-                    self.log_to_controller("creating {0}".format(bn))
+                    #self.log_to_controller("creating {0}".format(bn))
                     try:
                         client.create_bucket(
                             Bucket=bn,

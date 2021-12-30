@@ -6,7 +6,6 @@ import json
 from shared import *
 import sqlite3
 import os.path
-import uuid
 import stat_handler
 
 
@@ -19,10 +18,12 @@ class SlorControl:
     db_cursor = None
     readmap = []
     stat_buf = []
+    stat_viewer = None
 
     def __init__(self, root_config):
         self.config = root_config
         self.init_db()
+
 
     def exec(self):
 
@@ -32,8 +33,11 @@ class SlorControl:
             self.print_message("worker(s) failed check(s), I'm out")
             sys.exit(1)
 
+
+        self.stat_viewer = stat_handler.rtStatViewer(self.config)
         self.mk_read_map()
 
+        print("\n running:")
         for stage in self.config["tasks"]["loadorder"]:
             self.exec_stage(stage)
 
@@ -87,6 +91,7 @@ class SlorControl:
 
     def connect_to_workers(self):
         ret_val = True
+        self.config["worker_node_names"] = []
         for hostport in self.config["worker_list"]:
             print(
                 "################################################################################"
@@ -112,6 +117,9 @@ class SlorControl:
         return ret_val
 
     def check_worker_info(self, data):
+
+        self.config["worker_node_names"].append(data["uname"].node)
+
         print("  Hostname: {0}".format(data["uname"].node))
         print(
             "  OS: {0} release {1}".format(data["uname"].system, data["uname"].release)
@@ -164,21 +172,16 @@ class SlorControl:
                     "{0}{1}".format(self.config["bucket_prefix"], bc)
                 )
 
-        # Fire!
-        for i, wl in enumerate(workloads):
-            self.conn[i].send({"command": "workload", "config": workloads[i]})
+        # Set up real-time stats view
+        self.stat_viewer.set_stage(stage)
+        if stage in PROGRESS_BY_COUNT:
+            self.stat_viewer.set_progress_count(len(self.readmap))
+        elif stage in PROGRESS_BY_TIME:
+            self.stat_viewer.set_progress_time(self.config["run_time"])
 
-        if stage == "prepare":  # Database derived status handler
-            stat_view = stat_handler.dbStats(
-                self.db_file, SHOW_STATS_EVERY, len(self.readmap), stage
-            )
-        elif stage == "read" or stage == "write" or stage == "mixed":
-            stat_view = stat_handler.timingStats(
-                SHOW_STATS_EVERY, time.time(), self.config["run_time"], stage=stage
-            )
-        else:
-            self.print_message("stage: {0}".format(stage))
-            stat_view = stat_handler.textStats(stage=stage)
+        # Send workloads to workers
+        for i, wl in enumerate(workloads):
+            self.conn[i].send({"command": "workload", "config": wl})
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
 
@@ -187,22 +190,23 @@ class SlorControl:
         """
         donestack = len(workloads)
         while True:
-
+            group_time = time.time()
+            
             for i, wl in enumerate(workloads):
                 while self.conn[i].poll():
                     try:
                         mesg = self.conn[i].recv()
                         if self.check_status(mesg) == "done":
                             donestack -= 1
-                        self.process_message(mesg)
+                        self.process_message(mesg)    # Decide what to do with the mssage
                     except EOFError:
                         pass
 
-            stat_view.trigger()
+            self.stat_viewer.show(SHOW_STATS_RATE, now=group_time)
 
             if donestack == 0:
                 time.sleep(1)
-                stat_view.trigger(final=True)
+                self.stat_viewer.show(SHOW_STATS_RATE, now=group_time, final=True)
                 self.print_message(
                     "threads complete for this stage ({0})".format(stage), verbose=True
                 )
@@ -266,6 +270,11 @@ class SlorControl:
         return False
 
     def store_stat(self, message):
+
+        # Maintain some data in-memory for real-time visibility
+        self.stat_viewer.store(message)
+
+        # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
             message["w_id"],
             message["t_id"],

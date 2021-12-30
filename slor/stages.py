@@ -36,11 +36,12 @@ class SlorRead(SlorProcess):
                 self.nownow = time.time()
                 try:
                     self.start_io()
-                    self.get_object(pkey[0], pkey[1])
+                    resp = self.get_object(pkey[0], pkey[1])
+                    self.inc_content_len(resp["ContentLength"])
                     self.stop_io()
 
                 except Exception as e:
-                    sys.stderr.write("retry: {0}".format(str(e)))
+                    sys.stderr.write("retry {0}/{1}: {2}".format(pkey[0], pkey[1], str(e)))
                     self.fail_count += 1
                     continue
                 
@@ -76,7 +77,7 @@ class SlorWrite(SlorProcess):
         start = tm = time.time()
         stop = start + self.config["run_time"]
 
-        junk = bytearray(os.urandom(int(szrange[1])))
+        junk = bytearray(os.urandom(int(szrange[1])) * 2)
 
         while True:
 
@@ -175,6 +176,7 @@ class SlorMetadataMixed(SlorProcess):
 
 
 class SlorPrepare(SlorProcess):
+
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
@@ -194,20 +196,21 @@ class SlorPrepare(SlorProcess):
         maplen = len(self.config["mapslice"])
 
         # Takes too much effort to generate random data on-the-fly, going to
-        # pull random offsets from a pool
+        # pull random offsets from a pool of bytes
         pool = bytearray(os.urandom(int(szrange[1]) * 2))
 
         self.start_benchmark()
         self.start_sample()
-        for count, skey in enumerate(self.config["mapslice"]):
+        for skey in self.config["mapslice"]:
 
             self.nownow = time.time()  # Does anyone really know what time it is?
 
             if self.check_for_messages() == "stop":
                 break
-
+            
+            dsize = random.randint(int(szrange[0]), int(szrange[1]))
             body_data = (
-                pool[: random.randint(int(szrange[0]), int(szrange[1]))]
+                pool[: dsize ]
                 if is_rand_range
                 else pool
             )
@@ -215,17 +218,15 @@ class SlorPrepare(SlorProcess):
             for i in range(0, PREPARE_RETRIES):
 
                 try:
+                    self.start_io()
                     self.put_object(skey[0], skey[1], body_data)
-                    self.inc_io_count()
+                    self.inc_content_len(dsize)
+                    self.stop_io()
                     break
                 except Exception as e:
                     sys.stderr.write("retry: {0}".format(str(e)))
                     self.fail_count += 1
                     continue
-
-                sys.stderr.write(
-                    "ERROR: object failed to write: {0}/{0}".format(skey[0], skey[1])
-                )
 
             if self.benchmark_count == maplen:
                 self.stop_sample()

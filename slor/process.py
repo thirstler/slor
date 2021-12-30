@@ -15,32 +15,15 @@ class SlorProcess:
     benchmark_start = 0   # benchmark start time
     benchmark_iops = 0    # operations per second for this bench (total average)
     benchmark_count = 0   # I/O count, total for benchmark
-    benchmark_stop = 0    # When this benchmark is _supposed_ to stop
+    benchmark_stop = 0    # when this benchmark is _supposed_ to stop
     sample_start = 0      # reporting sample start time
     sample_iops = 0       # operations per second for this sample
     sample_count = 0      # I/O count for reporting sample
-    sample_ttc = []       # Array of time-to-complete I/O timings
-    unit_start = 0        # Start of individual I/O 
-    unit_time = 0         # Time to complete I/O
-
-    def log_stats(self, final=False):
-
-        stats = {
-            "count": self.benchmark_count,
-            "iops": self.sample_iops,
-            "failures": self.fail_count,
-            "resp": self.sample_ttc,
-        }
-        if final:
-            stats["final"] = True
-            stats["benchmark_iops"] = self.benchmark_iops
-
-        self.msg_to_worker(
-            type="stat",
-            stage=self.config["type"],
-            value=stats,
-            time_ms=int(self.nownow * 1000)
-        )
+    sample_content_ln = 0 # body content length (for bandwidth calc)
+    sample_bandwidth = 0  # bandwidth figures
+    sample_ttc = []       # array of time-to-complete I/O timings
+    unit_start = 0        # start of individual I/O 
+    unit_time = 0         # time to complete I/O
 
     def start_benchmark(self):
         self.benchmark_start = time.time()
@@ -51,21 +34,28 @@ class SlorProcess:
 
     def stop_benchmark(self):
         self.benchmark_iops = float(self.benchmark_count) / (time.time() - self.benchmark_start)
-        self.benchmark_iops = 0
-        self.benchmark_count = 0
+        #self.benchmark_iops = 0
+        #self.benchmark_count = 0
 
     def inc_io_count(self):
         self.benchmark_count += 1
         self.sample_count += 1
+
+    def inc_content_len(self, length):
+        self.sample_content_ln += length
 
     def start_sample(self):
         self.sample_start = time.time()
         self.sample_iops = 0
         self.sample_count = 0
         self.sample_ttc.clear()
+        self.sample_content_ln = 0
 
     def stop_sample(self):
-        self.sample_iops = float(self.sample_count) / (time.time() - self.sample_start)
+        now = time.time()
+        self.sample_iops = float(self.sample_count) / (now - self.sample_start)
+        self.sample_bandwidth = float(self.sample_content_ln) / (now - self.sample_start)
+        #self.benchmark_iops = float(self.benchmark_count) / (now - self.benchmark_start)
 
     def start_io(self):
         self.unit_start = time.time()
@@ -105,6 +95,26 @@ class SlorProcess:
         for count, val in enumerate(td):
             t_time += val["finish"] - val["start"]
         return (count + 1) / t_time
+
+
+    def log_stats(self, final=False):
+
+        stats = {
+            "count": self.benchmark_count,
+            "iops": self.sample_iops,
+            "failures": self.fail_count,
+            "resp": self.sample_ttc,
+        }
+        if final:
+            stats["final"] = True
+            stats["benchmark_iops"] = self.benchmark_iops
+
+        self.msg_to_worker(
+            type="stat",
+            stage=self.config["type"],
+            value=stats,
+            time_ms=int(self.nownow * 1000)
+        )
 
     def msg_to_worker(
         self,
