@@ -1,4 +1,4 @@
-import time
+import time, os
 from shared import *
 
 
@@ -45,6 +45,7 @@ class rtStatViewer:
     def set_progress_count(self, count_length):
         self.progress_type = "count"
         self.progress_count = count_length
+        self.progress_time_start = time.time()
 
     def show(self, disply_rate, now=time.time(), final=False):
 
@@ -80,7 +81,7 @@ class rtStatViewer:
                     if "iops" in me: ops_sec += me["iops"]
                     if "bandwidth" in me: bandwidth += me["bandwidth"]
                 resp = 0
-                if "resp" in me:
+                if "resp" in me and len(me["resp"]) > 0:
                     for r in me["resp"]:
                         resp += r
                     avg_resp = resp/len(me["resp"])
@@ -100,26 +101,37 @@ class rtStatViewer:
         self.progress(num, of, ops_sec, bandwidth, avg_resp*1000, failures, title=self.stage, final=final)
         self.last_seen = now
     
-    def progress(self, num, of,  ops, bandwidth, resp, failures, title="", final=False, bar_width=24):
+    def progress(self, num, of,  ops, bandwidth, resp, failures, title="", final=False):
         """Ultra simple progress bar"""
         file=sys.stdout
-
-        if len(title) > PROGRESS_TITLE_LEN:
-            title = title[:PROGRESS_TITLE_LEN]
-        else:
-            title = "{0}:{1}".format(title, " " * (PROGRESS_TITLE_LEN - len(title)))
+        bar_width = os.get_terminal_size().columns - 78
+        if bar_width > 25:
+            bar_width = 25
         
         width = math.ceil( (num / of) * bar_width)
         perc_done = math.ceil((num / of) * 100)
 
-        failtxt = ""
+        failtxt = "   --   "
         if failures > 0:
-            failtxt = "\033[1;31mF:{}\033[0m".format(failures)
-            
-        file.write(
-            "\r{0:<10}|{1}{2}|{3:>4}% [{4:>9.2f} op/s] [{5:>10}/s] [{6:>7.2f} ms] {7}".format(
-                    title, "|" * width, "-" * (bar_width - width), perc_done, ops, human_readable(bandwidth), resp, failtxt)
-        )
+            failtxt = "\033[1;31m{0}\033[0m/{1}".format(
+                human_readable(failures, print_units="ops"), human_readable(of, print_units="ops"))
+        
+        elapsed = time.time() - self.progress_time_start
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        elapsed = '{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))
+        prog = "\r{0:<8}|{1}{2}|{3:>3}% [{4:>7} op/s] [{5:>10}/s] [{6:>7.2f} ms] [{7:>8}] [{8:>8}]".format(
+                    title,
+                    u"\u2588" * width,
+                    "-" * (bar_width - width),
+                    perc_done,
+                    human_readable(ops, print_units="ops"),
+                    human_readable(bandwidth),
+                    resp,
+                    elapsed,
+                    failtxt)
+        file.write(prog)
+        
         if final:
             file.write("\n")
         file.flush()

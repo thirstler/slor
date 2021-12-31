@@ -5,16 +5,20 @@ import time
 from shared import *
 import boto3
 from stages import *
-
+import stage.prepare
+import stage.read
+import stage.overrun
 
 def _worker_t(socket, config, id):
     """
     Wrapper function to launch workload processes from a Process() call.
     """
     if config["type"] == "prepare":
-        wc = SlorPrepare(socket, config, id).exec()
+        wc = stage.prepare.Prepare(socket, config, id).exec()
+    elif config["type"] == "blowout":
+        wc = stage.overrun.Overrun(socket, config, id).exec()
     elif config["type"] == "read":
-        wc = SlorRead(socket, config, id).exec()
+        wc = stage.read.Read(socket, config, id).exec()
     elif config["type"] == "write":
         wc = SlorWrite(socket, config, id).exec()
     elif config["type"] == "readwrite":
@@ -149,22 +153,18 @@ class SlorWorkerHandle:
 
     def thread_control(self, config):
 
-        keys_per_thread = int(
-            ((config["prepare_sz"] / config["sz_range"][2]) + 1) / config["threads"]
-        )
-
         ##
         # Receive work
         for id in range(0, config["threads"]):
 
             if "readmap" in config:
 
+                chunk = int(len(config["readmap"])/config["threads"])
+
                 # Divide the readmap here if we're using one
-                offset = id * keys_per_thread
-                end = offset + keys_per_thread
-                config["mapslice"] = config["readmap"][
-                    offset : end if end < len(config["readmap"]) else -1
-                ]
+                offset = id * chunk
+                end = offset + chunk
+                config["mapslice"] = config["readmap"][offset:end]
 
             ##
             # Create socket for talking to thread and launch

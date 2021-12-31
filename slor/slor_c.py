@@ -38,12 +38,23 @@ class SlorControl:
         self.mk_read_map()
 
         print("running loads:")
+        self.print_progress_header()
+
         for stage in self.config["tasks"]["loadorder"]:
             if stage == "write": sys.exit(0)
             self.exec_stage(stage)
 
         for c in self.conn:
             c.close()
+
+    def print_progress_header(self):
+        bar_width = os.get_terminal_size().columns - 78
+        if bar_width > 25:
+            bar_width = 25
+        print("")
+        print("{0:<8} {1}      {2:<15}{3:<15}{4:<13}{5:<11}{6:<10}".format(
+            "stage", " "*bar_width, "throughput", "bandwidth", "resp. time", "elapsed", "fail"))
+        print("-"*(bar_width+79))
 
     def print_config(self):
         print(
@@ -175,7 +186,10 @@ class SlorControl:
 
         # Set up real-time stats view
         self.stat_viewer.set_stage(stage)
-        if stage in PROGRESS_BY_COUNT:
+        if stage == "blowout":
+            self.stat_viewer.set_progress_count(
+                int(self.config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ))
+        elif stage in PROGRESS_BY_COUNT:
             self.stat_viewer.set_progress_count(len(self.readmap))
         elif stage in PROGRESS_BY_TIME:
             self.stat_viewer.set_progress_time(self.config["run_time"])
@@ -224,9 +238,11 @@ class SlorControl:
             )
             return
 
+        blksz = (self.config["worker_thr"] * len(self.config["worker_list"]))
         objcount = int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
+        objcount = objcount - (objcount % blksz) + blksz
 
-        sys.stdout.write("building readmap ({0} entries)... ".format(objcount))
+        sys.stdout.write("generating prepaired keys ({0} entries)... ".format(objcount))
         sys.stdout.flush()
 
         for z in range(0, objcount):
@@ -340,12 +356,10 @@ class SlorControl:
 
         # Work out the readmap slices
         random.shuffle(self.readmap)
-        slice_width = len(self.readmap) / len(self.config["worker_list"])
-        offset = int(slice_width * wid)
-        end_slice = int(offset + slice_width)
-        mapslice = self.readmap[
-            offset : end_slice if end_slice < len(self.readmap) else -1
-        ]
+        chunk = int(len(self.readmap) / len(self.config["worker_list"]))
+        offset = chunk * wid
+        end_slice = offset + chunk
+        mapslice = self.readmap[offset:end_slice]
 
         if stage == "init":
             config["type"] = "init"

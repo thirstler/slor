@@ -93,13 +93,7 @@ class SlorProcess:
             aws_secret_access_key=config["secret_key"],
             region_name=config["region"],
         ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
-
-    def assess_per_sec(self, td):
-        count = 0
-        t_time = 0.0
-        for count, val in enumerate(td):
-            t_time += val["finish"] - val["start"]
-        return (count + 1) / t_time
+        
 
     def get_bytes_from_pool(self, num_bytes):
         start = random.randrange(0, self.pool_sz)
@@ -112,7 +106,6 @@ class SlorProcess:
     def mk_byte_pool(self, num_bytes):
         self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
         self.pool_sz = num_bytes
-        
 
     def log_stats(self, final=False):
 
@@ -129,7 +122,7 @@ class SlorProcess:
                 "benchmark_iops": self.benchmark_iops,
                 "benchmark_bandwidth": self.benchmark_bandwidth
             })
-        if self.id == 0: print(stats)
+
         self.msg_to_worker(
             type="stat",
             stage=self.config["type"],
