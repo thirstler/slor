@@ -26,7 +26,8 @@ DEFAULT_BUCKET_COUNT = 1
 DEFAULT_WRITE_PREFIX = "write/"
 DEFAULT_KEY_LENGTH = "40"
 DEFAULT_READMAP_PREFIX = "read/"
-
+DEFAULT_CACHE_OVERRUN_OBJ = 8388608
+DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
 # Root help message
 ROOT_HELP = """
 Usage slor.py [controller|worker] [options]
@@ -80,10 +81,10 @@ def human_readable(value, format="SI"):
 
     for s in ["EB", "PB", "TB", "GB", "MB", "KB"]:
         if value > 10 ** sipwr:
-            return "{0:.2f} {1} ".format(value / (10 ** sipwr), s)
+            return "{0:.2f} {1}".format(value / (10 ** sipwr), s)
         sipwr -= 3
 
-    return "{0} b ".format(value)
+    return "{0:.2f} b".format(value)
 
 
 def basic_sysinfo():

@@ -37,8 +37,9 @@ class SlorControl:
         self.stat_viewer = stat_handler.rtStatViewer(self.config)
         self.mk_read_map()
 
-        print("\n running:")
+        print("running loads:")
         for stage in self.config["tasks"]["loadorder"]:
+            if stage == "write": sys.exit(0)
             self.exec_stage(stage)
 
         for c in self.conn:
@@ -214,6 +215,7 @@ class SlorControl:
 
             time.sleep(0.01)
 
+
     def mk_read_map(self, key_desc={"min": 40, "max": 40}):
 
         if len(self.readmap) > 0:
@@ -246,6 +248,7 @@ class SlorControl:
         if verbose == True and self.config["verbose"] != True:
             return
         print(str(message))
+
 
     def process_message(self, message):
         """
@@ -324,12 +327,15 @@ class SlorControl:
             "verify": self.config["verify"],
             "region": self.config["region"],
             "run_time": self.config["run_time"],
-            "bucket_count": self.config["bucket_count"],
+            "bucket_count": int(self.config["bucket_count"]),
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
             "prepare_sz": int(
                 self.config["ttl_prepare_sz"] / len(self.config["worker_list"])
             ),
+            "cache_overrun_sz": int(
+                self.config["ttl_sz_cache"] / len(self.config["worker_list"])
+            )
         }
 
         # Work out the readmap slices

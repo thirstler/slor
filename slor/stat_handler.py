@@ -1,7 +1,4 @@
-import json
-import sqlite3
 import time
-import json
 from shared import *
 
 
@@ -49,8 +46,17 @@ class rtStatViewer:
         self.progress_type = "count"
         self.progress_count = count_length
 
-
     def show(self, disply_rate, now=time.time(), final=False):
+
+        if self.stage == "init":
+            if final:
+                self.progress(100, 100,  0, 0, 0, 0, title=self.stage, final=True)
+            else:
+                sys.stdout.write("\r{}:".format(self.stage))
+        else:
+            self._show(disply_rate, now=now, final=final)
+
+    def _show(self, disply_rate, now=time.time(), final=False):
         
         if (now - self.last_seen) < disply_rate:
             if final == False: return
@@ -58,16 +64,21 @@ class rtStatViewer:
         ops_sec = 0
         count = 0
         avg_resp = 0
-        perc_complete = 0
         failures = 0
+        bandwidth = 0
         num = 0 # input to progress bar
         of = 0  # input to progress bar
         for worker in self.data[self.stage]:
             for process in self.data[self.stage][worker]:
                 me = self.data[self.stage][worker][process]
                 if "count" in me: count += me["count"]
-                if "iops" in me: ops_sec += me["iops"]
                 if "failures" in me: failures += me["failures"]
+                if final:
+                    if "benchmark_iops" in me: ops_sec += me["benchmark_iops"]
+                    if "benchmark_bandwidth" in me: bandwidth += me["benchmark_bandwidth"]
+                else:    
+                    if "iops" in me: ops_sec += me["iops"]
+                    if "bandwidth" in me: bandwidth += me["bandwidth"]
                 resp = 0
                 if "resp" in me:
                     for r in me["resp"]:
@@ -85,13 +96,11 @@ class rtStatViewer:
             num = count
             of = self.progress_count
 
-        else: pass # you should never get here
-
         if num > of: of = num
-        self.progress(num, of, ops_sec, resp*1000, title=self.stage, final=final)
+        self.progress(num, of, ops_sec, bandwidth, avg_resp*1000, failures, title=self.stage, final=final)
         self.last_seen = now
     
-    def progress(self, num, of,  ops, resp, title="", final=False, bar_width=35):
+    def progress(self, num, of,  ops, bandwidth, resp, failures, title="", final=False, bar_width=24):
         """Ultra simple progress bar"""
         file=sys.stdout
 
@@ -100,11 +109,16 @@ class rtStatViewer:
         else:
             title = "{0}:{1}".format(title, " " * (PROGRESS_TITLE_LEN - len(title)))
         
-        width = math.floor( (num / of) * bar_width)
-        perc_done = math.floor((num / of) * 100)
+        width = math.ceil( (num / of) * bar_width)
+        perc_done = math.ceil((num / of) * 100)
 
+        failtxt = ""
+        if failures > 0:
+            failtxt = "\033[1;31mF:{}\033[0m".format(failures)
+            
         file.write(
-            "\r{0:<10}|{1}{2}|{3:>4}% [{4:>9.2f} op/s] [{4:>9.2f} ms]".format(title, "|" * width, "-" * (bar_width - width), perc_done, ops, resp)
+            "\r{0:<10}|{1}{2}|{3:>4}% [{4:>9.2f} op/s] [{5:>10}/s] [{6:>7.2f} ms] {7}".format(
+                    title, "|" * width, "-" * (bar_width - width), perc_done, ops, human_readable(bandwidth), resp, failtxt)
         )
         if final:
             file.write("\n")

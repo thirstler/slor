@@ -1,6 +1,7 @@
 import boto3
 import sys
 import time
+import random
 
 class SlorProcess:
 
@@ -9,21 +10,24 @@ class SlorProcess:
     id = None             # Process ID (unique to the worker, not the whole distributed job)
     s3client = None
     stop = False
+    byte_pool = 0
 
-    nownow = 0            # Current time
+    nownow = 0               # Current time
     fail_count = 0
-    benchmark_start = 0   # benchmark start time
-    benchmark_iops = 0    # operations per second for this bench (total average)
-    benchmark_count = 0   # I/O count, total for benchmark
-    benchmark_stop = 0    # when this benchmark is _supposed_ to stop
-    sample_start = 0      # reporting sample start time
-    sample_iops = 0       # operations per second for this sample
-    sample_count = 0      # I/O count for reporting sample
-    sample_content_ln = 0 # body content length (for bandwidth calc)
-    sample_bandwidth = 0  # bandwidth figures
-    sample_ttc = []       # array of time-to-complete I/O timings
-    unit_start = 0        # start of individual I/O 
-    unit_time = 0         # time to complete I/O
+    benchmark_start = 0      # benchmark start time
+    benchmark_iops = 0       # operations per second for this bench (total average)
+    benchmark_count = 0      # I/O count, total for benchmark
+    benchmark_stop = 0       # when this benchmark is _supposed_ to stop
+    benchmark_bandwidth = 0  # final bandwidth for the full benchmark
+    benchmark_content_ln = 0 
+    sample_start = 0         # reporting sample start time
+    sample_iops = 0          # operations per second for this sample
+    sample_count = 0         # I/O count for reporting sample
+    sample_content_ln = 0    # body content length (for bandwidth calc)
+    sample_bandwidth = 0     # bandwidth figures
+    sample_ttc = []          # array of time-to-complete I/O timings
+    unit_start = 0           # start of individual I/O 
+    unit_time = 0            # time to complete I/O
 
     def start_benchmark(self):
         self.benchmark_start = time.time()
@@ -33,9 +37,9 @@ class SlorProcess:
         self.benchmark_stop = self.benchmark_start + self.config["run_time"]
 
     def stop_benchmark(self):
-        self.benchmark_iops = float(self.benchmark_count) / (time.time() - self.benchmark_start)
-        #self.benchmark_iops = 0
-        #self.benchmark_count = 0
+        now = time.time()
+        self.benchmark_iops = float(self.benchmark_count) / (now - self.benchmark_start)
+        self.benchmark_bandwidth =  float(self.benchmark_content_ln) / (now - self.benchmark_start)
 
     def inc_io_count(self):
         self.benchmark_count += 1
@@ -43,6 +47,7 @@ class SlorProcess:
 
     def inc_content_len(self, length):
         self.sample_content_ln += length
+        self.benchmark_content_ln += length
 
     def start_sample(self):
         self.sample_start = time.time()
@@ -55,11 +60,11 @@ class SlorProcess:
         now = time.time()
         self.sample_iops = float(self.sample_count) / (now - self.sample_start)
         self.sample_bandwidth = float(self.sample_content_ln) / (now - self.sample_start)
-        #self.benchmark_iops = float(self.benchmark_count) / (now - self.benchmark_start)
 
     def start_io(self):
         self.unit_start = time.time()
-    
+        self.unit_time = 0
+
     def stop_io(self):
         self.unit_time = time.time() - self.unit_start
         self.sample_ttc.append(self.unit_time)
@@ -96,6 +101,18 @@ class SlorProcess:
             t_time += val["finish"] - val["start"]
         return (count + 1) / t_time
 
+    def get_bytes_from_pool(self, num_bytes):
+        start = random.randrange(0, self.pool_sz)
+        ext = start + num_bytes
+        if ext > self.pool_sz:
+            return self.byte_pool[:(ext-self.pool_sz)] + self.byte_pool[start:self.pool_sz]
+        else:
+            return self.byte_pool[start:ext]
+
+    def mk_byte_pool(self, num_bytes):
+        self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
+        self.pool_sz = num_bytes
+        
 
     def log_stats(self, final=False):
 
@@ -104,11 +121,15 @@ class SlorProcess:
             "iops": self.sample_iops,
             "failures": self.fail_count,
             "resp": self.sample_ttc,
+            "bandwidth": self.sample_bandwidth
         }
         if final:
-            stats["final"] = True
-            stats["benchmark_iops"] = self.benchmark_iops
-
+            stats.update({
+                "final": True,
+                "benchmark_iops": self.benchmark_iops,
+                "benchmark_bandwidth": self.benchmark_bandwidth
+            })
+        if self.id == 0: print(stats)
         self.msg_to_worker(
             type="stat",
             stage=self.config["type"],

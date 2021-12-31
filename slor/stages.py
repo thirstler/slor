@@ -37,8 +37,8 @@ class SlorRead(SlorProcess):
                 try:
                     self.start_io()
                     resp = self.get_object(pkey[0], pkey[1])
-                    self.inc_content_len(resp["ContentLength"])
                     self.stop_io()
+                    self.inc_content_len(resp["ContentLength"])
 
                 except Exception as e:
                     sys.stderr.write("retry {0}/{1}: {2}".format(pkey[0], pkey[1], str(e)))
@@ -69,59 +69,6 @@ class SlorWrite(SlorProcess):
         self.config = config
 
     def exec(self):
-
-        self.set_s3_client(self.config)
-        szrange = self.config["sz_range"]
-        is_rand_range = False if szrange[0] == szrange[1] else True
-
-        start = tm = time.time()
-        stop = start + self.config["run_time"]
-
-        junk = bytearray(os.urandom(int(szrange[1])) * 2)
-
-        while True:
-
-            if tm >= stop:
-                break
-
-            body_data = (
-                junk[: random.randint(int(szrange[0]), int(szrange[1]))]
-                if is_rand_range
-                else junk
-            )
-
-            ##
-            # Execute the PUT and gather timing
-            td = {"start": time.time()}
-            try:
-                data = self.put_object(
-                    "{0}{1}".format(
-                        self.config["bucket_prefix"],
-                        random.randint(0, (self.config["bucket_count"] - 1)),
-                    ),
-                    gen_key(
-                        key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX
-                    ),
-                    body_data,
-                )
-                td["status"] = True
-            except Exception as e:
-                td["status"] = False
-                sys.stderr.write("{0}\n".format(str(e)))
-            tm = td["finish"] = time.time()
-            self.timing_data.append(td)
-
-            ##
-            # Log the PUTs if it's time or if out of time
-            if (td["finish"] - tm) >= WORKER_REPORT_TIMER or tm >= stop:
-                ops_sec = self.assess_per_sec(self.timing_data)
-
-                self.msg_to_worker(type="stat", stage="write", value=ops_sec, time=tm)
-                self.timing_data.clear()
-                if tm >= stop:
-                    break
-
-    def process(self, td):
         pass
 
 
@@ -174,6 +121,57 @@ class SlorMetadataMixed(SlorProcess):
     def exec(self):
         pass
 
+class SlorBlowout(SlorProcess):
+
+    def __init__(self, socket, config, id):
+        self.sock = socket
+        self.id = id
+        self.config = config
+
+    def exec(self):
+
+        self.set_s3_client(self.config)
+
+        objcount = int(self.config["cache_overrun_sz"]/self.config["threads"]/CACHE_OVERRUN_OBJ_SZ)+1
+        self.mk_byte_pool(CACHE_OVERRUN_OBJ_SZ * 2)
+
+        self.start_benchmark()
+        self.start_sample()
+        for bo in range(0, objcount):
+
+            self.nownow = time.time()  # Does anyone really know what time it is?
+
+            if self.check_for_messages() == "stop":
+                break
+            
+            body_data = self.get_bytes_from_pool(CACHE_OVERRUN_OBJ_SZ)
+
+            for i in range(0, PREPARE_RETRIES):
+
+                try:
+                    self.start_io()
+                    self.put_object("{0}{1}".format(self.config["bucket_prefix"], bo % self.config["bucket_count"]), str(i), body_data)
+                    self.stop_io()
+                    self.inc_content_len(CACHE_OVERRUN_OBJ_SZ)
+                    break # worked, no need to retry
+
+                except Exception as e:
+                    sys.stderr.write("retry: {0}".format(str(e)))
+                    self.fail_count += 1
+                    continue # Keep trying, you can do it
+
+            if self.benchmark_count == objcount:
+                self.stop_sample()
+                self.stop_benchmark()
+                self.log_stats(final=True)
+
+            # Report-in every now and then
+            elif (self.nownow - self.sample_start) >= WORKER_REPORT_TIMER:
+                self.stop_sample()
+                self.log_stats()
+                self.start_sample()
+                self.start_sample()
+
 
 class SlorPrepare(SlorProcess):
 
@@ -181,23 +179,17 @@ class SlorPrepare(SlorProcess):
         self.sock = socket
         self.id = id
         self.config = config
-        try:
-            self.config["prepare_sz"] = (
-                self.config["prepare_sz"] / self.config["threads"]
-            ) + 1
-        except:
-            pass  # whatever
+
 
     def exec(self):
 
         self.set_s3_client(self.config)
-        szrange = self.config["sz_range"]
-        is_rand_range = False if szrange[0] == szrange[1] else True
+        sz_range = self.config["sz_range"]
+        r1 = int(sz_range[0])
+        r2 = int(sz_range[1])
         maplen = len(self.config["mapslice"])
 
-        # Takes too much effort to generate random data on-the-fly, going to
-        # pull random offsets from a pool of bytes
-        pool = bytearray(os.urandom(int(szrange[1]) * 2))
+        self.mk_byte_pool(int(sz_range[1]) * 2)
 
         self.start_benchmark()
         self.start_sample()
@@ -208,25 +200,22 @@ class SlorPrepare(SlorProcess):
             if self.check_for_messages() == "stop":
                 break
             
-            dsize = random.randint(int(szrange[0]), int(szrange[1]))
-            body_data = (
-                pool[: dsize ]
-                if is_rand_range
-                else pool
-            )
+            c_len = random.randint(r1, r2)
+            body_data = self.get_bytes_from_pool(c_len)
 
             for i in range(0, PREPARE_RETRIES):
 
                 try:
                     self.start_io()
                     self.put_object(skey[0], skey[1], body_data)
-                    self.inc_content_len(dsize)
                     self.stop_io()
-                    break
+                    self.inc_content_len(c_len)
+                    break # worked, no need to retry
+
                 except Exception as e:
                     sys.stderr.write("retry: {0}".format(str(e)))
                     self.fail_count += 1
-                    continue
+                    continue # Keep trying, you can do it
 
             if self.benchmark_count == maplen:
                 self.stop_sample()
