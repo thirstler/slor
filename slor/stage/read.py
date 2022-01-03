@@ -1,6 +1,5 @@
 from shared import *
 from process import SlorProcess
-import time
 
 class Read(SlorProcess):
 
@@ -17,16 +16,14 @@ class Read(SlorProcess):
         stop = False
         rerun = 0
 
-        print(len(self.config["mapslice"]))
-
         # Wrap-around when out of keys to read
         while True:
 
             if stop: break
 
             if rerun > 0:
-                self.msg_to_worker(
-                    value="WARNING: rereading objects (x{0}), consider increasing iop-limit".format(
+                sys.stderr.write(
+                    "WARNING: rereading objects (x{0}), consider increasing iop-limit\n".format(
                         rerun
                     )
                 )
@@ -42,14 +39,13 @@ class Read(SlorProcess):
                 except Exception as e:
                     sys.stderr.write("fail[{0}] {0}/{1}: {2}\n".format(self.id, pkey[0], pkey[1], str(e)))
                     sys.stderr.flush()
-                    self.fail_count += 1
-                    continue
+                    self.stop_io(failed=True)
                 
                 if self.unit_start >= self.benchmark_stop:
                     self.stop_sample()
                     self.stop_benchmark()
                     self.log_stats(final=True)
-                    stop = True
+                    stop = True # break outer loop
                     break
 
                 elif (self.unit_start - self.sample_start) >= WORKER_REPORT_TIMER:

@@ -27,7 +27,7 @@ class SlorControl:
 
     def exec(self):
 
-        self.print_message("\nstarting up...\n")
+        self.print_message("\nstarting up...")
         self.print_config()
         if not self.connect_to_workers():
             self.print_message("worker(s) failed check(s), I'm out")
@@ -35,13 +35,18 @@ class SlorControl:
 
 
         self.stat_viewer = stat_handler.rtStatViewer(self.config)
-        self.mk_read_map()
 
-        print("running loads:")
         self.print_progress_header()
 
-        for stage in self.config["tasks"]["loadorder"]:
-            if stage == "write": sys.exit(0)
+        self.mk_read_map()
+
+        for c, stage in enumerate(self.config["tasks"]["loadorder"]):
+            if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
+                continue
+            if c != 0:
+                sys.stdout.write("sleeping...")
+                sys.stdout.flush()
+                time.sleep(self.config["sleeptime"])
             self.exec_stage(stage)
 
         for c in self.conn:
@@ -52,24 +57,43 @@ class SlorControl:
         if bar_width > 25:
             bar_width = 25
         print("")
-        print("{0:<8} {1}      {2:<15}{3:<15}{4:<13}{5:<11}{6:<10}".format(
-            "stage", " "*bar_width, "throughput", "bandwidth", "resp. time", "elapsed", "fail"))
+        print("{0:<8} {1}     {2:<15}{3:<15}{4:<13}{5:<11}{6:<10}".format(
+            "Stage", " "*bar_width, "Throughput", "Bandwidth", "Resp ms", "Elapsed", "Failures"))
         print("-"*(bar_width+79))
 
     def print_config(self):
-        print(
-            "################################################################################"
-        )
-        print("# SLOR Configuration:")
+        twidth = os.get_terminal_size().columns
+        if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
+        print("{0}".format("-"*twidth))
+
+        print("SLOR Configuration:")
         print("Workload name:      {0}".format(self.config["name"]))
         print("User key:           {0}".format(self.config["access_key"]))
         print("Target endpoint:    {0}".format(self.config["endpoint"]))
         print("Stage run time:     {0}s".format(self.config["run_time"]))
+        print("Object size(s):     {0}".format(
+            human_readable(self.config["sz_range"][0], precision=0)
+            if self.config["sz_range"][0] == self.config["sz_range"][1]
+            else "low: {0}, high:  {1} (avg: {2})".format(
+                human_readable(self.config["sz_range"][0], precision=0),
+                human_readable(self.config["sz_range"][1], precision=0),
+                human_readable(self.config["sz_range"][2], precision=0)
+            )))
+        print("Key length(s):      {0}".format(
+            self.config["key_sz"][0]
+            if self.config["key_sz"][0] == self.config["key_sz"][1]
+            else "low: {0}, high:  {1} (avg: {2})".format(
+                self.config["key_sz"][0],
+                self.config["key_sz"][1],
+                self.config["key_sz"][2]
+            )))
+        print("Prepared objects:   {0} (readmap length)".format(
+            human_readable(self.get_readmap_len(), print_units="ops")))
         print("Bucket prefix:      {0}".format(self.config["bucket_prefix"]))
         print("Num buckets:        {0}".format(self.config["bucket_count"]))
         print("Driver processes:   {0}".format(len(self.config["worker_list"])))
         print(
-            "Procs per driver:   {0} ({1} workers)".format(
+            "Procs per driver:   {0} ({1} workers total)".format(
                 self.config["worker_thr"],
                 (int(self.config["worker_thr"]) * len(self.config["worker_list"])),
             )
@@ -86,9 +110,13 @@ class SlorControl:
         )
         print("Stats database:     {0}".format(self.db_file))
         print("Stages:")
+        stagecount = 1
+        if self.get_readmap_len() > 0:
+            print("{} {}: {}".format(" "*22, stagecount, " readmap - generate keys for use during read opeations"))
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
+            stagecount += 1
             if stage == "mixed":
-                sys.stdout.write("                    {0}: {1} (".format(i, stage))
+                sys.stdout.write("                    {0}: {1} (".format(stagecount, stage))
                 for j, m in enumerate(self.config["tasks"]["mixed_profile"]):
                     sys.stdout.write(
                         "{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m])
@@ -96,20 +124,39 @@ class SlorControl:
                     if (j + 1) < len(self.config["tasks"]["mixed_profile"]):
                         sys.stdout.write(", ")
                 print(")")
-            else:
-                print("                    {0}: {1}".format(i, stage))
-        print()
-        print()
+            elif stage == "init":
+                print("{} {}: {}".format(" "*22, stagecount, " init - create needed buckets/config"))
+            elif stage == "prepare":
+                print("{} {}: {}".format(" "*22, stagecount, " prepare - write objects needed for read operations"))
+            elif stage == "blowout":
+                if self.config["ttl_sz_cache"] == 0:
+                    stagecount -= 1
+                    continue
+                else:
+                    print("{} {}: {}".format(" "*22, stagecount, " blowout - overrun page cache (needs proper config)"))
+            elif stage == "read":
+                print("{} {}: {}".format(" "*22, stagecount, " read - pure GET workload"))
+            elif stage == "write":
+                print("{} {}: {}".format(" "*22, stagecount, " write - pure PUT workload"))
+            elif stage == "head":
+                print("{} {}: {}".format(" "*22, stagecount, " head - pure HEAD workload"))
+            elif stage == "delete":
+                print("{} {}: {}".format(" "*22, stagecount, " delete - pure DELETE workload"))
+            elif stage == "tag":
+                print("{} {}: {}".format(" "*22, stagecount, " tag - pure tagging (metadata) workload"))
+
 
     def connect_to_workers(self):
         ret_val = True
         self.config["worker_node_names"] = []
-        for hostport in self.config["worker_list"]:
-            print(
-                "################################################################################"
-            )
-            print(
-                "# worker system ({0}:{1})".format(hostport["host"], hostport["port"])
+        twidth = os.get_terminal_size().columns
+        if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
+        
+        print("Workers ({})".format(len(self.config["worker_list"])))
+        print("{0}".format("-"*twidth))
+        for i, hostport in enumerate(self.config["worker_list"]):
+            sys.stdout.write(
+                "{0}) addr: {1}:{2};".format(i+1, hostport["host"], hostport["port"])
             )
             try:
                 self.conn.append(Client((hostport["host"], hostport["port"])))
@@ -132,18 +179,20 @@ class SlorControl:
 
         self.config["worker_node_names"].append(data["uname"].node)
 
-        print("  Hostname: {0}".format(data["uname"].node))
-        print(
-            "  OS: {0} release {1}".format(data["uname"].system, data["uname"].release)
+        sys.stdout.write(" hostname: {0};".format(data["uname"].node))
+        sys.stdout.write(
+            " OS: {0} release {1}".format(data["uname"].system, data["uname"].release)
         )
         if data["slor_version"] != SLOR_VERSION:
+            sys.stdout.write("\n")
             print(
                 "  \033[1;31mwarning\033[0m: version mismatch; controller is {0} worker is {1}".format(
                     SLOR_VERSION, data["slor_version"]
                 )
             )
         if data["sysload"][0] >= 1:
-            print(
+            sys.stdout.write("\n")
+            sys.stdout.write(
                 "  \033[1;31mwarning\033[0m: worker 1m sysload is > 1 ({0})".format(
                     data["sysload"][0]
                 )
@@ -155,11 +204,13 @@ class SlorControl:
                 + data["net"][iface].dropin
                 + data["net"][iface].dropout
             ) > 0:
-                print(
+                sys.stdout.write("\n")
+                sys.stdout.write(
                     "  \033[1;31mwarning\033[0m: iface {0} has dropped packets or errors".format(
                         iface
                     )
                 )
+        sys.stdout.write("\n")
 
     def exec_stage(self, stage):
         """
@@ -229,6 +280,15 @@ class SlorControl:
 
             time.sleep(0.01)
 
+    def get_readmap_len(self):
+        try:
+            blksz = (self.config["worker_thr"] * len(self.config["worker_list"]))
+            objcount = int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
+        except:
+            objcount = 0
+
+        return (objcount - (objcount % blksz) + blksz)
+
 
     def mk_read_map(self, key_desc={"min": 40, "max": 40}):
 
@@ -237,15 +297,19 @@ class SlorControl:
                 "readmap of {0} entries exists".format(len(self.readmap))
             )
             return
+        
+        objcount = self.get_readmap_len()
+        
 
-        blksz = (self.config["worker_thr"] * len(self.config["worker_list"]))
-        objcount = int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
-        objcount = objcount - (objcount % blksz) + blksz
+        self.stat_viewer.set_stage("readmap")
+        self.stat_viewer.set_progress_count(objcount)
 
-        sys.stdout.write("generating prepaired keys ({0} entries)... ".format(objcount))
-        sys.stdout.flush()
-
+        skipcount = int(objcount/100)
+        samplecount = 0
+        timer = time.time()
+        avgrate = []
         for z in range(0, objcount):
+
             self.readmap.append(
                 (
                     "{0}{1}".format(
@@ -257,8 +321,19 @@ class SlorControl:
                     ),
                 )
             )
-
-        self.print_message("done")
+            samplecount += 1
+            if z % skipcount == 0 or objcount == (z+1):
+                final = False
+                now = time.time()
+                avgrate.append(samplecount/(now - timer))
+                if objcount == (z+1):
+                    final = True
+                    ttl=0
+                    for i in avgrate: ttl += i
+                    avgrate.append(ttl/len(avgrate))
+                self.stat_viewer.arbitrary_progress(z, objcount, ops=avgrate[-1], title="readmap", final=final)
+                samplecount = 0
+                timer = now
 
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
@@ -336,6 +411,7 @@ class SlorControl:
         config = {
             "host": target["host"],
             "port": target["port"],
+            "w_id": wid,
             "threads": self.config["worker_thr"],
             "access_key": self.config["access_key"],
             "secret_key": self.config["secret_key"],
@@ -346,6 +422,7 @@ class SlorControl:
             "bucket_count": int(self.config["bucket_count"]),
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
+            "key_sz": self.config["key_sz"],
             "prepare_sz": int(
                 self.config["ttl_prepare_sz"] / len(self.config["worker_list"])
             ),
@@ -355,7 +432,7 @@ class SlorControl:
         }
 
         # Work out the readmap slices
-        random.shuffle(self.readmap)
+        #random.shuffle(self.readmap)
         chunk = int(len(self.readmap) / len(self.config["worker_list"]))
         offset = chunk * wid
         end_slice = offset + chunk

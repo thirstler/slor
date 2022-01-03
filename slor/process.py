@@ -12,7 +12,6 @@ class SlorProcess:
     stop = False
     byte_pool = 0
 
-    nownow = 0               # Current time
     fail_count = 0
     benchmark_start = 0      # benchmark start time
     benchmark_iops = 0       # operations per second for this bench (total average)
@@ -65,10 +64,13 @@ class SlorProcess:
         self.unit_start = time.time()
         self.unit_time = 0
 
-    def stop_io(self):
+    def stop_io(self, failed=False):
         self.unit_time = time.time() - self.unit_start
         self.sample_ttc.append(self.unit_time)
-        self.inc_io_count()
+        if failed:
+            self.fail_count += 1
+        else:
+            self.inc_io_count()
 
     def check_for_messages(self):
 
@@ -95,7 +97,7 @@ class SlorProcess:
         ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
         
 
-    def get_bytes_from_pool(self, num_bytes):
+    def get_bytes_from_pool(self, num_bytes) -> bytearray:
         start = random.randrange(0, self.pool_sz)
         ext = start + num_bytes
         if ext > self.pool_sz:
@@ -103,7 +105,7 @@ class SlorProcess:
         else:
             return self.byte_pool[start:ext]
 
-    def mk_byte_pool(self, num_bytes):
+    def mk_byte_pool(self, num_bytes) -> None:
         self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
         self.pool_sz = num_bytes
 
@@ -127,7 +129,7 @@ class SlorProcess:
             type="stat",
             stage=self.config["type"],
             value=stats,
-            time_ms=int(self.nownow * 1000)
+            time_ms=int(time.time() * 1000)
         )
 
     def msg_to_worker(
@@ -143,6 +145,7 @@ class SlorProcess:
         if time_ms != None:
             mesg["time"] = time_ms
 
+        if self.id == 0: print(mesg)
         try:
             self.sock.send(mesg)
         except BrokenPipeError:

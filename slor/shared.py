@@ -28,6 +28,8 @@ DEFAULT_KEY_LENGTH = "40"
 DEFAULT_READMAP_PREFIX = "read/"
 DEFAULT_CACHE_OVERRUN_OBJ = 8388608
 DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
+DEFAULT_SLEEP_TIME = 30
+
 # Root help message
 ROOT_HELP = """
 Usage slor.py [controller|worker] [options]
@@ -42,16 +44,16 @@ LOG_TO_CONSOLE = True
 WORKER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 WORKER_REPORT_TIMER = 5  # seconds
-LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup")
+LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
-PROGRESS_BY_TIME = ("read", "readwrite", "write", "mixed", "blowout")
+PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
 SHOW_STATS_RATE = 1 # seconds
 STATS_DB_DIR = "/dev/shm"
+TERM_WIDTH_MAX=104
+WRITE_STAGE_BYTEPOOL_SZ = 16777216
 
-
-###############################################################################
 ###############################################################################
 ## Globally shared routines
 ##
@@ -75,7 +77,7 @@ def parse_size(stringval: str) -> float:
     return float(stringval)
 
 
-def human_readable(value, format="SI", print_units="bytes"):
+def human_readable(value, format="SI", print_units="bytes", precision=2):
     sipwr = 18
     
     if print_units == "ops":
@@ -85,7 +87,7 @@ def human_readable(value, format="SI", print_units="bytes"):
 
     for s in units:
         if value > 10 ** sipwr or (10 ** sipwr) == 1:
-            return "{0:.2f}{1}".format(value / (10 ** sipwr), s)
+            return "{0:.{2}f}{1}".format(value / (10 ** sipwr), s, precision)
         sipwr -= 3
 
     return "??" # you shouldn't get here

@@ -14,7 +14,6 @@ class Overrun(SlorProcess):
     def exec(self):
 
         count = int(self.config["cache_overrun_sz"]/self.config["threads"]/DEFAULT_CACHE_OVERRUN_OBJ)+1
-        print(count)
         self.set_s3_client(self.config)
         self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ*2)
         self.start_benchmark()
@@ -26,14 +25,14 @@ class Overrun(SlorProcess):
                 break
             
             body_data = self.get_bytes_from_pool(DEFAULT_CACHE_OVERRUN_OBJ)
+            key = "w{}t{}o{}".format(self.config["w_id"], self.id, o)
 
             for i in range(0, PREPARE_RETRIES):
-
                 try:
                     self.start_io()
                     self.put_object(
                         "{0}{1}".format(self.config["bucket_prefix"], (o % self.config["bucket_count"])),
-                        "{0}{1}".format(DEFAULT_CACHE_OVERRUN_PREFIX, o),
+                        "{0}{1}".format(DEFAULT_CACHE_OVERRUN_PREFIX, key),
                         body_data)
                     self.stop_io()
                     self.inc_content_len(DEFAULT_CACHE_OVERRUN_OBJ)

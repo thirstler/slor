@@ -10,10 +10,9 @@ import json
 ##
 def calc_prepare_size(sizerange, runtime, iops):
     if len(sizerange) > 1:
-        avgsz = ((sizerange[1] - sizerange[0]) / 2) + sizerange[0]
+        avgsz = (sizerange[0] + sizerange[1]) / 2
     else:
         avgsz = sizerange[0]
-
     return avgsz * iops * runtime
 
 
@@ -161,6 +160,11 @@ def run():
         help="specify the loads you want to run; any (or all) of read, write, delete, head, mixed",
     )
     parser.add_argument(
+        "--sleep",
+        default=DEFAULT_SLEEP_TIME,
+        help="sleeptime between workloads",
+    )
+    parser.add_argument(
         "--mix-profile",
         default=DEFAULT_MIX_PROFILE,
         help="profile of mixed load percentages in JASON format, eg: '{0}'".format(
@@ -185,11 +189,13 @@ def run():
     if args.endpoint == "":
         args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
 
-    key_sz = args.key_length.split(",")
+    key_sz = args.key_length.split("-")
     if len(key_sz) == 1:
-        key_sz = (int(key_sz[0]), int(key_sz[0]))
+        key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
     else:
-        key_sz = (int(key_sz[0]), int(key_sz[1]))
+        key_sz = (int(key_sz[0]),
+                  int(key_sz[1]),
+                  int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
 
     tasks = generate_tasks(args)
 
@@ -207,6 +213,7 @@ def run():
         "bucket_count": int(args.bucket_count),
         "bucket_prefix": args.bucket_prefix,
         "worker_list": parse_worker_list(args.worker_list),
+        "sleeptime": float(args.sleep),
         "worker_thr": int(args.worker_threads),
         "ttl_sz_cache": parse_size(args.cachemem_size),
         "ttl_prepare_sz": calc_prepare_size(

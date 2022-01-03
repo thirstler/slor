@@ -8,6 +8,7 @@ from stages import *
 import stage.prepare
 import stage.read
 import stage.overrun
+import stage.write
 
 def _worker_t(socket, config, id):
     """
@@ -20,7 +21,7 @@ def _worker_t(socket, config, id):
     elif config["type"] == "read":
         wc = stage.read.Read(socket, config, id).exec()
     elif config["type"] == "write":
-        wc = SlorWrite(socket, config, id).exec()
+        wc = stage.write.Write(socket, config, id).exec()
     elif config["type"] == "readwrite":
         wc = SlorReadWrite(socket, config, id).exec()
     elif config["type"] == "delete":
@@ -29,8 +30,10 @@ def _worker_t(socket, config, id):
         wc = SlorMetadataRead(socket, config, id).exec()
     elif config["type"] == "metadata_write":
         wc = SlorMetadataWrite(socket, config, id).exec()
-    elif config["type"] == "metadata_write":
+    elif config["type"] == "metadata_mixed":
         wc = SlorMetadataMixed(socket, config, id).exec()
+
+    del wc
 
 
 class SlorWorkerHandle:

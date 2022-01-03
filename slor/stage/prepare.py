@@ -40,9 +40,9 @@ class Prepare(SlorProcess):
                     break # worked, no need to retry
 
                 except Exception as e:
+                    self.stop_io(failed=True)
                     sys.stderr.write("retry[{0}]: {1}\n".format(self.id, str(e)))
                     sys.stderr.flush()
-                    self.fail_count += 1
                     continue # Keep trying, you can do it
 
             # Report-in every now and then

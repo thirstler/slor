@@ -9,6 +9,7 @@ class rtStatViewer:
     progress_time_len = None
     progress_time_start = None
     progress_count = None
+    object_count_shadow = 0 # used to track I/Os for time-based progress
     stage = None
     window = 0
     data = {}
@@ -47,9 +48,14 @@ class rtStatViewer:
         self.progress_count = count_length
         self.progress_time_start = time.time()
 
-    def show(self, disply_rate, now=time.time(), final=False):
+    def arbitrary_progress(self, count, of, ops=0, title="", final=False):
+        self.progress(count, of, ops, 0, 0, 0, title=title, final=final)
+        self.object_count_shadow = count
 
+    def show(self, disply_rate, now=time.time(), final=False):
+        
         if self.stage == "init":
+            self.object_count_shadow = 0
             if final:
                 self.progress(100, 100,  0, 0, 0, 0, title=self.stage, final=True)
             else:
@@ -64,6 +70,7 @@ class rtStatViewer:
         
         ops_sec = 0
         count = 0
+        self.object_count_shadow = 0
         avg_resp = 0
         failures = 0
         bandwidth = 0
@@ -71,15 +78,24 @@ class rtStatViewer:
         of = 0  # input to progress bar
         for worker in self.data[self.stage]:
             for process in self.data[self.stage][worker]:
+
+                # Shorthand
                 me = self.data[self.stage][worker][process]
-                if "count" in me: count += me["count"]
-                if "failures" in me: failures += me["failures"]
+
+                if "count" in me:
+                    count += me["count"]
+                    self.object_count_shadow = count
+
+                if "failures" in me:
+                    failures += me["failures"]
+
                 if final:
                     if "benchmark_iops" in me: ops_sec += me["benchmark_iops"]
                     if "benchmark_bandwidth" in me: bandwidth += me["benchmark_bandwidth"]
                 else:    
                     if "iops" in me: ops_sec += me["iops"]
                     if "bandwidth" in me: bandwidth += me["bandwidth"]
+
                 resp = 0
                 if "resp" in me and len(me["resp"]) > 0:
                     for r in me["resp"]:
@@ -102,32 +118,43 @@ class rtStatViewer:
         self.last_seen = now
     
     def progress(self, num, of,  ops, bandwidth, resp, failures, title="", final=False):
-        """Ultra simple progress bar"""
+        """
+        This has gotten really trashy, please rewrite
+        """
         file=sys.stdout
-        bar_width = os.get_terminal_size().columns - 78
+        bar_width = os.get_terminal_size().columns - 79
         if bar_width > 25:
             bar_width = 25
         
         width = math.ceil( (num / of) * bar_width)
         perc_done = math.ceil((num / of) * 100)
 
-        failtxt = "   --   "
-        if failures > 0:
-            failtxt = "\033[1;31m{0}\033[0m/{1}".format(
-                human_readable(failures, print_units="ops"), human_readable(of, print_units="ops"))
+        failtxt = "       -"
+        if num > 0:
+            try:
+                perc_f = failures/self.object_count_shadow
+            except:
+                perc_f = 0
+            if perc_f >= 0.0001:
+                failtxt = "{:.4f}%".format(perc_f*100)
+            else:
+                failtxt = "{0}/{1}".format(
+                    human_readable(failures, print_units="ops", precision=0),
+                    human_readable(self.object_count_shadow, print_units="ops", precision=0))
         
         elapsed = time.time() - self.progress_time_start
         hours, remainder = divmod(elapsed, 3600)
         minutes, seconds = divmod(remainder, 60)
         elapsed = '{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))
-        prog = "\r{0:<8}|{1}{2}|{3:>3}% [{4:>7} op/s] [{5:>10}/s] [{6:>7.2f} ms] [{7:>8}] [{8:>8}]".format(
+        prog = "\r{0:<8}{1}{2} {3:>3}% {4} {5} {6} [{7:>8}] [{8:>8}]".format(
                     title,
-                    u"\u2588" * width,
+                    "|" * width if final else "/" * width,
+                    #u"\u2588" * width,
                     "-" * (bar_width - width),
                     perc_done,
-                    human_readable(ops, print_units="ops"),
-                    human_readable(bandwidth),
-                    resp,
+                    "[           -]" if ops == 0 else "[{:>7} op/s]".format(human_readable(ops, print_units="ops")),
+                    "[           -]" if bandwidth == 0 else "[{:>10}/s]".format(human_readable(bandwidth)),
+                    "[         -]" if resp == 0 else "[{:>10.2f}]".format(resp),
                     elapsed,
                     failtxt)
         file.write(prog)
