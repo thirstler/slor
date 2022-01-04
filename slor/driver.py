@@ -10,7 +10,7 @@ import stage.read
 import stage.overrun
 import stage.write
 
-def _worker_t(socket, config, id):
+def _driver_t(socket, config, id):
     """
     Wrapper function to launch workload processes from a Process() call.
     """
@@ -36,9 +36,9 @@ def _worker_t(socket, config, id):
     del wc
 
 
-class SlorWorkerHandle:
+class SlorDriverHandle:
     """
-    Slor worker root class. This
+    Slor driver root class. This
     """
 
     sock = None
@@ -173,7 +173,7 @@ class SlorWorkerHandle:
             # Create socket for talking to thread and launch
             self.pipes.append((Pipe()))
             self.procs.append(
-                Process(target=_worker_t, args=(self.pipes[-1][1], config, id))
+                Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
             )
             self.procs[-1].start()
 
@@ -219,7 +219,7 @@ class SlorWorkerHandle:
     def decider(self, cmd_buffer):
         """I'm the decider"""
 
-        # Take care of items relevent to the root worker
+        # Take care of items relevent to the root driver
         if cmd_buffer["command"] == "sysinfo":
             inf_msg = self.sysinf
             inf_msg["status"] = "done"
@@ -229,7 +229,7 @@ class SlorWorkerHandle:
         # Workloads be here
         elif cmd_buffer["command"] == "workload":
 
-            # Init is done at the worker level, make buckets and exit
+            # Init is done at the driver level, make buckets and exit
             if (
                 "type" in cmd_buffer["config"]
                 and cmd_buffer["config"]["type"] == "init"
@@ -242,7 +242,7 @@ class SlorWorkerHandle:
             self.thread_control(cmd_buffer["config"])
 
 
-def _slor_worker(bindaddr, bindport):
+def _slor_driver(bindaddr, bindport):
 
     """Non-cli entry point"""
 
@@ -252,7 +252,7 @@ def _slor_worker(bindaddr, bindport):
         # There will only ever be one connection, no connection handling
         sock = server_sock.accept()
         print("new connection")
-        handle = SlorWorkerHandle(sock)
+        handle = SlorDriverHandle(sock)
         handle.exec()
 
 
@@ -260,7 +260,7 @@ def run():
     parser = argparse.ArgumentParser(
         description="Slor (S3 Load Ruler) is a distributed load generation and benchmarking tool for S3 storage"
     )
-    parser.add_argument("worker")  # Make argparse happy
+    parser.add_argument("driver")  # Make argparse happy
     parser.add_argument(
         "--bindaddr",
         default="0.0.0.0",
@@ -268,9 +268,9 @@ def run():
     )
     parser.add_argument(
         "--listen",
-        default=DEFAULT_WORKER_PORT,
-        help="worker listen port (defaults to {0})".format(DEFAULT_WORKER_PORT),
+        default=DEFAULT_DRIVER_PORT,
+        help="driver listen port (defaults to {0})".format(DEFAULT_DRIVER_PORT),
     )
     args = parser.parse_args()
 
-    _slor_worker(args.bindaddr, args.listen)
+    _slor_driver(args.bindaddr, args.listen)

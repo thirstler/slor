@@ -40,7 +40,7 @@ class Write(SlorProcess):
                 self.log_stats(final=True)
                 break
 
-            elif (self.unit_start - self.sample_start) >= WORKER_REPORT_TIMER:
+            elif (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.log_stats()
                 self.start_sample()

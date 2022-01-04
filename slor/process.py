@@ -7,7 +7,7 @@ class SlorProcess:
 
     sock = None
     config = None
-    id = None             # Process ID (unique to the worker, not the whole distributed job)
+    id = None             # Process ID (unique to the driver, not the whole distributed job)
     s3client = None
     stop = False
     byte_pool = 0
@@ -125,14 +125,14 @@ class SlorProcess:
                 "benchmark_bandwidth": self.benchmark_bandwidth
             })
 
-        self.msg_to_worker(
+        self.msg_to_driver(
             type="stat",
             stage=self.config["type"],
             value=stats,
             time_ms=int(time.time() * 1000)
         )
 
-    def msg_to_worker(
+    def msg_to_driver(
         self,
         type="message",
         value=None,
@@ -145,11 +145,10 @@ class SlorProcess:
         if time_ms != None:
             mesg["time"] = time_ms
 
-        if self.id == 0: print(mesg)
         try:
             self.sock.send(mesg)
         except BrokenPipeError:
-            sys.stderr.write("lost contact with main worker (process exiting)\n")
+            sys.stderr.write("lost contact with main driver (process exiting)\n")
             self.sock.close()
             sys.exit(1)
         except Exception as e:

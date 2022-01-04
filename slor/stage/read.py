@@ -37,7 +37,7 @@ class Read(SlorProcess):
                     self.inc_content_len(resp["ContentLength"])
 
                 except Exception as e:
-                    sys.stderr.write("fail[{0}] {0}/{1}: {2}\n".format(self.id, pkey[0], pkey[1], str(e)))
+                    sys.stderr.write("fail[{0}] {1}/{2}: {3}\n".format(self.id, pkey[0], pkey[1], str(e)))
                     sys.stderr.flush()
                     self.stop_io(failed=True)
                 
@@ -48,7 +48,7 @@ class Read(SlorProcess):
                     stop = True # break outer loop
                     break
 
-                elif (self.unit_start - self.sample_start) >= WORKER_REPORT_TIMER:
+                elif (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
                     self.stop_sample()
                     self.log_stats()
                     self.start_sample()

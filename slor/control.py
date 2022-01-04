@@ -30,7 +30,7 @@ def parse_size_range(stringval):
         return (low, high, avg)
 
 
-def parse_worker_list(stringval):
+def parse_driver_list(stringval):
     hostlist = []
     for hostport in stringval.split(","):
         if ":" in hostport:
@@ -38,14 +38,14 @@ def parse_worker_list(stringval):
             port = int(hostport.split(":")[1])
         else:
             host = hostport
-            port = int(DEFAULT_WORKER_PORT)
+            port = int(DEFAULT_DRIVER_PORT)
         hostlist.append({"host": host, "port": port})
     return hostlist
 
 
 def generate_tasks(args):
 
-    loads = tuple(args.loads.split(","))
+    loads = list(args.loads.split(","))
     mix_prof_obj = {}
     for l in loads:
         if l not in LOAD_TYPES:
@@ -61,26 +61,16 @@ def generate_tasks(args):
             sys.stderr.write("your mixed load profile values don't equal 100\n")
             sys.exit(1)
 
-    # Arrange the load order
-    actions = ("init",)
-    if len(loads) == 1 and "write" in loads:
-        actions += ("write",)
-    else:
-        actions += ("prepare",)
-        if "write" in loads:
-            actions += ("write",)
-        if "read" in loads:
-            actions += ("blowout", "read")
-        if "head" in loads:
-            actions += ("head",)
-        if "mixed" in loads:
-            actions += ("blowout", "mixed")
-        if "delete" in loads:
-            actions += ("delete",)  # debateable, might want cache overwritten as well?
-        if "cleanup" in loads:
-            actions += ("cleanup",)
+    # Always happens:
+    loads.insert(0, "init")
 
-    return {"loadorder": actions, "mixed_profile": mix_prof_obj}
+    # Create a readmap and add prep stage if needed
+    if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
+        loads.insert(1, "readmap")
+        loads.insert(2, "prepare")
+
+
+    return {"loadorder": loads, "mixed_profile": mix_prof_obj}
 
 
 def run():
@@ -106,7 +96,7 @@ def run():
     parser.add_argument(
         "--verify",
         default=True,
-        help='verify HTTPS certs, defaults to "true"; set to "false" or a path to a CA bundle (bundle needs to be present on all worker hosts',
+        help='verify HTTPS certs, defaults to "true"; set to "false" or a path to a CA bundle (bundle needs to be present on all driver hosts',
     )
     parser.add_argument("--region", default=DEFAULT_REGION)
     parser.add_argument("--access-key", default=False)
@@ -133,14 +123,14 @@ def run():
         ),
     )
     parser.add_argument(
-        "--worker-list",
+        "--driver-list",
         required=True,
-        help="comma-delimited list of running worker hosts (in host:port format); 9256 is assumed if port is excluded",
+        help="comma-delimited list of driver hosts running \"slor driver\" processes (in host:port format); 9256 is assumed if port is excluded",
     )
     parser.add_argument(
-        "--worker-threads",
+        "--processes-per-driver",
         default=DEFAULT_SESSION_COUNT,
-        help="number of simultaneous HTTP sessions per worker - num_workers * num_threads will equal total thread count (defaults to {0})".format(
+        help="number of simultaneous processes per driver host; drivers * processes_per_driver will equal total processes (defaults to {0})".format(
             DEFAULT_SESSION_COUNT
         ),
     )
@@ -212,9 +202,9 @@ def run():
         "run_time": int(args.stage_time),
         "bucket_count": int(args.bucket_count),
         "bucket_prefix": args.bucket_prefix,
-        "worker_list": parse_worker_list(args.worker_list),
+        "driver_list": parse_driver_list(args.driver_list),
         "sleeptime": float(args.sleep),
-        "worker_thr": int(args.worker_threads),
+        "driver_proc": int(args.processes_per_driver),
         "ttl_sz_cache": parse_size(args.cachemem_size),
         "ttl_prepare_sz": calc_prepare_size(
             parse_size_range(args.object_size),

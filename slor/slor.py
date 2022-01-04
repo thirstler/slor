@@ -13,10 +13,10 @@ if __name__ == "__main__":
 
         control.run()
 
-    elif sys.argv[1] == "worker":
-        import worker
+    elif sys.argv[1] == "driver":
+        import driver as driver
 
-        worker.run()
+        driver.run()
 
     else:
         sys.stderr.write(ROOT_HELP)

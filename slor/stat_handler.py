@@ -24,10 +24,10 @@ class rtStatViewer:
         # Create data data structure to hold current stats
         for stage in self.config["tasks"]["loadorder"]:
             self.data[stage] = {}
-            for worker in self.config["worker_node_names"]:
-                self.data[stage][worker] = {}
-                for t in range(0, self.config["worker_thr"]):
-                    self.data[stage][worker][t] = {}
+            for driver in self.config["driver_node_names"]:
+                self.data[stage][driver] = {}
+                for t in range(0, self.config["driver_proc"]):
+                    self.data[stage][driver][t] = {}
 
     def set_stage(self, stage):
         self.clear()
@@ -76,11 +76,11 @@ class rtStatViewer:
         bandwidth = 0
         num = 0 # input to progress bar
         of = 0  # input to progress bar
-        for worker in self.data[self.stage]:
-            for process in self.data[self.stage][worker]:
+        for driver in self.data[self.stage]:
+            for process in self.data[self.stage][driver]:
 
                 # Shorthand
-                me = self.data[self.stage][worker][process]
+                me = self.data[self.stage][driver][process]
 
                 if "count" in me:
                     count += me["count"]
@@ -126,8 +126,12 @@ class rtStatViewer:
         if bar_width > 25:
             bar_width = 25
         
-        width = math.ceil( (num / of) * bar_width)
-        perc_done = math.ceil((num / of) * 100)
+        try:
+            width = math.ceil( (num / of) * bar_width)
+            perc_done = math.ceil((num / of) * 100)
+        except ZeroDivisionError:
+            width = math.ceil(bar_width)
+            perc_done = 0
 
         failtxt = "       -"
         if num > 0:
@@ -148,7 +152,7 @@ class rtStatViewer:
         elapsed = '{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))
         prog = "\r{0:<8}{1}{2} {3:>3}% {4} {5} {6} [{7:>8}] [{8:>8}]".format(
                     title,
-                    "|" * width if final else "/" * width,
+                    "/" * width,
                     #u"\u2588" * width,
                     "-" * (bar_width - width),
                     perc_done,

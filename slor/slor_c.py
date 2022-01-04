@@ -29,8 +29,8 @@ class SlorControl:
 
         self.print_message("\nstarting up...")
         self.print_config()
-        if not self.connect_to_workers():
-            self.print_message("worker(s) failed check(s), I'm out")
+        if not self.connect_to_driver():
+            self.print_message("driver(s) failed check(s), I'm out")
             sys.exit(1)
 
 
@@ -38,15 +38,22 @@ class SlorControl:
 
         self.print_progress_header()
 
-        self.mk_read_map()
-
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
             if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
                 continue
-            if c != 0:
-                sys.stdout.write("sleeping...")
+            elif stage[:5] == "sleep":
+                try:
+                    st = int(stage[5:])
+                except:
+                    st = self.config["sleeptime"]
+                sys.stdout.write("sleeping ({})...".format(st))
                 sys.stdout.flush()
-                time.sleep(self.config["sleeptime"])
+                time.sleep(st)
+                continue
+            elif stage == "readmap":
+                self.mk_read_map()
+                continue
+
             self.exec_stage(stage)
 
         for c in self.conn:
@@ -91,11 +98,11 @@ class SlorControl:
             human_readable(self.get_readmap_len(), print_units="ops")))
         print("Bucket prefix:      {0}".format(self.config["bucket_prefix"]))
         print("Num buckets:        {0}".format(self.config["bucket_count"]))
-        print("Driver processes:   {0}".format(len(self.config["worker_list"])))
+        print("Driver processes:   {0}".format(len(self.config["driver_list"])))
         print(
-            "Procs per driver:   {0} ({1} workers total)".format(
-                self.config["worker_thr"],
-                (int(self.config["worker_thr"]) * len(self.config["worker_list"])),
+            "Procs per driver:   {0} ({1} driver total)".format(
+                self.config["driver_proc"],
+                (int(self.config["driver_proc"]) * len(self.config["driver_list"])),
             )
         )
         print(
@@ -111,8 +118,7 @@ class SlorControl:
         print("Stats database:     {0}".format(self.db_file))
         print("Stages:")
         stagecount = 1
-        if self.get_readmap_len() > 0:
-            print("{} {}: {}".format(" "*22, stagecount, " readmap - generate keys for use during read opeations"))
+        
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
             stagecount += 1
             if stage == "mixed":
@@ -124,6 +130,8 @@ class SlorControl:
                     if (j + 1) < len(self.config["tasks"]["mixed_profile"]):
                         sys.stdout.write(", ")
                 print(")")
+            elif stage == "readmap":
+                print("{} {}: {}".format(" "*22, stagecount, " readmap - generate keys for use during read operations"))
             elif stage == "init":
                 print("{} {}: {}".format(" "*22, stagecount, " init - create needed buckets/config"))
             elif stage == "prepare":
@@ -146,38 +154,38 @@ class SlorControl:
                 print("{} {}: {}".format(" "*22, stagecount, " tag - pure tagging (metadata) workload"))
 
 
-    def connect_to_workers(self):
+    def connect_to_driver(self):
         ret_val = True
-        self.config["worker_node_names"] = []
+        self.config["driver_node_names"] = []
         twidth = os.get_terminal_size().columns
         if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
         
-        print("Workers ({})".format(len(self.config["worker_list"])))
+        print("Drivers ({})".format(len(self.config["driver_list"])))
         print("{0}".format("-"*twidth))
-        for i, hostport in enumerate(self.config["worker_list"]):
+        for i, hostport in enumerate(self.config["driver_list"]):
             sys.stdout.write(
                 "{0}) addr: {1}:{2};".format(i+1, hostport["host"], hostport["port"])
             )
-            try:
-                self.conn.append(Client((hostport["host"], hostport["port"])))
-                self.conn[-1].send({"command": "sysinfo"})
-                resp = self.conn[-1].recv()
-                self.check_worker_info(resp)
-                self.mk_data_store(resp)
+            #try:
+            self.conn.append(Client((hostport["host"], hostport["port"])))
+            self.conn[-1].send({"command": "sysinfo"})
+            resp = self.conn[-1].recv()
+            self.check_driver_info(resp)
+            self.mk_data_store(resp)
 
-            except Exception as e:
-                sys.stderr.write(
-                    "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
-                        hostport["host"], hostport["port"], e
-                    )
-                )
-                ret_val = False
+            #except Exception as e:
+            #    sys.stderr.write(
+            #        "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
+            #            hostport["host"], hostport["port"], e
+            #        )
+            #    )
+            #    ret_val = False
 
         return ret_val
 
-    def check_worker_info(self, data):
+    def check_driver_info(self, data):
 
-        self.config["worker_node_names"].append(data["uname"].node)
+        self.config["driver_node_names"].append(data["uname"].node)
 
         sys.stdout.write(" hostname: {0};".format(data["uname"].node))
         sys.stdout.write(
@@ -186,17 +194,19 @@ class SlorControl:
         if data["slor_version"] != SLOR_VERSION:
             sys.stdout.write("\n")
             print(
-                "  \033[1;31mwarning\033[0m: version mismatch; controller is {0} worker is {1}".format(
+                "  \033[1;31mwarning\033[0m: version mismatch; controller is {0} driver is {1}".format(
                     SLOR_VERSION, data["slor_version"]
                 )
             )
+
         if data["sysload"][0] >= 1:
             sys.stdout.write("\n")
             sys.stdout.write(
-                "  \033[1;31mwarning\033[0m: worker 1m sysload is > 1 ({0})".format(
+                "  \033[1;31mwarning\033[0m: driver 1m sysload is > 1 ({0})".format(
                     data["sysload"][0]
                 )
             )
+
         for iface in data["net"]:
             if (
                 data["net"][iface].errin
@@ -214,21 +224,21 @@ class SlorControl:
 
     def exec_stage(self, stage):
         """
-        Contains the main loop communicating with worker processes
+        Contains the main loop communicating with driver processes
         """
 
         workloads = []
-        n_wrkrs = len(self.config["worker_list"])
+        n_wrkrs = len(self.config["driver_list"])
 
         # Create the workloads
-        for wc, target in enumerate(self.config["worker_list"]):
+        for wc, target in enumerate(self.config["driver_list"]):
             stage_cfg = self.mk_stage(target, stage, wc)
             if stage_cfg:
                 workloads.append(stage_cfg)
             else:
                 return
 
-        # Distribute buckets to workers for init
+        # Distribute buckets to driver for init
         if stage == "init":
             for bc in range(0, self.config["bucket_count"]):
                 workloads[bc % n_wrkrs]["bucket_list"].append(
@@ -245,14 +255,14 @@ class SlorControl:
         elif stage in PROGRESS_BY_TIME:
             self.stat_viewer.set_progress_time(self.config["run_time"])
 
-        # Send workloads to workers
+        # Send workloads to driver
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": wl})
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
 
         """
-        Primary Loop - monitors the workers by polling messages from them
+        Primary Loop - monitors the drivers by polling messages from them
         """
         donestack = len(workloads)
         while True:
@@ -282,7 +292,7 @@ class SlorControl:
 
     def get_readmap_len(self):
         try:
-            blksz = (self.config["worker_thr"] * len(self.config["worker_list"]))
+            blksz = (self.config["driver_proc"] * len(self.config["driver_list"]))
             objcount = int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
         except:
             objcount = 0
@@ -343,7 +353,7 @@ class SlorControl:
 
     def process_message(self, message):
         """
-        Filters messages from workers and take the appropriate action
+        Filters messages from drivers and take the appropriate action
         """
         try:
             if type(message) == str:
@@ -367,10 +377,10 @@ class SlorControl:
 
         # Maintain some data in-memory for real-time visibility
         self.stat_viewer.store(message)
-
+        
         # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
-            message["w_id"],
+            message["w_id"].replace(".", "_"),
             message["t_id"],
             message["time"],
             message["stage"],
@@ -393,13 +403,14 @@ class SlorControl:
             self.db_cursor = self.db_conn.cursor()
 
     def mk_data_store(self, sysinf):
+
         self.db_cursor.execute(
             "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
-                sysinf["uname"].node
+                sysinf["uname"].node.replace(".", "_")
             )
         )
         self.db_cursor.execute(
-            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(sysinf["uname"].node)
+            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(sysinf["uname"].node.replace(".", "_"))
         )
         # self.db_cursor.execute(
         #    "CREATE INDEX {0}_stage_i ON {0} (stage)".format(sysinf["uname"].node)
@@ -412,7 +423,7 @@ class SlorControl:
             "host": target["host"],
             "port": target["port"],
             "w_id": wid,
-            "threads": self.config["worker_thr"],
+            "threads": self.config["driver_proc"],
             "access_key": self.config["access_key"],
             "secret_key": self.config["secret_key"],
             "endpoint": self.config["endpoint"],
@@ -424,16 +435,17 @@ class SlorControl:
             "sz_range": self.config["sz_range"],
             "key_sz": self.config["key_sz"],
             "prepare_sz": int(
-                self.config["ttl_prepare_sz"] / len(self.config["worker_list"])
+                self.config["ttl_prepare_sz"] / len(self.config["driver_list"])
             ),
             "cache_overrun_sz": int(
-                self.config["ttl_sz_cache"] / len(self.config["worker_list"])
+                self.config["ttl_sz_cache"] / len(self.config["driver_list"])
             )
         }
 
         # Work out the readmap slices
-        #random.shuffle(self.readmap)
-        chunk = int(len(self.readmap) / len(self.config["worker_list"]))
+        sys.stdout.write("\r  [shuffling readmap...]  ")
+        random.shuffle(self.readmap)
+        chunk = int(len(self.readmap) / len(self.config["driver_list"]))
         offset = chunk * wid
         end_slice = offset + chunk
         mapslice = self.readmap[offset:end_slice]

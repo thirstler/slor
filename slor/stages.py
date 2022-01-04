@@ -1,8 +1,5 @@
 from process import SlorProcess
 from shared import *
-import random
-import time
-import os
 
 class SlorWrite(SlorProcess):
 

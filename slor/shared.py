@@ -15,8 +15,8 @@ DEFAULT_REGION = "us-east-1"
 DEFAULT_BUCKET_PREFIX = "slor-"
 DEFAULT_BENCH_LEN = "300"
 DEFAULT_OBJECT_SIZE = "1MB"
-DEFAULT_WORKER_PORT = "9256"
-DEFAULT_WORKER_LIST = "localhost:{0}".format(DEFAULT_WORKER_PORT)
+DEFAULT_DRIVER_PORT = "9256"
+DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "1"
 DEFAULT_UPPER_IOP_LIMIT = "10000"
 DEFAULT_TESTS = "read,write,head,mixed,delete"
@@ -32,7 +32,7 @@ DEFAULT_SLEEP_TIME = 30
 
 # Root help message
 ROOT_HELP = """
-Usage slor.py [controller|worker] [options]
+Usage slor.py [controller|driver] [options]
 
 Slor is a distributed load generation and benchmarking tool. Please see
 README.md for more information.
@@ -41,10 +41,10 @@ README.md for more information.
 
 # Low-level config (changing may or may not break things)
 LOG_TO_CONSOLE = True
-WORKER_SOCKET_TIMEOUT = 300  # seconds
+DRIVER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
-WORKER_REPORT_TIMER = 5  # seconds
-LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag")
+DRIVER_REPORT_TIMER = 5  # seconds
+LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
 PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag")
 OBJECT_PREFIX_LOC = "keys"
@@ -94,10 +94,24 @@ def human_readable(value, format="SI", print_units="bytes", precision=2):
 
 
 def basic_sysinfo():
+
+    # Older versions of psutil don't have getloadavg(), pft.
+    sysload = []
+    try:
+        sysload = psutil.getloadavg()
+    except AttributeError:
+        with open('/proc/loadavg') as f:
+            for i, item in  enumerate(f.readlines()[0].split(" ")):
+                if i > 2: break
+                sysload.append(float(item))
+    except:
+        # Fuck it
+        sysload = [0.0, 0.0, 0.0]
+
     return {
         "slor_version": SLOR_VERSION,
         "uname": platform.uname(),
-        "sysload": psutil.getloadavg(),
+        "sysload": sysload,
         "cpu_perc": psutil.cpu_percent(1),
         "vm": psutil.virtual_memory(),
         "cpus": psutil.cpu_count(),

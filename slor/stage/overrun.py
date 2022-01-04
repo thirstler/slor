@@ -45,7 +45,7 @@ class Overrun(SlorProcess):
                     continue # Keep trying, you can do it
 
             # Report-in every now and then
-            if (self.unit_start - self.sample_start) >= WORKER_REPORT_TIMER:
+            if (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.log_stats()
                 self.start_sample()
