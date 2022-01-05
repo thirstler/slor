@@ -46,7 +46,7 @@ FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
 LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
-PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag", "head")
+PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag", "head", "delete")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
 SHOW_STATS_RATE = 1 # seconds
@@ -94,19 +94,38 @@ def human_readable(value, format="SI", print_units="bytes", precision=2):
 
 
 def basic_sysinfo():
+    """
+    Never would have used psutil to start with if I knew is sucked this hard
+    """
 
     # Older versions of psutil don't have getloadavg(), pft.
     sysload = []
     try:
         sysload = psutil.getloadavg()
     except AttributeError:
-        with open('/proc/loadavg') as f:
-            for i, item in  enumerate(f.readlines()[0].split(" ")):
-                if i > 2: break
-                sysload.append(float(item))
+        if os.name == "posix":
+            with open('/proc/loadavg') as f:
+                for i, item in  enumerate(f.readlines()[0].split(" ")):
+                    if i > 2: break
+                    sysload.append(float(item))
+        else:
+            sysload = [0.0, 0.0, 0.0]
     except:
         # Fuck it
         sysload = [0.0, 0.0, 0.0]
+
+    # Not every platform has this either
+    try:
+        cpu_freq = psutil.cpu_freq()
+    except AttributeError:
+        cpu_freq = None
+
+    # Not every platform has this either
+    try:
+        sensors = psutil.sensors_temperatures(),
+    except AttributeError:
+        sensors = None
+
 
     return {
         "slor_version": SLOR_VERSION,
@@ -115,9 +134,9 @@ def basic_sysinfo():
         "cpu_perc": psutil.cpu_percent(1),
         "vm": psutil.virtual_memory(),
         "cpus": psutil.cpu_count(),
-        "cpu_freq": psutil.cpu_freq(),
+        "cpu_freq": cpu_freq,
         "net": psutil.net_io_counters(pernic=True),
-        "sensors": psutil.sensors_temperatures(),
+        "sensors": sensors,
     }
 
 
