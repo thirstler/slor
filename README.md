@@ -9,13 +9,18 @@ for S3 storage systems. It operates on the same controller/driver arrangement us
                 \_ Driver3
                 \_ etc...
 
+It currently runs only on Linux since 
 It runs wherever Python3 does and minimizes dependencies where possible. The
 ones that make the most of a fuss seem to be boto3 an psutil. They can both
 be "pip installed" if necessary but CentOS/RedHat w/EPEL has them in as
 RPM packages as well.
 
-It is currently not packages so just download and run where it is (this
-will likely change at some point).
+Installation
+------------
+
+Slor is not currently packaged so just download and run it where it is (this
+will likely change at some point). It should run anywhere python3 does where
+boto3 and psutil are installed.
 
 Getting Started
 ---------------

@@ -173,3 +173,25 @@ class SlorProcess:
             resp = self.s3client.get_object(Bucket=bucket, Key=key)
 
         return resp
+
+    def head_object(self, bucket, key, version_id=None):
+        if version_id != None:
+            resp = self.s3client.head_object(
+                Bucket=bucket, Key=key, VersionId=version_id
+            )
+        else:
+            resp = self.s3client.head_object(
+                Bucket=bucket, Key=key
+            )
+        return resp
+
+    def delete_object(self, bucket, key, version_id=None):
+        if version_id != None:
+            resp = self.s3client.delete_object(
+                Bucket=bucket, Key=key, VersionId=version_id
+            )
+        else:
+            resp = self.s3client.delete_object(
+                Bucket=bucket, Key=key
+            )
+        return resp

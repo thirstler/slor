@@ -7,7 +7,7 @@ from shared import *
 import sqlite3
 import os.path
 import stat_handler
-
+from pathlib import Path
 
 class SlorControl:
 
@@ -39,6 +39,11 @@ class SlorControl:
         self.print_progress_header()
 
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
+
+            if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
+                sys.stdout.write("\r   [shuffling readmap...]   ")
+                random.shuffle(self.readmap)
+
             if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
                 continue
             elif stage[:5] == "sleep":
@@ -81,7 +86,7 @@ class SlorControl:
         print("Object size(s):     {0}".format(
             human_readable(self.config["sz_range"][0], precision=0)
             if self.config["sz_range"][0] == self.config["sz_range"][1]
-            else "low: {0}, high:  {1} (avg: {2})".format(
+            else "low: {0}, high: {1} (avg: {2})".format(
                 human_readable(self.config["sz_range"][0], precision=0),
                 human_readable(self.config["sz_range"][1], precision=0),
                 human_readable(self.config["sz_range"][2], precision=0)
@@ -100,24 +105,28 @@ class SlorControl:
         print("Num buckets:        {0}".format(self.config["bucket_count"]))
         print("Driver processes:   {0}".format(len(self.config["driver_list"])))
         print(
-            "Procs per driver:   {0} ({1} driver total)".format(
+            "Procs per driver:   {0} ({1} worker processes total)".format(
                 self.config["driver_proc"],
                 (int(self.config["driver_proc"]) * len(self.config["driver_list"])),
             )
         )
         print(
             "Prepared data size: {0}".format(
-                human_readable(self.config["ttl_prepare_sz"])
+                human_readable(self.config["ttl_prepare_sz"]),
+                ((int(self.config["ttl_prepare_sz"])/DEFAULT_CACHE_OVERRUN_OBJ)+1),
+                human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
         )
         print(
-            "Cache overrun size: {0}".format(
-                human_readable(self.config["ttl_sz_cache"])
+            "Cache overrun size: {0} ({1} x {2} objects)".format(
+                human_readable(self.config["ttl_sz_cache"]),
+                (int(self.config["ttl_sz_cache"]/DEFAULT_CACHE_OVERRUN_OBJ)+1),
+                human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
         )
         print("Stats database:     {0}".format(self.db_file))
         print("Stages:")
-        stagecount = 1
+        stagecount = 0
         
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
             stagecount += 1
@@ -131,27 +140,25 @@ class SlorControl:
                         sys.stdout.write(", ")
                 print(")")
             elif stage == "readmap":
-                print("{} {}: {}".format(" "*22, stagecount, " readmap - generate keys for use during read operations"))
+                print("{} {}: {}".format(" "*19, stagecount, "readmap - generate keys for use during read operations"))
             elif stage == "init":
-                print("{} {}: {}".format(" "*22, stagecount, " init - create needed buckets/config"))
+                print("{} {}: {}".format(" "*19, stagecount, "init - create needed buckets/config"))
             elif stage == "prepare":
-                print("{} {}: {}".format(" "*22, stagecount, " prepare - write objects needed for read operations"))
+                print("{} {}: {}".format(" "*19, stagecount, "prepare - write objects needed for read operations"))
             elif stage == "blowout":
-                if self.config["ttl_sz_cache"] == 0:
-                    stagecount -= 1
-                    continue
-                else:
-                    print("{} {}: {}".format(" "*22, stagecount, " blowout - overrun page cache (needs proper config)"))
+                print("{} {}: {}".format(" "*19, stagecount, "blowout - overrun page cache"))
             elif stage == "read":
-                print("{} {}: {}".format(" "*22, stagecount, " read - pure GET workload"))
+                print("{} {}: {}".format(" "*19, stagecount, "read - pure GET workload"))
             elif stage == "write":
-                print("{} {}: {}".format(" "*22, stagecount, " write - pure PUT workload"))
+                print("{} {}: {}".format(" "*19, stagecount, "write - pure PUT workload"))
             elif stage == "head":
-                print("{} {}: {}".format(" "*22, stagecount, " head - pure HEAD workload"))
+                print("{} {}: {}".format(" "*19, stagecount, "head - pure HEAD workload"))
             elif stage == "delete":
-                print("{} {}: {}".format(" "*22, stagecount, " delete - pure DELETE workload"))
+                print("{} {}: {}".format(" "*19, stagecount, "delete - pure DELETE workload"))
             elif stage == "tag":
-                print("{} {}: {}".format(" "*22, stagecount, " tag - pure tagging (metadata) workload"))
+                print("{} {}: {}".format(" "*19, stagecount, "tag - pure tagging (metadata) workload"))
+            elif stage == "sleep":
+                print("{} {}: {}".format(" "*19, stagecount, "sleep - delay between workloads"))
 
 
     def connect_to_driver(self):
@@ -301,16 +308,8 @@ class SlorControl:
 
 
     def mk_read_map(self, key_desc={"min": 40, "max": 40}):
-
-        if len(self.readmap) > 0:
-            self.print_message(
-                "readmap of {0} entries exists".format(len(self.readmap))
-            )
-            return
         
         objcount = self.get_readmap_len()
-        
-
         self.stat_viewer.set_stage("readmap")
         self.stat_viewer.set_progress_count(objcount)
 
@@ -390,16 +389,24 @@ class SlorControl:
         self.db_conn.commit()
 
     def init_db(self):
+        if os.name == "nt":
+            dbroot = "C:/Windows/Temp/"
+        elif os.name == "posix":
+            dbroot = "/tmp/"
+        else:
+            return
 
         if self.db_conn == None:
-            self.db_file = "{0}/{1}.db".format(STATS_DB_DIR, self.config["name"])
+            self.db_file = Path("{}{}.db".format(dbroot, self.config["name"]))
+            #self.db_file = "{0}/{1}.db".format(STATS_DB_DIR, self.config["name"])
             vcount = 1
             while os.path.exists(self.db_file):
-                self.db_file = "{0}/{1}_{2}.db".format(
-                    STATS_DB_DIR, self.config["name"], vcount
-                )
+                self.db_file = Path("{}{}_{}.db".format(dbroot, self.config["name"], vcount))
+                #self.db_file = "{0}/{1}_{2}.db".format(
+                #    STATS_DB_DIR, self.config["name"], vcount
+                #)
                 vcount += 1
-            self.db_conn = sqlite3.connect(self.db_file)
+            self.db_conn = sqlite3.connect(self.db_file.as_posix())
             self.db_cursor = self.db_conn.cursor()
 
     def mk_data_store(self, sysinf):
@@ -443,8 +450,6 @@ class SlorControl:
         }
 
         # Work out the readmap slices
-        sys.stdout.write("\r  [shuffling readmap...]  ")
-        random.shuffle(self.readmap)
         chunk = int(len(self.readmap) / len(self.config["driver_list"]))
         offset = chunk * wid
         end_slice = offset + chunk

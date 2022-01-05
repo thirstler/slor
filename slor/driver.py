@@ -9,6 +9,9 @@ import stage.prepare
 import stage.read
 import stage.overrun
 import stage.write
+import stage.head
+import stage.delete
+import sys
 
 def _driver_t(socket, config, id):
     """
@@ -22,21 +25,19 @@ def _driver_t(socket, config, id):
         wc = stage.read.Read(socket, config, id).exec()
     elif config["type"] == "write":
         wc = stage.write.Write(socket, config, id).exec()
-    elif config["type"] == "readwrite":
-        wc = SlorReadWrite(socket, config, id).exec()
+    elif config["type"] == "head":
+        wc = stage.head.Head(socket, config, id).exec()
     elif config["type"] == "delete":
-        wc = SlorDelete(socket, config, id).exec()
-    elif config["type"] == "metadata_read":
-        wc = SlorMetadataRead(socket, config, id).exec()
-    elif config["type"] == "metadata_write":
-        wc = SlorMetadataWrite(socket, config, id).exec()
-    elif config["type"] == "metadata_mixed":
-        wc = SlorMetadataMixed(socket, config, id).exec()
+        wc = stage.delete.Delete(socket, config, id).exec()
 
-    del wc
+    try:
+        del wc
+    except:
+        # whatever
+        pass
 
 
-class SlorDriverHandle:
+class SlorDriver:
     """
     Slor driver root class. This
     """
@@ -50,10 +51,14 @@ class SlorDriverHandle:
     sysinf = None
     stop = False
     reset = False
+    bindaddr = None
+    bindport = None
 
-    def __init__(self, socket):
+    def __init__(self, socket, bindaddr, bindport):
 
         self.sock = socket
+        self.bindaddr = bindaddr
+        self.bindport = bindport
 
     def exec(self):
 
@@ -242,18 +247,24 @@ class SlorDriverHandle:
             self.thread_control(cmd_buffer["config"])
 
 
-def _slor_driver(bindaddr, bindport):
+def _slor_driver(bindaddr, bindport, exit_on_disconnect):
 
     """Non-cli entry point"""
-
-    server_sock = Listener((bindaddr, int(bindport)))
-
+    try:
+        server_sock = Listener((bindaddr, int(bindport)))
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+        
+    print("ready on  {}:{}".format(bindaddr, bindport))
     while True:
         # There will only ever be one connection, no connection handling
         sock = server_sock.accept()
         print("new connection")
-        handle = SlorDriverHandle(sock)
+        handle = SlorDriver(sock, bindaddr, bindport)
         handle.exec()
+        if exit_on_disconnect:
+            return
 
 
 def run():
@@ -273,4 +284,6 @@ def run():
     )
     args = parser.parse_args()
 
-    _slor_driver(args.bindaddr, args.listen)
+    _slor_driver(args.bindaddr, args.listen, False)
+    
+    sys.exit(0)

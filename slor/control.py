@@ -1,8 +1,10 @@
 import sys
 import argparse
 from multiprocessing.connection import Client
+from multiprocessing import Process
 from slor_c import *
 from shared import *
+from driver import _slor_driver, _driver_t, SlorDriver
 import json
 
 ###############################################################################
@@ -124,7 +126,7 @@ def run():
     )
     parser.add_argument(
         "--driver-list",
-        required=True,
+        default="",
         help="comma-delimited list of driver hosts running \"slor driver\" processes (in host:port format); 9256 is assumed if port is excluded",
     )
     parser.add_argument(
@@ -214,5 +216,17 @@ def run():
         "tasks": tasks,
     }
 
+    # Start a driver here if there isn't one specified
+    driver = None
+    if args.driver_list == "":
+        print("no driver address specified, starting one here")
+        driver = Process(target=_slor_driver, args=("127.0.0.1", DEFAULT_DRIVER_PORT, True))
+        driver.start()
+        time.sleep(2)
+
     handle = SlorControl(root_config)
     handle.exec()
+    
+    # Join the driver if we started one
+    if driver != None:
+        driver.join()
