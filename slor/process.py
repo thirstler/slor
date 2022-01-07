@@ -2,12 +2,13 @@ import boto3
 import sys
 import time
 import random
+from shared import *
 
 class SlorProcess:
 
     sock = None
     config = None
-    id = None             # Process ID (unique to the driver, not the whole distributed job)
+    id = None                # Process ID (unique to the driver, not the whole distributed job)
     s3client = None
     stop = False
     byte_pool = 0
@@ -19,66 +20,78 @@ class SlorProcess:
     benchmark_stop = 0       # when this benchmark is _supposed_ to stop
     benchmark_bandwidth = 0  # final bandwidth for the full benchmark
     benchmark_content_ln = 0 
-    sample_start = 0         # reporting sample start time
-    sample_iops = 0          # operations per second for this sample
-    sample_count = 0         # I/O count for reporting sample
-    sample_content_ln = 0    # body content length (for bandwidth calc)
-    sample_bandwidth = 0     # bandwidth figures
     sample_ttc = []          # array of time-to-complete I/O timings
     unit_start = 0           # start of individual I/O 
     unit_time = 0            # time to complete I/O
+    sample_struct = None
+    benchmark_struct = None      
+    default_op = None
+    current_op = None
+    operations = ()          # Operation types in this workload
 
-    def start_benchmark(self):
-        self.benchmark_start = time.time()
-        self.benchmark_iops = 0
-        self.benchmark_count = 0
-        self.fail_count = 0
+    def start_benchmark(self, operations):
+        self.benchmark_struct = self.new_sample(time.time())
         self.benchmark_stop = self.benchmark_start + self.config["run_time"]
+        self.operations = operations
+    def new_sample(self, start=None):
+        sample = {
+            "start": start if start else 0,
+            "end": 0
+        }
+        for t in self.operations:
+            sample[t]["st"] = {
+                "resp": [],
+                "bytes": 0,
+                "ios": 0,
+                "failures": 0,
+                "iotime": 0
+            }
+        return sample
 
     def stop_benchmark(self):
-        now = time.time()
-        self.benchmark_iops = float(self.benchmark_count) / (now - self.benchmark_start)
-        self.benchmark_bandwidth =  float(self.benchmark_content_ln) / (now - self.benchmark_start)
-
-    def inc_io_count(self):
-        self.benchmark_count += 1
-        self.sample_count += 1
+        self.benchmark_struct["end"] = time.time()
 
     def inc_content_len(self, length):
         self.sample_content_ln += length
         self.benchmark_content_ln += length
 
     def start_sample(self):
-        self.sample_start = time.time()
-        self.sample_iops = 0
-        self.sample_count = 0
-        self.sample_ttc.clear()
-        self.sample_content_ln = 0
+        self.sample_struct = self.new_sample(start=time.time())
 
     def stop_sample(self):
-        now = time.time()
-        self.sample_iops = float(self.sample_count) / (now - self.sample_start)
-        self.sample_bandwidth = float(self.sample_content_ln) / (now - self.sample_start)
+        self.sample_struct["end"] = time.time()
+        for o in self.operations:
+            self.benchmark_struct["st"][o]["bytes"] += self.sample_struct["st"][o]["bytes"]
+            self.benchmark_struct["st"][o]["iotime"] += self.sample_struct["st"][o]["iotime"]
+            self.benchmark_struct["st"][o]["ios"] += self.sample_struct["st"][o]["ios"]
+            self.benchmark_struct["st"][o]["failures"] += self.sample_struct["st"][o]["failures"]
 
-    def start_io(self):
-        self.unit_start = time.time()
+    def start_io(self, type):
+        self.current_op = type
         self.unit_time = 0
+        self.unit_start = time.time()
 
-    def stop_io(self, failed=False):
+
+    def stop_io(self, failed=False, sz=None):
         self.unit_time = time.time() - self.unit_start
-        self.sample_ttc.append(self.unit_time)
         if failed:
-            self.fail_count += 1
+            self.sample_struct["st"][self.current_op]["failures"] += 1
+            self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
         else:
-            self.inc_io_count()
+            self.sample_struct["st"][self.current_op]["resp"].append(self.unit_time)
+            self.sample_struct["st"][self.current_op]["ios"] += 1
+            self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
+            if sz:
+                self.sample_struct["st"][self.current_op]["bytes"] += sz
+                
 
     def check_for_messages(self):
-
         if self.sock.poll():
             msg = self.sock.recv()
             if "command" in msg and msg["command"] == "stop":
                 self.stop = True
                 return "stop"
+
 
     def set_s3_client(self, config):
 
@@ -105,32 +118,27 @@ class SlorProcess:
         else:
             return self.byte_pool[start:ext]
 
+
     def mk_byte_pool(self, num_bytes) -> None:
         self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
         self.pool_sz = num_bytes
 
+
     def log_stats(self, final=False):
-
-        stats = {
-            "count": self.benchmark_count,
-            "iops": self.sample_iops,
-            "failures": self.fail_count,
-            "resp": self.sample_ttc,
-            "bandwidth": self.sample_bandwidth
-        }
+ 
         if final:
-            stats.update({
-                "final": True,
-                "benchmark_iops": self.benchmark_iops,
-                "benchmark_bandwidth": self.benchmark_bandwidth
-            })
-
+            sendme = self.benchmark_struct
+            sendme["final"] = True
+        else:
+            sendme = self.sample_struct
+        print(str(sendme))
         self.msg_to_driver(
             type="stat",
             stage=self.config["type"],
-            value=stats,
+            value=sendme,
             time_ms=int(time.time() * 1000)
         )
+
 
     def msg_to_driver(
         self,
@@ -156,6 +164,7 @@ class SlorProcess:
             self.sock.close()
             sys.exit(1)
 
+
     def put_object(self, bucket, key, data):
         resp = self.s3client.put_object(
             Bucket=bucket,
@@ -163,6 +172,7 @@ class SlorProcess:
             Body=data,
         )
         return resp
+
 
     def get_object(self, bucket, key, version_id=None):
         if version_id != None:
@@ -174,6 +184,7 @@ class SlorProcess:
 
         return resp
 
+
     def head_object(self, bucket, key, version_id=None):
         if version_id != None:
             resp = self.s3client.head_object(
@@ -184,6 +195,7 @@ class SlorProcess:
                 Bucket=bucket, Key=key
             )
         return resp
+
 
     def delete_object(self, bucket, key, version_id=None):
         if version_id != None:

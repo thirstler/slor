@@ -7,6 +7,7 @@ class Read(SlorProcess):
         self.sock = socket
         self.id = id
         self.config = config
+        self.operations = ("read",)
 
     def exec(self):
 

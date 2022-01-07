@@ -7,6 +7,7 @@ class Delete(SlorProcess):
         self.sock = socket
         self.id = id
         self.config = config
+        self.operations = ("delete",)
 
     def exec(self):
 

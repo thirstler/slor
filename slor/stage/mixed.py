@@ -11,14 +11,18 @@ class Mixed(SlorProcess):
         self.sock = socket
         self.id = id
         self.config = config
+        for x in self.config["mixed_profile"]:
+            self.operations += (x,)
 
     def _read(self):
         if self.all_is_fair:
             key = self.get_key_from_existing()
         else:
             key = self.config["readmap"][self.readmap_index]
-
+        
+        self.start_io("read")
         resp = self.get_object(key[0], key[1])
+        self.stop_io()
         self.readmap_index += 1
 
         if self.readmap_index >= len(self.config["mapslice"]):
@@ -129,24 +133,16 @@ class Mixed(SlorProcess):
         dice = self.mk_dice()
         self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
         self.set_s3_client(self.config)
-
         self.start_benchmark()
         self.start_sample()
         while True:
 
-            #try:
-            self.start_io()
-            op = self.roll(dice)
-            resp = self.do(op)
-            self.stop_io()
-            
-            if any(x == op for x in ("read", "write", "reread", "overwite")):
-                self.inc_content_len(resp["ContentLength"])
+            try:
+                resp = self.do(self.roll(dice))
 
-            #except Exception as e:
-            #    sys.stderr.write(str(e))
-            #    sys.stderr.flush()
-            #    self.stop_io(failed=True)
+            except Exception as e:
+                sys.stderr.write(str(e))
+                sys.stderr.flush()
             
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()

@@ -8,6 +8,7 @@ class Write(SlorProcess):
         self.sock = socket
         self.id = id
         self.config = config
+        self.operations = ("write",)
 
     def exec(self):
 
