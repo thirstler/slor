@@ -101,6 +101,7 @@ class SlorControl:
             )))
         print("Prepared objects:   {0} (readmap length)".format(
             human_readable(self.get_readmap_len(), print_units="ops")))
+        print("Upper IO limit:     {0}".format(self.config["iop_limit"]))  
         print("Bucket prefix:      {0}".format(self.config["bucket_prefix"]))
         print("Num buckets:        {0}".format(self.config["bucket_count"]))
         print("Driver processes:   {0}".format(len(self.config["driver_list"])))
@@ -446,7 +447,8 @@ class SlorControl:
             ),
             "cache_overrun_sz": int(
                 self.config["ttl_sz_cache"] / len(self.config["driver_list"])
-            )
+            ),
+            "mixed_profile": self.config["mixed_profile"]
         }
 
         # Work out the readmap slices

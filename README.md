@@ -9,7 +9,8 @@ for S3 storage systems. It operates on the same controller/driver arrangement us
                 \_ Driver3
                 \_ etc...
 
-It currently runs only on Linux since 
+It currently runs only on Linux since there appear to be pickling issues on
+Windows - and slor relies on it for now. Apart from 
 It runs wherever Python3 does and minimizes dependencies where possible. The
 ones that make the most of a fuss seem to be boto3 an psutil. They can both
 be "pip installed" if necessary but CentOS/RedHat w/EPEL has them in as
@@ -89,4 +90,21 @@ Great, in another window on the load generation host, let's looks at the
                             number of buckets to distribute over, defaults to '1'
 
 Yikes.  
+
+Mixed workload structure:
+
+mixed = {
+    "reads": 0,        # %
+    "write": 0,        # %
+    "delete": 0,       # %
+    "head": 0,         # %
+    "reread": 0,       # %
+    "overwrite": 0,    # %
+    "tag_write": 0,    # %
+    "tag_read": 0,     # %
+    "tag_config": {
+        "key_len": 0,  # Range or value
+        "value_len: 0  # Range or value
+    }
+}
 

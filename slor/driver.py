@@ -11,6 +11,7 @@ import stage.overrun
 import stage.write
 import stage.head
 import stage.delete
+import stage.mixed
 import sys
 
 def _driver_t(socket, config, id):
@@ -29,6 +30,8 @@ def _driver_t(socket, config, id):
         wc = stage.head.Head(socket, config, id).exec()
     elif config["type"] == "delete":
         wc = stage.delete.Delete(socket, config, id).exec()
+    elif config["type"] == "mixed":
+        wc = stage.mixed.Mixed(socket, config, id).exec()
 
     try:
         del wc

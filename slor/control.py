@@ -15,6 +15,7 @@ def calc_prepare_size(sizerange, runtime, iops):
         avgsz = (sizerange[0] + sizerange[1]) / 2
     else:
         avgsz = sizerange[0]
+
     return avgsz * iops * runtime
 
 
@@ -48,6 +49,7 @@ def parse_driver_list(stringval):
 def generate_tasks(args):
 
     loads = list(args.loads.split(","))
+    print(loads)
     mix_prof_obj = {}
     for l in loads:
         if l not in LOAD_TYPES:
@@ -56,9 +58,10 @@ def generate_tasks(args):
 
     if "mixed" in loads:
         perc = 0
-        mix_prof_obj = json.loads(args.mix_profile)
-        for l in mix_prof_obj:
-            perc += float(mix_prof_obj[l])
+        mix_prof_obj = json.loads(args.mixed_profile)
+        for l in MIXED_LOAD_TYPES:
+            if l in mix_prof_obj:
+                perc += int(mix_prof_obj[l])
         if perc != 100:
             sys.stderr.write("your mixed load profile values don't equal 100\n")
             sys.exit(1)
@@ -157,10 +160,10 @@ def run():
         help="sleeptime between workloads",
     )
     parser.add_argument(
-        "--mix-profile",
-        default=DEFAULT_MIX_PROFILE,
+        "--mixed-profile",
+        default=DEFAULT_MIXED_PROFILE,
         help="profile of mixed load percentages in JASON format, eg: '{0}'".format(
-            DEFAULT_MIX_PROFILE
+            DEFAULT_MIXED_PROFILE
         ),
     )
     parser.add_argument(
@@ -208,12 +211,14 @@ def run():
         "sleeptime": float(args.sleep),
         "driver_proc": int(args.processes_per_driver),
         "ttl_sz_cache": parse_size(args.cachemem_size),
+        "iop_limit": human_readable(int(args.iop_limit)),
         "ttl_prepare_sz": calc_prepare_size(
             parse_size_range(args.object_size),
             int(args.stage_time),
             int(args.iop_limit),
         ),
         "tasks": tasks,
+        "mixed_profile": json.loads(args.mixed_profile)
     }
 
     # Start a driver here if there isn't one specified

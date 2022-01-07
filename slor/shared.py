@@ -20,7 +20,7 @@ DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "1"
 DEFAULT_UPPER_IOP_LIMIT = "10000"
 DEFAULT_TESTS = "read,write,head,mixed,delete"
-DEFAULT_MIX_PROFILE = '{"read": 60, "write": 25, "delete": 5, "head": 10 }'
+DEFAULT_MIXED_PROFILE = '{"read": 60, "write": 25, "delete": 5, "head": 10 }'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
 DEFAULT_WRITE_PREFIX = "write/"
@@ -44,9 +44,10 @@ LOG_TO_CONSOLE = True
 DRIVER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
-LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag", "sleep")
+LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
-PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag", "head", "delete")
+PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write")
+MIXED_LOAD_TYPES = ("read", "write", "head", "delete", "tag_read", "tag_write", "reread", "overwrite")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
 SHOW_STATS_RATE = 1 # seconds
@@ -171,6 +172,6 @@ def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_low
         prefix,
         "".join(
             random.choice(chars)
-            for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1]  else random.randrange(key_desc[0], key_desc[1]) )
+            for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1] else random.randrange(key_desc[0], key_desc[1]) )
         ),
     )
