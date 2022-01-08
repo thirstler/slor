@@ -20,7 +20,7 @@ class Prepare(SlorProcess):
 
         self.set_s3_client(self.config)
         self.mk_byte_pool(int(sz_range[1]) * 2)
-        self.start_benchmark()
+        self.start_benchmark(("write",))
         self.start_sample()
         
         for skey in self.config["mapslice"]:
@@ -34,10 +34,9 @@ class Prepare(SlorProcess):
             for i in range(0, PREPARE_RETRIES):
 
                 try:
-                    self.start_io()
+                    self.start_io("write")
                     self.put_object(skey[0], skey[1], body_data)
-                    self.stop_io()
-                    self.inc_content_len(c_len)
+                    self.stop_io(sz=c_len)
                     break # worked, no need to retry
 
                 except Exception as e:
@@ -47,12 +46,10 @@ class Prepare(SlorProcess):
                     continue # Keep trying, you can do it
 
             # Report-in every now and then
-            if (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
+            if (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
-                self.log_stats()
                 self.start_sample()
 
         # wrap it up
         self.stop_sample()
         self.stop_benchmark()
-        self.log_stats(final=True)

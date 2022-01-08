@@ -283,14 +283,15 @@ class SlorControl:
                         if self.check_status(mesg) == "done":
                             donestack -= 1
                         self.process_message(mesg)    # Decide what to do with the mssage
+                        print(mesg)
                     except EOFError:
                         pass
 
-            self.stat_viewer.show(SHOW_STATS_RATE, now=group_time)
+            #self.stat_viewer.show(SHOW_STATS_RATE, now=group_time)
 
             if donestack == 0:
                 time.sleep(1)
-                self.stat_viewer.show(SHOW_STATS_RATE, now=group_time, final=True)
+                #self.stat_viewer.show(SHOW_STATS_RATE, now=group_time, final=True)
                 self.print_message(
                     "threads complete for this stage ({0})".format(stage), verbose=True
                 )
