@@ -3,15 +3,16 @@ from process import SlorProcess
 
 class Head(SlorProcess):
 
+    s3ops = None
+
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
         self.config = config
-        self.operations = ("delete",)
+        self.operations = ("head",)
 
     def exec(self):
 
-        self.set_s3_client(self.config)
         self.start_benchmark()
         self.start_sample()
         stop = False
@@ -29,8 +30,8 @@ class Head(SlorProcess):
             for i, pkey in enumerate(self.config["mapslice"]):
 
                 try:
-                    self.start_io()
-                    resp = self.head_object(pkey[0], pkey[1])
+                    self.start_io("head")
+                    resp = self.s3ops.head_object(pkey[0], pkey[1])
                     self.stop_io()
 
                 except Exception as e:
@@ -41,13 +42,11 @@ class Head(SlorProcess):
                 if self.unit_start >= self.benchmark_stop:
                     self.stop_sample()
                     self.stop_benchmark()
-                    self.log_stats(final=True)
                     stop = True # break outer loop
                     break
 
-                elif (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
+                elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
                     self.stop_sample()
-                    self.log_stats()
                     self.start_sample()
 
             rerun += 1

@@ -4,7 +4,7 @@ from multiprocessing.connection import Client, Listener
 import time
 from shared import *
 import boto3
-from stages import *
+from stage import *
 import stage.prepare
 import stage.read
 import stage.overrun
@@ -159,7 +159,7 @@ class SlorDriver:
         try:
             self.sock.send(message)
         except Exception as e:
-            print(message)
+            #print(message)
             self.reset = True  # lost contact with controller need to close-up
 
     def thread_control(self, config):
@@ -186,7 +186,7 @@ class SlorDriver:
             self.procs[-1].start()
 
         ##
-        # Monitoring and retrun the responses
+        # Monitoring and return the responses
         while True:
             running = False
 

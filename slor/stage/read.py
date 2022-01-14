@@ -11,7 +11,6 @@ class Read(SlorProcess):
 
     def exec(self):
 
-        self.set_s3_client(self.config)
         self.start_benchmark()
         self.start_sample()
         stop = False
@@ -32,10 +31,9 @@ class Read(SlorProcess):
             for i, pkey in enumerate(self.config["mapslice"]):
 
                 try:
-                    self.start_io()
-                    resp = self.get_object(pkey[0], pkey[1])
-                    self.stop_io()
-                    self.inc_content_len(resp["ContentLength"])
+                    self.start_io("read")
+                    resp = self.s3ops.get_object(pkey[0], pkey[1])
+                    self.stop_io(sz=resp["ContentLength"])
 
                 except Exception as e:
                     sys.stderr.write("fail[{0}] {1}/{2}: {3}\n".format(self.id, pkey[0], pkey[1], str(e)))
@@ -45,13 +43,11 @@ class Read(SlorProcess):
                 if self.unit_start >= self.benchmark_stop:
                     self.stop_sample()
                     self.stop_benchmark()
-                    self.log_stats(final=True)
                     stop = True # break outer loop
                     break
 
-                elif (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
+                elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
                     self.stop_sample()
-                    self.log_stats()
                     self.start_sample()
 
             rerun += 1

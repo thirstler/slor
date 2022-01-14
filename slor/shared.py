@@ -46,15 +46,22 @@ FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
 LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
-PROGRESS_BY_TIME = ("read", "write", "mixed", "blowout", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write")
+PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write")
 MIXED_LOAD_TYPES = ("read", "write", "head", "delete", "tag_read", "tag_write", "reread", "overwrite")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
-SHOW_STATS_RATE = 1 # seconds
+SHOW_STATS_RATE = 1
 STATS_DB_DIR = "/dev/shm"
 TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
-
+HEADER = """
+                                                  
+            /""/""/""/""/""/""/""/""/""/""/""/""/""/""/""/""/
+           /                     SLOR                      /
+          /_______________________________________________/
+           
+                            S3 Load Ruler
+"""
 ###############################################################################
 ## Globally shared routines
 ##
@@ -175,3 +182,21 @@ def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_low
             for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1] else random.randrange(key_desc[0], key_desc[1]) )
         ),
     )
+
+def sample_structure(operations):
+    sample = {
+        "start": 0,          # start of sample
+        "end": 0,            # end of sample
+        "st": {},            # dict of operation types
+        "perc": 0,           # precent complete (for iterable benchmarks - blowout, prepare)
+        "ios": 0             # I/Os global to load
+    }
+    for t in operations:
+        sample["st"][t] = {
+            "resp": [],      # list of response times (seconds)
+            "bytes": 0,      # total bytes present in sample
+            "ios": 0,        # total io operations present in sample
+            "failures": 0,   # total number of failures present in the sample
+            "iotime": 0,     # time spend in io (seconds)
+        }
+    return sample

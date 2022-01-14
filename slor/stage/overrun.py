@@ -14,9 +14,8 @@ class Overrun(SlorProcess):
     def exec(self):
 
         count = int(self.config["cache_overrun_sz"]/self.config["threads"]/DEFAULT_CACHE_OVERRUN_OBJ)+1
-        self.set_s3_client(self.config)
         self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ*2)
-        self.start_benchmark(("write",))
+        self.start_benchmark(("write",), target=count)
         self.start_sample()
 
         for o in range(0, count):
@@ -30,7 +29,7 @@ class Overrun(SlorProcess):
             for i in range(0, PREPARE_RETRIES):
                 try:
                     self.start_io("write")
-                    self.put_object(
+                    self.s3ops.put_object(
                         "{0}{1}".format(self.config["bucket_prefix"], (o % self.config["bucket_count"])),
                         "{0}{1}".format(DEFAULT_CACHE_OVERRUN_PREFIX, key),
                         body_data)
@@ -46,7 +45,6 @@ class Overrun(SlorProcess):
             # Report-in every now and then
             if (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
-                self.log_stats()
                 self.start_sample()
 
         # wrap it up

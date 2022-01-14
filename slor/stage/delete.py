@@ -3,6 +3,8 @@ from process import SlorProcess
 
 class Delete(SlorProcess):
 
+    s3ops = None
+
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
@@ -11,7 +13,6 @@ class Delete(SlorProcess):
 
     def exec(self):
 
-        self.set_s3_client(self.config)
         self.start_benchmark()
         self.start_sample()
         
@@ -19,8 +20,8 @@ class Delete(SlorProcess):
         for i, pkey in enumerate(self.config["mapslice"]):
 
             try:
-                self.start_io()
-                resp = self.delete_object(pkey[0], pkey[1])
+                self.start_io("delete")
+                resp = self.s3ops.delete_object(pkey[0], pkey[1])
                 self.stop_io()
 
             except Exception as e:
@@ -31,11 +32,9 @@ class Delete(SlorProcess):
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()
                 self.stop_benchmark()
-                self.log_stats(final=True)
                 stop = True # break outer loop
                 break
 
-            elif (self.unit_start - self.sample_start) >= DRIVER_REPORT_TIMER:
+            elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
-                self.log_stats()
                 self.start_sample()

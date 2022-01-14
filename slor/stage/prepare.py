@@ -1,6 +1,5 @@
 from shared import *
 from process import SlorProcess
-import time
 import random
 
 class Prepare(SlorProcess):
@@ -18,13 +17,11 @@ class Prepare(SlorProcess):
         r1 = int(sz_range[0])
         r2 = int(sz_range[1])
 
-        self.set_s3_client(self.config)
         self.mk_byte_pool(int(sz_range[1]) * 2)
-        self.start_benchmark(("write",))
+        self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
         
         for skey in self.config["mapslice"]:
-
             if self.check_for_messages() == "stop":
                 break
             
@@ -35,7 +32,7 @@ class Prepare(SlorProcess):
 
                 try:
                     self.start_io("write")
-                    self.put_object(skey[0], skey[1], body_data)
+                    self.s3ops.put_object(skey[0], skey[1], body_data)
                     self.stop_io(sz=c_len)
                     break # worked, no need to retry
 

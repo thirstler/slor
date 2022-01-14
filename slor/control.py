@@ -49,7 +49,7 @@ def parse_driver_list(stringval):
 def generate_tasks(args):
 
     loads = list(args.loads.split(","))
-    print(loads)
+    #print(loads)
     mix_prof_obj = {}
     for l in loads:
         if l not in LOAD_TYPES:
@@ -211,7 +211,7 @@ def run():
         "sleeptime": float(args.sleep),
         "driver_proc": int(args.processes_per_driver),
         "ttl_sz_cache": parse_size(args.cachemem_size),
-        "iop_limit": human_readable(int(args.iop_limit)),
+        "iop_limit": int(args.iop_limit),
         "ttl_prepare_sz": calc_prepare_size(
             parse_size_range(args.object_size),
             int(args.stage_time),

@@ -4,6 +4,7 @@ import time
 import random
 from shared import *
 import struct
+from s3primitives import S3primitives
 
 class SlorProcess:
 
@@ -13,10 +14,11 @@ class SlorProcess:
     s3client = None
     stop = False
     byte_pool = 0
+    s3ops = None
 
     fail_count = 0
+    op_count = 0
     benchmark_stop = 0       # when this benchmark is _supposed_ to stop
-    sample_ttc = []          # array of time-to-complete I/O timings
     unit_start = 0           # start of individual I/O 
     unit_time = 0            # time to complete I/O
     sample_struct = None
@@ -24,36 +26,31 @@ class SlorProcess:
     default_op = None
     current_op = None
     operations = ()          # Operation types in this workload
+    target = None
+    resp_placeholder = {}
 
 
     def new_sample(self, start=None):
-        sample = {
-            "start": start if start else 0,
-            "end": 0,
-            "st": {}
-        }
-        for t in self.operations:
-
-            sample["st"][t] = {
-                "resp": [],
-                "bytes": 0,
-                "ios": 0,
-                "failures": 0,
-                "iotime": 0
-            }
+        sample = sample_structure(self.operations)
+        if start: sample["start"] = start
         return sample
-
     
     ##
     # Benchmark timing functions
-    def start_benchmark(self, operations):
+    def start_benchmark(self, ops=None, target=None):
+        self.s3ops = S3primitives(self.config)
         self.benchmark_struct = self.new_sample(time.time())
         self.benchmark_struct["final"] = True
         self.benchmark_stop = self.benchmark_struct["start"] + self.config["run_time"]
-        self.operations = operations
+        if ops: self.operations = ops
+        if target: self.target = target
+        for o in self.operations:
+            self.resp_placeholder[o] = 0
         
     def stop_benchmark(self):
         self.benchmark_struct["end"] = time.time()
+        for o in self.operations:
+            self.benchmark_struct["st"][o]["resp"] = [self.resp_placeholder[o]]
         self.send_sample(final=True)
 
     def start_sample(self):
@@ -68,6 +65,8 @@ class SlorProcess:
             self.benchmark_struct["st"][o]["iotime"] += self.sample_struct["st"][o]["iotime"]
             self.benchmark_struct["st"][o]["ios"] += self.sample_struct["st"][o]["ios"]
             self.benchmark_struct["st"][o]["failures"] += self.sample_struct["st"][o]["failures"]
+            self.benchmark_struct["ios"] = self.sample_struct["ios"]
+            self.benchmark_struct["perc"] = self.sample_struct["perc"]
 
     def start_io(self, type):
         self.current_op = type
@@ -77,20 +76,32 @@ class SlorProcess:
     def stop_io(self, failed=False, sz=None):
         self.unit_time = time.time() - self.unit_start
         if failed:
-            print("############ {} ############".format(self.current_op))
             self.sample_struct["st"][self.current_op]["failures"] += 1
             self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
         else:
-            self.sample_struct["st"][self.current_op]["resp"].append(struct.pack("f", self.unit_time))
+            self.op_count += 1
+            self.sample_struct["st"][self.current_op]["resp"].append(self.unit_time)
             self.sample_struct["st"][self.current_op]["ios"] += 1
             self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
+            self.sample_struct["ios"] = self.op_count
             if sz:
                 self.sample_struct["st"][self.current_op]["bytes"] += sz
-                
+            if self.target:
+                self.sample_struct["perc"] = self.op_count/self.target
+            
+            # A weighted figure to go in the benchmark sample
+            self.resp_placeholder[self.current_op] = \
+                (self.resp_placeholder[self.current_op] + self.unit_time)/2
+
+
     def send_sample(self, final=False):
 
         if final:
             message = self.benchmark_struct
+            # This is a little silly bt
+            for o in self.operations:
+                self.benchmark_struct["st"][o]["resp"] = \
+                    self.sample_struct["st"][self.current_op]["resp"] 
         else:
             message = self.sample_struct
 
@@ -149,62 +160,3 @@ class SlorProcess:
             sys.stderr.write("error in process: {0} (thread exiting)\n".format(e))
             self.sock.close()
             sys.exit(1)
-
-
-    ##
-    # S3 operation primitives
-    def set_s3_client(self, config):
-
-        if config["verify"] == True:
-            verify_tls = True
-        elif config["verify"].to_lower() == "false":
-            verify_tls = False
-        else:
-            verify_tls = config["verify"]
-
-        # Hopefully we can replace this with a lower-level client. For now, Boto3.
-        self.s3client = boto3.Session(
-            aws_access_key_id=config["access_key"],
-            aws_secret_access_key=config["secret_key"],
-            region_name=config["region"],
-        ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
-
-    def put_object(self, bucket, key, data):
-        resp = self.s3client.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=data,
-        )
-        return resp
-
-    def get_object(self, bucket, key, version_id=None):
-        if version_id != None:
-            resp = self.s3client.get_object(
-                Bucket=bucket, Key=key, VersionId=version_id
-            )
-        else:
-            resp = self.s3client.get_object(Bucket=bucket, Key=key)
-
-        return resp
-
-    def head_object(self, bucket, key, version_id=None):
-        if version_id != None:
-            resp = self.s3client.head_object(
-                Bucket=bucket, Key=key, VersionId=version_id
-            )
-        else:
-            resp = self.s3client.head_object(
-                Bucket=bucket, Key=key
-            )
-        return resp
-
-    def delete_object(self, bucket, key, version_id=None):
-        if version_id != None:
-            resp = self.s3client.delete_object(
-                Bucket=bucket, Key=key, VersionId=version_id
-            )
-        else:
-            resp = self.s3client.delete_object(
-                Bucket=bucket, Key=key
-            )
-        return resp

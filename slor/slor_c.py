@@ -18,7 +18,6 @@ class SlorControl:
     db_cursor = None
     readmap = []
     stat_buf = []
-    stat_viewer = None
 
     def __init__(self, root_config):
         self.config = root_config
@@ -33,8 +32,6 @@ class SlorControl:
             self.print_message("driver(s) failed check(s), I'm out")
             sys.exit(1)
 
-
-        self.stat_viewer = stat_handler.rtStatViewer(self.config)
 
         self.print_progress_header()
 
@@ -56,7 +53,12 @@ class SlorControl:
                 time.sleep(st)
                 continue
             elif stage == "readmap":
+                sys.stdout.write("\r")
+                sys.stdout.write(" "*38)
+                sys.stdout.write("{:<15}".format("throughput"))
+                sys.stdout.write("\n")
                 self.mk_read_map()
+                sys.stdout.write("\n")
                 continue
 
             self.exec_stage(stage)
@@ -65,17 +67,13 @@ class SlorControl:
             c.close()
 
     def print_progress_header(self):
-        bar_width = os.get_terminal_size().columns - 78
-        if bar_width > 25:
-            bar_width = 25
         print("")
-        print("{0:<8} {1}     {2:<15}{3:<15}{4:<13}{5:<11}{6:<10}".format(
-            "Stage", " "*bar_width, "Throughput", "Bandwidth", "Resp ms", "Elapsed", "Failures"))
-        print("-"*(bar_width+79))
+        print("-"*103)
 
     def print_config(self):
         twidth = os.get_terminal_size().columns
         if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
+        print(HEADER)
         print("{0}".format("-"*twidth))
 
         print("SLOR Configuration:")
@@ -174,20 +172,20 @@ class SlorControl:
             sys.stdout.write(
                 "{0}) addr: {1}:{2};".format(i+1, hostport["host"], hostport["port"])
             )
-            #try:
-            self.conn.append(Client((hostport["host"], hostport["port"])))
-            self.conn[-1].send({"command": "sysinfo"})
-            resp = self.conn[-1].recv()
-            self.check_driver_info(resp)
-            self.mk_data_store(resp)
+            try:
+                self.conn.append(Client((hostport["host"], hostport["port"])))
+                self.conn[-1].send({"command": "sysinfo"})
+                resp = self.conn[-1].recv()
+                self.check_driver_info(resp)
+                self.mk_data_store(resp)
 
-            #except Exception as e:
-            #    sys.stderr.write(
-            #        "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
-            #            hostport["host"], hostport["port"], e
-            #        )
-            #    )
-            #    ret_val = False
+            except Exception as e:
+                sys.stderr.write(
+                    "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
+                        hostport["host"], hostport["port"], e
+                    )
+                )
+                ret_val = False
 
         return ret_val
 
@@ -210,7 +208,7 @@ class SlorControl:
         if data["sysload"][0] >= 1:
             sys.stdout.write("\n")
             sys.stdout.write(
-                "  \033[1;31mwarning\033[0m: driver 1m sysload is > 1 ({0})".format(
+                "  \033[1;31mwarning\033[0m: driver 1m sysload is > 1 ({:.2f})".format(
                     data["sysload"][0]
                 )
             )
@@ -252,22 +250,36 @@ class SlorControl:
                 workloads[bc % n_wrkrs]["bucket_list"].append(
                     "{0}{1}".format(self.config["bucket_prefix"], bc)
                 )
-
-        # Set up real-time stats view
-        self.stat_viewer.set_stage(stage)
-        if stage == "blowout":
-            self.stat_viewer.set_progress_count(
-                int(self.config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ))
-        elif stage in PROGRESS_BY_COUNT:
-            self.stat_viewer.set_progress_count(len(self.readmap))
-        elif stage in PROGRESS_BY_TIME:
-            self.stat_viewer.set_progress_time(self.config["run_time"])
+        
+        if stage == "mixed":
+            sys.stdout.write("\r")
+            sys.stdout.write(" "*38)
+            items = []
+            for o in self.config["mixed_profile"]:
+                items.append("{}".format(o))
+            items.append("elapsed")
+            for i in items:
+                sys.stdout.write("{:<15}".format(i))
+            sys.stdout.write("\n")
+        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout")):
+            sys.stdout.write("\r")
+            sys.stdout.write(" "*38)
+            items = []
+            for o in ("throughput", "bandwidth", "resp ms", "failures", "elapsed"):
+                items.append("{}".format(o))
+            for i in items:
+                sys.stdout.write("{:<15}".format(i))
+            sys.stdout.write("\n")
 
         # Send workloads to driver
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": wl})
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
+        
+        self.stats_h = stat_handler.statHandler(self.config, stage)
+        if self.get_readmap_len() > 0:
+            self.stats_h.set_count_target(self.get_readmap_len())
 
         """
         Primary Loop - monitors the drivers by polling messages from them
@@ -275,7 +287,7 @@ class SlorControl:
         donestack = len(workloads)
         while True:
             group_time = time.time()
-            
+            sys.stdout.write("\r")
             for i, wl in enumerate(workloads):
                 while self.conn[i].poll():
                     try:
@@ -283,21 +295,18 @@ class SlorControl:
                         if self.check_status(mesg) == "done":
                             donestack -= 1
                         self.process_message(mesg)    # Decide what to do with the mssage
-                        print(mesg)
                     except EOFError:
                         pass
-
-            #self.stat_viewer.show(SHOW_STATS_RATE, now=group_time)
-
             if donestack == 0:
                 time.sleep(1)
-                #self.stat_viewer.show(SHOW_STATS_RATE, now=group_time, final=True)
+                self.stats_h.show(final=True)
                 self.print_message(
                     "threads complete for this stage ({0})".format(stage), verbose=True
                 )
                 break
-
+            self.stats_h.show()
             time.sleep(0.01)
+
 
     def get_readmap_len(self):
         try:
@@ -312,13 +321,8 @@ class SlorControl:
     def mk_read_map(self, key_desc={"min": 40, "max": 40}):
         
         objcount = self.get_readmap_len()
-        self.stat_viewer.set_stage("readmap")
-        self.stat_viewer.set_progress_count(objcount)
-
-        skipcount = int(objcount/100)
-        samplecount = 0
-        timer = time.time()
-        avgrate = []
+        stat_h = stat_handler.statHandler(self.config, "readmap")
+        fin = False
         for z in range(0, objcount):
 
             self.readmap.append(
@@ -332,19 +336,10 @@ class SlorControl:
                     ),
                 )
             )
-            samplecount += 1
-            if z % skipcount == 0 or objcount == (z+1):
-                final = False
-                now = time.time()
-                avgrate.append(samplecount/(now - timer))
-                if objcount == (z+1):
-                    final = True
-                    ttl=0
-                    for i in avgrate: ttl += i
-                    avgrate.append(ttl/len(avgrate))
-                self.stat_viewer.arbitrary_progress(z, objcount, ops=avgrate[-1], title="readmap", final=final)
-                samplecount = 0
-                timer = now
+            if (z+1) == objcount:
+                fin = True
+            stat_h.readmap_progress(z, objcount, final=fin)
+
 
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
@@ -356,17 +351,18 @@ class SlorControl:
         """
         Filters messages from drivers and take the appropriate action
         """
-        try:
-            if type(message) == str:
-                print(message)
-            elif "message" in message:
-                print("{0}: {1}".format(message["w_id"], message["message"]))
-            elif "type" in message and message["type"] == "stat":
-                self.store_stat(message)
-            else:
-                pass  # ignore
-        except Exception as e:
-            print(str(e))
+        #try:
+        if type(message) == str:
+            print(message)
+        elif "message" in message:
+            print("{0}: {1}".format(message["w_id"], message["message"]))
+        elif "type" in message and message["type"] == "stat":
+            self.stats_h.update_standing_sample(message)
+            self.store_stat(message)
+        else:
+            pass  # ignore
+        #except Exception as e:
+        #    print("fuuuuck: {} - {}".format(str(e), message))
 
     def check_status(self, mesg):
         if "status" in mesg and mesg["status"] == "done":
@@ -377,7 +373,7 @@ class SlorControl:
     def store_stat(self, message):
 
         # Maintain some data in-memory for real-time visibility
-        self.stat_viewer.store(message)
+        #self.stat_viewer.store(message)
         
         # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
@@ -400,13 +396,9 @@ class SlorControl:
 
         if self.db_conn == None:
             self.db_file = Path("{}{}.db".format(dbroot, self.config["name"]))
-            #self.db_file = "{0}/{1}.db".format(STATS_DB_DIR, self.config["name"])
             vcount = 1
             while os.path.exists(self.db_file):
                 self.db_file = Path("{}{}_{}.db".format(dbroot, self.config["name"], vcount))
-                #self.db_file = "{0}/{1}_{2}.db".format(
-                #    STATS_DB_DIR, self.config["name"], vcount
-                #)
                 vcount += 1
             self.db_conn = sqlite3.connect(self.db_file.as_posix())
             self.db_cursor = self.db_conn.cursor()
@@ -443,6 +435,7 @@ class SlorControl:
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
             "key_sz": self.config["key_sz"],
+            "driver_list": self.config["driver_list"],
             "prepare_sz": int(
                 self.config["ttl_prepare_sz"] / len(self.config["driver_list"])
             ),
