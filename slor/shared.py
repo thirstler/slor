@@ -29,6 +29,7 @@ DEFAULT_READMAP_PREFIX = "read/"
 DEFAULT_CACHE_OVERRUN_OBJ = 8388608
 DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
 DEFAULT_SLEEP_TIME = 30
+DEFAULT_DELIMITER_CONFIG="0,0,0"
 
 # Root help message
 ROOT_HELP = """
@@ -54,14 +55,18 @@ SHOW_STATS_RATE = 1
 STATS_DB_DIR = "/dev/shm"
 TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
-HEADER = """
-                                                  
-            /""/""/""/""/""/""/""/""/""/""/""/""/""/""/""/""/
-           /                     SLOR                      /
-          /_______________________________________________/
-           
-                            S3 Load Ruler
-"""
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 ###############################################################################
 ## Globally shared routines
 ##

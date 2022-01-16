@@ -21,9 +21,15 @@ class Mixed(SlorProcess):
         else:
             key = self.config["readmap"][self.readmap_index]
         
-        self.start_io("read")
-        resp = self.s3ops.get_object(key[0], key[1])
-        self.stop_io(sz=resp["ContentLength"])
+        
+        try:
+            self.start_io("read")
+            resp = self.s3ops.get_object(key[0], key[1])
+            self.stop_io(sz=resp["ContentLength"])
+        except Exception as e:
+            sys.stderr.write(e)
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
         self.readmap_index += 1
 
@@ -41,18 +47,26 @@ class Mixed(SlorProcess):
             ("{}{}".format(self.config["bucket_prefix"], random.randint(0, self.config["bucket_count"]-1)),
             gen_key(key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX))
         )
-        self.start_io("write")
-        self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
-        self.stop_io(sz=size)
-
+        try:
+            self.start_io("write")
+            self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
+            self.stop_io(sz=size)
+        except Exception as e:
+            sys.stderr.write(e)
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
     def _head(self):
         hat = self.get_key_from_existing()
 
-        self.start_io("head")
-        self.s3ops.head_object(hat[0], hat[1])
-        self.stop_io()
-
+        try:
+            self.start_io("head")
+            self.s3ops.head_object(hat[0], hat[1])
+            self.stop_io()
+        except Exception as e:
+            sys.stderr.write(e)
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
     def _delete(self):
         """ Only delete from the written pool """
@@ -62,23 +76,31 @@ class Mixed(SlorProcess):
         indx = random.randint(0, len(self.writemap)-1)
         key = self.writemap.pop(indx)
 
-        self.start_io("delete")
-        self.s3ops.delete_object(key[0], key[1])
-        self.stop_io()
-
+        try:
+            self.start_io("delete")
+            self.s3ops.delete_object(key[0], key[1])
+            self.stop_io()
+        except Exception as e:
+            sys.stderr.write(e)
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
     def _reread(self):
         """ Only reread from the written pool """
         if len(self.writemap) == 0:
             raise KeyError("nothing to read")
 
-        indx = random.randint(0, len(self.writemap-1))
+        indx = random.randint(0, len(self.writemap)-1)
         key = self.writemap[indx]
 
-        self.start_io("reread")
-        resp = self.s3ops.get_object(key[0], key[1])
-        self.stop_io(resp["ContentLength"])
-
+        try:
+            self.start_io("reread")
+            resp = self.s3ops.get_object(key[0], key[1])
+            self.stop_io(sz=resp["ContentLength"])
+        except Exception as e:
+            sys.stderr.write(e)
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
     def _overwrite(self):
         body_data = self.get_bytes_from_pool(
@@ -86,12 +108,14 @@ class Mixed(SlorProcess):
         key = self.get_key_from_existing()
         size = len(body_data)
 
+        #try:
         self.start_io("overwrite")
-        self.s3ops.put_object(
-            "{}{}".format(key[0], key[1], body_data)
-        )
+        self.s3ops.put_object(key[0], key[1], body_data)
         self.stop_io(sz=size)
-
+        #except Exception as e:
+        #    sys.stderr.write(str(e))
+        #    sys.stderr.flush()
+        #    self.stop_io(failed=True)
 
     def do(self, operation):
         
@@ -142,12 +166,7 @@ class Mixed(SlorProcess):
         self.start_sample()
         while True:
 
-            try:
-                self.do(dice[random.randint(0,99)])
-
-            except Exception as e:
-                sys.stderr.write(str(e))
-                sys.stderr.flush()
+            self.do(dice[random.randint(0,99)])
             
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()

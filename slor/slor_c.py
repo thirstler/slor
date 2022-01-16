@@ -18,6 +18,7 @@ class SlorControl:
     db_cursor = None
     readmap = []
     stat_buf = []
+    last_stage = None
 
     def __init__(self, root_config):
         self.config = root_config
@@ -26,19 +27,23 @@ class SlorControl:
 
     def exec(self):
 
-        self.print_message("\nstarting up...")
-        self.print_config()
+        print("\nS3 Load Ruler (SLOR) \u250C"+("\u252C"*11) + "\u2510")
+        # Print config
+        self.box_text(self.config_text())
+
+        # Gather and show driver info
+        print("")
         if not self.connect_to_driver():
             self.print_message("driver(s) failed check(s), I'm out")
             sys.exit(1)
-
-
-        self.print_progress_header()
-
+        
+        print("")
+        self.top_box()
+        sys.stdout.write("\u2502 WORKLOADS ({})\n\u2502\n".format(len(self.config["tasks"]["loadorder"])))
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
 
             if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
-                sys.stdout.write("\r   [shuffling readmap...]   ")
+                sys.stdout.write("\r\u2502   [shuffling readmap...]   ")
                 random.shuffle(self.readmap)
 
             if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
@@ -48,17 +53,15 @@ class SlorControl:
                     st = int(stage[5:])
                 except:
                     st = self.config["sleeptime"]
-                sys.stdout.write("sleeping ({})...".format(st))
+                sys.stdout.write("\u2502 sleeping ({})...".format(st))
                 sys.stdout.flush()
                 time.sleep(st)
                 continue
             elif stage == "readmap":
-                sys.stdout.write("\r")
-                sys.stdout.write(" "*38)
+                sys.stdout.write("\r\u2502"+" "*26)
                 sys.stdout.write("{:<15}".format("throughput"))
                 sys.stdout.write("\n")
                 self.mk_read_map()
-                sys.stdout.write("\n")
                 continue
 
             self.exec_stage(stage)
@@ -66,118 +69,121 @@ class SlorControl:
         for c in self.conn:
             c.close()
 
-    def print_progress_header(self):
-        print("")
-        print("-"*103)
+        self.bottom_box()
+        print("\ndone.\n")
 
-    def print_config(self):
-        twidth = os.get_terminal_size().columns
-        if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
-        print(HEADER)
-        print("{0}".format("-"*twidth))
+    def top_box(self):
+        print(u"\u256D{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
 
-        print("SLOR Configuration:")
-        print("Workload name:      {0}".format(self.config["name"]))
-        print("User key:           {0}".format(self.config["access_key"]))
-        print("Target endpoint:    {0}".format(self.config["endpoint"]))
-        print("Stage run time:     {0}s".format(self.config["run_time"]))
-        print("Object size(s):     {0}".format(
+    def bottom_box(self):
+        print(u"\u2570{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+
+    def box_text(self, text):
+        text_lines = text.split("\n")
+        self.top_box()
+        for line in text_lines:
+            print(u"\u2502 "+line)
+        self.bottom_box()
+
+
+    def config_text(self):
+
+        cft_text = "CONFIGURATION:\n"
+        cft_text += "\n"
+        cft_text += "Workload name:      {0}\n".format(self.config["name"])
+        cft_text += "User key:           {0}\n".format(self.config["access_key"])
+        cft_text += "Target endpoint:    {0}\n".format(self.config["endpoint"])
+        cft_text += "Stage run time:     {0}s\n".format(self.config["run_time"])
+        cft_text += "Object size(s):     {0}\n".format(
             human_readable(self.config["sz_range"][0], precision=0)
             if self.config["sz_range"][0] == self.config["sz_range"][1]
             else "low: {0}, high: {1} (avg: {2})".format(
                 human_readable(self.config["sz_range"][0], precision=0),
                 human_readable(self.config["sz_range"][1], precision=0),
                 human_readable(self.config["sz_range"][2], precision=0)
-            )))
-        print("Key length(s):      {0}".format(
+            ))
+        cft_text += "Key length(s):      {0}\n".format(
             self.config["key_sz"][0]
             if self.config["key_sz"][0] == self.config["key_sz"][1]
             else "low: {0}, high:  {1} (avg: {2})".format(
                 self.config["key_sz"][0],
                 self.config["key_sz"][1],
                 self.config["key_sz"][2]
-            )))
-        print("Prepared objects:   {0} (readmap length)".format(
-            human_readable(self.get_readmap_len(), print_units="ops")))
-        print("Upper IO limit:     {0}".format(self.config["iop_limit"]))  
-        print("Bucket prefix:      {0}".format(self.config["bucket_prefix"]))
-        print("Num buckets:        {0}".format(self.config["bucket_count"]))
-        print("Driver processes:   {0}".format(len(self.config["driver_list"])))
-        print(
-            "Procs per driver:   {0} ({1} worker processes total)".format(
+            ))
+        cft_text += "Prepared objects:   {0} (readmap length)\n".format(
+            human_readable(self.get_readmap_len(), print_units="ops"))
+        cft_text += "Upper IO limit:     {0}\n".format(self.config["iop_limit"])
+        cft_text += "Bucket prefix:      {0}\n".format(self.config["bucket_prefix"])
+        cft_text += "Num buckets:        {0}\n".format(self.config["bucket_count"])
+        cft_text += "Driver processes:   {0}\n".format(len(self.config["driver_list"]))
+        cft_text += "Procs per driver:   {0} ({1} worker processes total)\n".format(
                 self.config["driver_proc"],
                 (int(self.config["driver_proc"]) * len(self.config["driver_list"])),
             )
-        )
-        print(
-            "Prepared data size: {0}".format(
+        cft_text += "Prepared data size: {0}\n".format(
                 human_readable(self.config["ttl_prepare_sz"]),
                 ((int(self.config["ttl_prepare_sz"])/DEFAULT_CACHE_OVERRUN_OBJ)+1),
                 human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
-        )
-        print(
-            "Cache overrun size: {0} ({1} x {2} objects)".format(
+        cft_text += "Cache overrun size: {0} ({1} x {2} objects)\n".format(
                 human_readable(self.config["ttl_sz_cache"]),
                 (int(self.config["ttl_sz_cache"]/DEFAULT_CACHE_OVERRUN_OBJ)+1),
                 human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
-        )
-        print("Stats database:     {0}".format(self.db_file))
-        print("Stages:")
+        cft_text += "Stats database:     {0}\n".format(self.db_file)
+        cft_text += "Stages:\n"
         stagecount = 0
         
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
             stagecount += 1
             if stage == "mixed":
-                sys.stdout.write("                    {0}: {1} (".format(stagecount, stage))
+                cft_text += "                    {0}: {1} (".format(stagecount, stage)
                 for j, m in enumerate(self.config["tasks"]["mixed_profile"]):
-                    sys.stdout.write(
-                        "{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m])
-                    )
+                    cft_text += "{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m])
                     if (j + 1) < len(self.config["tasks"]["mixed_profile"]):
-                        sys.stdout.write(", ")
-                print(")")
+                        cft_text += ", "
+                cft_text += ")\n"
             elif stage == "readmap":
-                print("{} {}: {}".format(" "*19, stagecount, "readmap - generate keys for use during read operations"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "readmap - generate keys for use during read operations")
             elif stage == "init":
-                print("{} {}: {}".format(" "*19, stagecount, "init - create needed buckets/config"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "init - create needed buckets/config")
             elif stage == "prepare":
-                print("{} {}: {}".format(" "*19, stagecount, "prepare - write objects needed for read operations"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "prepare - write objects needed for read operations")
             elif stage == "blowout":
-                print("{} {}: {}".format(" "*19, stagecount, "blowout - overrun page cache"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "blowout - overrun page cache")
             elif stage == "read":
-                print("{} {}: {}".format(" "*19, stagecount, "read - pure GET workload"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "read - pure GET workload")
             elif stage == "write":
-                print("{} {}: {}".format(" "*19, stagecount, "write - pure PUT workload"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "write - pure PUT workload")
             elif stage == "head":
-                print("{} {}: {}".format(" "*19, stagecount, "head - pure HEAD workload"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "head - pure HEAD workload")
             elif stage == "delete":
-                print("{} {}: {}".format(" "*19, stagecount, "delete - pure DELETE workload"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "delete - pure DELETE workload")
             elif stage == "tag":
-                print("{} {}: {}".format(" "*19, stagecount, "tag - pure tagging (metadata) workload"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "tag - pure tagging (metadata) workload")
             elif stage == "sleep":
-                print("{} {}: {}".format(" "*19, stagecount, "sleep - delay between workloads"))
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "sleep - delay between workloads")
 
+        return cft_text
+        
 
     def connect_to_driver(self):
         ret_val = True
         self.config["driver_node_names"] = []
-        twidth = os.get_terminal_size().columns
-        if twidth > TERM_WIDTH_MAX: twidth = TERM_WIDTH_MAX
         
-        print("Drivers ({})".format(len(self.config["driver_list"])))
-        print("{0}".format("-"*twidth))
+        self.top_box()
+        print(u"\u2502 DRIVERS ({})".format(len(self.config["driver_list"])))
+        print(u"\u2502")
         for i, hostport in enumerate(self.config["driver_list"]):
             sys.stdout.write(
-                "{0}) addr: {1}:{2};".format(i+1, hostport["host"], hostport["port"])
+                u"\u2502 {0}) addr: {1}:{2};".format(i+1, hostport["host"], hostport["port"])
             )
             try:
                 self.conn.append(Client((hostport["host"], hostport["port"])))
                 self.conn[-1].send({"command": "sysinfo"})
                 resp = self.conn[-1].recv()
                 self.check_driver_info(resp)
-                self.mk_data_store(resp)
+                self.mk_data_store(hostport["host"])
 
             except Exception as e:
                 sys.stderr.write(
@@ -186,7 +192,7 @@ class SlorControl:
                     )
                 )
                 ret_val = False
-
+        self.bottom_box()
         return ret_val
 
     def check_driver_info(self, data):
@@ -194,13 +200,12 @@ class SlorControl:
         self.config["driver_node_names"].append(data["uname"].node)
 
         sys.stdout.write(" hostname: {0};".format(data["uname"].node))
-        sys.stdout.write(
-            " OS: {0} release {1}".format(data["uname"].system, data["uname"].release)
-        )
+        sys.stdout.write(" OS: {0}".format(data["uname"].system))
         if data["slor_version"] != SLOR_VERSION:
             sys.stdout.write("\n")
             print(
-                "  \033[1;31mwarning\033[0m: version mismatch; controller is {0} driver is {1}".format(
+                u"\u2502    {}warning{}} version mismatch; controller is {} driver is {}".format(
+                    bcolors.WARNING, bcolors.ENDC,
                     SLOR_VERSION, data["slor_version"]
                 )
             )
@@ -208,7 +213,8 @@ class SlorControl:
         if data["sysload"][0] >= 1:
             sys.stdout.write("\n")
             sys.stdout.write(
-                "  \033[1;31mwarning\033[0m: driver 1m sysload is > 1 ({:.2f})".format(
+                u"\u2502    {}warning{} driver 1m sysload is > 1 ({:.2f})".format(
+                    bcolors.WARNING, bcolors.ENDC,
                     data["sysload"][0]
                 )
             )
@@ -222,7 +228,8 @@ class SlorControl:
             ) > 0:
                 sys.stdout.write("\n")
                 sys.stdout.write(
-                    "  \033[1;31mwarning\033[0m: iface {0} has dropped packets or errors".format(
+                    u"\u2502    {}warning{} iface {} has dropped packets or errors".format(
+                        bcolors.WARNING, bcolors.ENDC,
                         iface
                     )
                 )
@@ -253,7 +260,7 @@ class SlorControl:
         
         if stage == "mixed":
             sys.stdout.write("\r")
-            sys.stdout.write(" "*38)
+            sys.stdout.write("\u2502"+" "*26)
             items = []
             for o in self.config["mixed_profile"]:
                 items.append("{}".format(o))
@@ -261,9 +268,10 @@ class SlorControl:
             for i in items:
                 sys.stdout.write("{:<15}".format(i))
             sys.stdout.write("\n")
-        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout")):
+        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout")) and \
+             all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout")):
             sys.stdout.write("\r")
-            sys.stdout.write(" "*38)
+            sys.stdout.write("\u2502"+" "*26)
             items = []
             for o in ("throughput", "bandwidth", "resp ms", "failures", "elapsed"):
                 items.append("{}".format(o))
@@ -306,6 +314,8 @@ class SlorControl:
                 break
             self.stats_h.show()
             time.sleep(0.01)
+
+        self.last_stage = stage
 
 
     def get_readmap_len(self):
@@ -403,15 +413,15 @@ class SlorControl:
             self.db_conn = sqlite3.connect(self.db_file.as_posix())
             self.db_cursor = self.db_conn.cursor()
 
-    def mk_data_store(self, sysinf):
+    def mk_data_store(self, host):
 
         self.db_cursor.execute(
             "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
-                sysinf["uname"].node.replace(".", "_")
+                host
             )
         )
         self.db_cursor.execute(
-            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(sysinf["uname"].node.replace(".", "_"))
+            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(host)
         )
         # self.db_cursor.execute(
         #    "CREATE INDEX {0}_stage_i ON {0} (stage)".format(sysinf["uname"].node)
@@ -442,7 +452,8 @@ class SlorControl:
             "cache_overrun_sz": int(
                 self.config["ttl_sz_cache"] / len(self.config["driver_list"])
             ),
-            "mixed_profile": self.config["mixed_profile"]
+            "mixed_profile": self.config["mixed_profile"],
+            "startup_delay": (DRIVER_REPORT_TIMER/len(self.config["driver_list"]))
         }
 
         # Work out the readmap slices

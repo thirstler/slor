@@ -1,3 +1,4 @@
+from pyclbr import Function
 import time, os
 from shared import *
 import math
@@ -17,6 +18,7 @@ class statHandler:
     last_rm_time = 0
     stat_rotation = float(0)
     stat_types = ("throughput", "bandwidth", "response")
+    last_stage = None
 
     def __init__(self, config, stage):
         self.config = config
@@ -46,7 +48,6 @@ class statHandler:
         self.count_target = count
 
     def update_standing_sample(self, data):
-
         self.standing_sample[data["w_id"]][data["t_id"]] = data["value"]
 
         # Add a wall-time figure
@@ -102,6 +103,19 @@ class statHandler:
         self.global_sample["wrkld_eff"] /= count
         self.global_sample["perc"] /= count
 
+    def rotate_mixed_stat_func(self, final):
+        if final: self.stat_rotation = 0
+        if self.stat_types[int(self.stat_rotation)] == "throughput":
+            disp_func=self.ops_sec
+        elif self.stat_types[int(self.stat_rotation)] == "bandwidth":
+            disp_func=self.bytes_sec
+        elif self.stat_types[int(self.stat_rotation)] == "response":
+            disp_func=self.resp_avg
+        self.stat_rotation += 0.20
+        if self.stat_rotation >= 3:
+            self.stat_rotation = 0
+        return disp_func
+
 
     def show(self, final=False):
         now = time.time()
@@ -110,12 +124,12 @@ class statHandler:
             return
 
         if self.stage == "init" and final:
-            sys.stdout.write("\rinit:    done")
+            sys.stdout.write("\r\u2502 init:    done")
             if final: sys.stdout.write("\n")
             sys.stdout.flush()
             return
         elif self.stage == "init":
-            sys.stdout.write("\rinit:")
+            sys.stdout.write("\r\u2502 init:")
             if final: sys.stdout.write("\n")
             sys.stdout.flush()
             return
@@ -123,26 +137,19 @@ class statHandler:
         self.mk_global_sample()
         sys.stdout.write("\r")
 
-        sys.stdout.write("{:<9}".format(self.stage + ":"))
+        sys.stdout.write("\u2502 {:<9}".format(self.stage + ":"))
         if len(self.operations) > 1:
 
             if self.stage in PROGRESS_BY_TIME:
                 perc = (time.time()-self.progress_start_time)/self.config["run_time"]
                 if perc > 1: perc = 1
-                self.progress(perc)
+                self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
-                self.progress(self.global_sample["perc"])
+                self.progress(self.global_sample["perc"], final=final)
 
-            if final: self.stat_rotation = 0
-            if self.stat_types[int(self.stat_rotation)] == "throughput":
-                disp_func=self.ops_sec
-            elif self.stat_types[int(self.stat_rotation)] == "bandwidth":
-                disp_func=self.bytes_sec
-            elif self.stat_types[int(self.stat_rotation)] == "response":
-                disp_func=self.resp_avg
-
+            stat_func = self.rotate_mixed_stat_func(final)
             for o in self.operations:
-                sys.stdout.write(" {}".format(disp_func(operation=o)))
+                sys.stdout.write(" {}".format(stat_func(operation=o)))
             
             sys.stdout.write(" {}".format(self.elapsed_time()))
 
@@ -153,9 +160,9 @@ class statHandler:
             if self.stage in PROGRESS_BY_TIME:
                 perc = (time.time()-self.progress_start_time)/self.config["run_time"]
                 if perc > 1: perc = 1
-                self.progress(perc)
+                self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
-                self.progress(self.global_sample["perc"])
+                self.progress(self.global_sample["perc"], final=final)
 
             sys.stdout.write(" {} {} {} {} {}".format(
                 self.ops_sec(operation=self.operations[0]),
@@ -165,13 +172,11 @@ class statHandler:
                 self.elapsed_time()
             ))
 
-        if final: sys.stdout.write("\n\n")
+        if final: sys.stdout.write("\n")
         sys.stdout.flush()
 
 
-        self.stat_rotation += 0.20
-        if self.stat_rotation >= 3:
-            self.stat_rotation = 0
+        
         #print(self.stat_rotation)
         self.last_show = now
 
@@ -182,11 +187,11 @@ class statHandler:
             nownow = time.time()
         else: return
 
-        perc = x/outof
+        perc = 1 if final else (x/outof)
         rate = (x - self.last_rm_count)/(nownow-self.last_rm_time)
 
-        sys.stdout.write("\rreadmap: ")
-        self.progress(perc)
+        sys.stdout.write("\r\u2502 readmap: ")
+        self.progress(perc, final=final)
         sys.stdout.write(" {}".format(
             "[{:>7} op/s]".format(human_readable(rate, print_units="ops"))
         ))
@@ -199,9 +204,17 @@ class statHandler:
         self.last_rm_count = x
 
 
-    def progress(self, perc, width=20):
-        char_w = math.ceil(perc*width)
-        sys.stdout.write("|{}{}|{:>5}%".format("|"*char_w, "-"*(width-char_w), math.ceil(perc*100)))
+    def progress(self, perc, width=10, final=False):
+        if final: perc = 1
+        blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588") # eighth blocks
+        fillchar = u"\u2588"
+        char_w = perc*width
+        leading_char = blocks[math.floor((char_w*8) % 8)]
+        if final:
+            fillchar = u"\u2592"
+            leading_char = " "
+        sys.stdout.write(u"{}{}{}{:>3}%".format(fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100)))
+        #sys.stdout.write(u"{}{}{:>4}%".format(u"\u2585"*char_w, u"\u2500"*(width-char_w), math.ceil(perc*100)))
 
     def failure_count(self, stat_sample=None, operation=None):
         if not stat_sample:
@@ -231,15 +244,19 @@ class statHandler:
 
 
     def ops_sec(self, stat_sample=None, operation=None, width=None):
+        color=""
         if not stat_sample:
             stat_sample = self.global_sample
 
         if stat_sample["walltime"] == 0:
-            rate = 0
-        else:   
-            rate = human_readable(stat_sample["st"][operation]["ios"]/stat_sample["walltime"], print_units="ops")
-        return("[{:>7} op/s]".format(rate))
-
+            h_rate = 0
+        else:
+            float_rate = stat_sample["st"][operation]["ios"]/stat_sample["walltime"]
+            if float_rate > self.config["iop_limit"] and any(operation == x for x in ("read", "delete")):
+                color=bcolors.WARNING
+                
+            h_rate = human_readable(float_rate, print_units="ops")
+        return("{}[{:>7} op/s]{}".format(color, h_rate,bcolors.ENDC if color != "" else ""))
 
     def resp_avg(self, stat_sample=None, operation=None, value=None, width=None):
         resp_t = 0

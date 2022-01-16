@@ -56,6 +56,8 @@ class SlorDriver:
     reset = False
     bindaddr = None
     bindport = None
+    w_name = None
+    worker_name = None
 
     def __init__(self, socket, bindaddr, bindport):
 
@@ -89,7 +91,7 @@ class SlorDriver:
 
         # loops and whatever else are done. Close shop.
         self.reset = False
-        print("done with controller")
+        print(" done with controller")
         self.sock.close()
 
     def init_buckets(self, config):
@@ -154,7 +156,7 @@ class SlorDriver:
             return
         if type(message) is str:
             message = {"message": message}
-        message["w_id"] = self.sysinf["uname"].node
+        message["w_id"] = self.worker_name
 
         try:
             self.sock.send(message)
@@ -163,7 +165,8 @@ class SlorDriver:
             self.reset = True  # lost contact with controller need to close-up
 
     def thread_control(self, config):
-
+        time.sleep(config["w_id"] * config["startup_delay"])
+        delay_time = config["startup_delay"]/config["threads"]
         ##
         # Receive work
         for id in range(0, config["threads"]):
@@ -183,6 +186,7 @@ class SlorDriver:
             self.procs.append(
                 Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
             )
+            time.sleep(delay_time)
             self.procs[-1].start()
 
         ##
@@ -214,6 +218,8 @@ class SlorDriver:
         for n in self.procs:
             n.join()
 
+        self.procs.clear()
+        print(len(self.procs))
         # Alert controller that the current workload is finished
         self.log_to_controller({"status": "done"})
 
@@ -236,7 +242,8 @@ class SlorDriver:
 
         # Workloads be here
         elif cmd_buffer["command"] == "workload":
-
+            if "config" in cmd_buffer:
+                self.worker_name = cmd_buffer["config"]["host"]
             # Init is done at the driver level, make buckets and exit
             if (
                 "type" in cmd_buffer["config"]
@@ -263,9 +270,11 @@ def _slor_driver(bindaddr, bindport, exit_on_disconnect):
     while True:
         # There will only ever be one connection, no connection handling
         sock = server_sock.accept()
-        print("new connection")
+        print(" new connection")
         handle = SlorDriver(sock, bindaddr, bindport)
         handle.exec()
+        sock.close()
+        del handle
         if exit_on_disconnect:
             return
 

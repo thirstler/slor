@@ -74,6 +74,7 @@ class SlorProcess:
         self.unit_start = time.time()
 
     def stop_io(self, failed=False, sz=None):
+
         self.unit_time = time.time() - self.unit_start
         if failed:
             self.sample_struct["st"][self.current_op]["failures"] += 1

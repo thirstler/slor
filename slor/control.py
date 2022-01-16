@@ -167,6 +167,11 @@ def run():
         ),
     )
     parser.add_argument(
+        "--delimiter-config",
+        default=DEFAULT_DELIMITER_CONFIG,
+        help="comma-delimited count, depth and length of delimited prefixes (see README)"
+    )
+    parser.add_argument(
         "--bucket-count",
         default=DEFAULT_BUCKET_COUNT,
         help="number of buckets to distribute over, defaults to '{0}'".format(
@@ -193,6 +198,15 @@ def run():
                   int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
 
     tasks = generate_tasks(args)
+
+    # Start a driver here if there isn't one specified
+    driver = None
+    if args.driver_list == "":
+        args.driver_list = os.uname().nodename
+        print("no driver address specified, starting one here")
+        driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
+        driver.start()
+        time.sleep(2)
 
     root_config = {
         "name": args.name,
@@ -221,13 +235,7 @@ def run():
         "mixed_profile": json.loads(args.mixed_profile)
     }
 
-    # Start a driver here if there isn't one specified
-    driver = None
-    if args.driver_list == "":
-        print("no driver address specified, starting one here")
-        driver = Process(target=_slor_driver, args=("127.0.0.1", DEFAULT_DRIVER_PORT, True))
-        driver.start()
-        time.sleep(2)
+    
 
     handle = SlorControl(root_config)
     handle.exec()
