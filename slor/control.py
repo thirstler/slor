@@ -114,6 +114,16 @@ def run():
         ),
     )
     parser.add_argument(
+        "--iop-limit",
+        default=DEFAULT_UPPER_IOP_LIMIT,
+        help="maximum expected IOP/s value that you can expect to hit given the workload; used with --stage-time to calculate the number of objects to preprare",
+    )
+    parser.add_argument(
+        "--prepare-objects",
+        default=None,
+        help="directly specify the number of objects to prepare (overrides calculation with --iop-limit) ",
+    )
+    parser.add_argument(
         "--key-length",
         default=DEFAULT_KEY_LENGTH,
         help="key length(s) to use, can be single number or range (e.g. 10,50) - defaults to {0}".format(
@@ -143,11 +153,6 @@ def run():
         "--cachemem-size",
         default="0",
         help="total amount of memory available in the target cluster for page cache and read caches; post-prepare stage will write this value to overwhelm caches for a cold read stage",
-    )
-    parser.add_argument(
-        "--iop-limit",
-        default=DEFAULT_UPPER_IOP_LIMIT,
-        help="maximum expected IOP/s value that you can expect to hit given the workload; needed to determine the size of the prepare data given the load run-time",
     )
     parser.add_argument(
         "--loads",
@@ -208,6 +213,14 @@ def run():
         driver.start()
         time.sleep(2)
 
+    if args.prepare_objects != None:
+        ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
+    else:
+        ttl_prepare_sz = calc_prepare_size(
+            parse_size_range(args.object_size),
+            int(args.stage_time),
+            int(args.iop_limit),
+        )
     root_config = {
         "name": args.name,
         "verbose": args.verbose,
@@ -226,11 +239,7 @@ def run():
         "driver_proc": int(args.processes_per_driver),
         "ttl_sz_cache": parse_size(args.cachemem_size),
         "iop_limit": int(args.iop_limit),
-        "ttl_prepare_sz": calc_prepare_size(
-            parse_size_range(args.object_size),
-            int(args.stage_time),
-            int(args.iop_limit),
-        ),
+        "ttl_prepare_sz": ttl_prepare_sz,
         "tasks": tasks,
         "mixed_profile": json.loads(args.mixed_profile)
     }

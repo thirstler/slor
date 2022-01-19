@@ -13,6 +13,7 @@ import stage.head
 import stage.delete
 import stage.mixed
 import sys
+from s3primitives import S3primitives
 
 def _driver_t(socket, config, id):
     """
@@ -239,8 +240,6 @@ class SlorDriver:
             inf_msg["status"] = "done"
             self.sock.send(inf_msg)
             return
-
-        # Workloads be here
         elif cmd_buffer["command"] == "workload":
             if "config" in cmd_buffer:
                 self.worker_name = cmd_buffer["config"]["host"]
@@ -252,7 +251,7 @@ class SlorDriver:
                 self.init_buckets(cmd_buffer["config"])
                 self.log_to_controller({"status": "done"})
                 return
-
+                
             # Everything else is managed in separate processes
             self.thread_control(cmd_buffer["config"])
 

@@ -2,28 +2,23 @@ import sys
 from multiprocessing.connection import Client
 import random
 import time
-import json
 from shared import *
-import sqlite3
 import os.path
 import stat_handler
-from pathlib import Path
+from db_ops import SlorDB
 
 class SlorControl:
 
     config = None
     conn = []
-    db_file = None
-    db_conn = None
-    db_cursor = None
     readmap = []
     stat_buf = []
     last_stage = None
+    slordb = None
 
     def __init__(self, root_config):
         self.config = root_config
-        self.init_db()
-
+        self.slordb = SlorDB()
 
     def exec(self):
 
@@ -39,7 +34,7 @@ class SlorControl:
         
         print("")
         self.top_box()
-        sys.stdout.write("\u2502 WORKLOADS ({})\n\u2502\n".format(len(self.config["tasks"]["loadorder"])))
+        sys.stdout.write("\u2502 STAGES ({})\n\u2502\n".format(len(self.config["tasks"]["loadorder"])))
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
 
             if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
@@ -183,7 +178,7 @@ class SlorControl:
                 self.conn[-1].send({"command": "sysinfo"})
                 resp = self.conn[-1].recv()
                 self.check_driver_info(resp)
-                self.mk_data_store(hostport["host"])
+                self.slordb.mk_data_store(hostport["host"])
 
             except Exception as e:
                 sys.stderr.write(
@@ -368,7 +363,7 @@ class SlorControl:
             print("{0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
-            self.store_stat(message)
+            self.slordb.store_stat(message)
         else:
             pass  # ignore
         #except Exception as e:
@@ -379,53 +374,7 @@ class SlorControl:
             return "done"
 
         return False
-
-    def store_stat(self, message):
-
-        # Maintain some data in-memory for real-time visibility
-        #self.stat_viewer.store(message)
-        
-        # Add to database for analysis later
-        sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
-            message["w_id"].replace(".", "_"),
-            message["t_id"],
-            message["time"],
-            message["stage"],
-            json.dumps(message),
-        )
-        self.db_cursor.execute(sql)
-        self.db_conn.commit()
-
-    def init_db(self):
-        if os.name == "nt":
-            dbroot = "C:/Windows/Temp/"
-        elif os.name == "posix":
-            dbroot = "/tmp/"
-        else:
-            return
-
-        if self.db_conn == None:
-            self.db_file = Path("{}{}.db".format(dbroot, self.config["name"]))
-            vcount = 1
-            while os.path.exists(self.db_file):
-                self.db_file = Path("{}{}_{}.db".format(dbroot, self.config["name"], vcount))
-                vcount += 1
-            self.db_conn = sqlite3.connect(self.db_file.as_posix())
-            self.db_cursor = self.db_conn.cursor()
-
-    def mk_data_store(self, host):
-
-        self.db_cursor.execute(
-            "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
-                host
-            )
-        )
-        self.db_cursor.execute(
-            "CREATE INDEX {0}_ts_i ON {0} (ts)".format(host)
-        )
-        # self.db_cursor.execute(
-        #    "CREATE INDEX {0}_stage_i ON {0} (stage)".format(sysinf["uname"].node)
-        # )
+    
 
     def mk_stage(self, target, stage, wid):
 

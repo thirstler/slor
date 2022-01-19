@@ -64,3 +64,41 @@ class S3primitives:
                 Bucket=bucket, Key=key
             )
         return resp
+
+    def list_bucket(self, bucket, paged=True):
+        if paged:
+            lspgntr = self.s3client("list_object_versions")
+            self.page_iterator = lspgntr.paginate(
+                Bucket=bucket,
+                MaxKeys=1000
+            )
+        else:
+            pass # fuck off
+
+    def get_listing_page(self) -> iter:
+        return self.page_iterator
+
+    def delete_page(self, bucket, page_listing):
+        allthings = page_listing["Versions"] + page_listing["DeleteMarkers"]
+        deleted = self.s3client.delete_objects(Bucket=bucket, Delete=allthings)
+        return deleted
+
+    ##
+    # Less primitive
+    def delete_recursive(self, bucket, batch_delete=True):
+        if batch_delete:
+            lspgntr = self.s3client("list_object_versions")
+            page_iterator = lspgntr.paginate(
+                Bucket=bucket,
+                MaxKeys=1000
+            )
+            for listing in page_iterator:
+                versions = listing["Versions"]
+                markers = listing["DeleteMarkers"]
+                allthings = versions + markers
+                deleted = self.s3client.delete_objects(Bucket=bucket, Delete=allthings)
+                print(deleted)
+        else:
+            pass # fuck it        
+
+

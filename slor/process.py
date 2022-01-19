@@ -1,9 +1,7 @@
-import boto3
 import sys
 import time
 import random
 from shared import *
-import struct
 from s3primitives import S3primitives
 
 class SlorProcess:

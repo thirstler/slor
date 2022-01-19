@@ -256,7 +256,7 @@ class statHandler:
                 color=bcolors.WARNING
                 
             h_rate = human_readable(float_rate, print_units="ops")
-        return("{}[{:>7} op/s]{}".format(color, h_rate,bcolors.ENDC if color != "" else ""))
+        return("[{}{:>7} op/s{}]".format(color, h_rate,bcolors.ENDC if color != "" else ""))
 
     def resp_avg(self, stat_sample=None, operation=None, value=None, width=None):
         resp_t = 0

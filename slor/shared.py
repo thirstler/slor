@@ -46,8 +46,8 @@ DRIVER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
 LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
-PROGRESS_BY_COUNT = ("init", "prepare", "blowout", "cleanup")
-PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write")
+PROGRESS_BY_COUNT = ("init", "prepare", "blowout")
+PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write", "sleep")
 MIXED_LOAD_TYPES = ("read", "write", "head", "delete", "tag_read", "tag_write", "reread", "overwrite")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
@@ -55,6 +55,8 @@ SHOW_STATS_RATE = 1
 STATS_DB_DIR = "/dev/shm"
 TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
+WINDOWS_DB_TMP = "C:/Windows/Temp/"
+POSIX_DB_TMP = "/tmp"
 
 class bcolors:
     HEADER = '\033[95m'
@@ -81,7 +83,8 @@ def parse_size(stringval: str) -> float:
         pwr += 10
 
     for s in ["KB", "MB", "GB", "TB", "PB", "EB"]:
-        if stringval[-1:] == s[0]:
+        # Deal with single-letter suffixes and two letter (e.g. "MB" and "M")
+        if stringval[-1:] == s[0]: 
             return float(stringval[0:-1]) * (10 ** sipwr)
         if stringval[-2:] == s:
             return float(stringval[0:-2]) * (10 ** sipwr)
@@ -90,20 +93,23 @@ def parse_size(stringval: str) -> float:
     return float(stringval)
 
 
-def human_readable(value, format="SI", print_units="bytes", precision=2):
-    sipwr = 18
+def human_readable(value, val_format="SI", print_units="bytes", precision=2):
     
-    if print_units == "ops":
-        units = ["E", "P", "T", "G", "M", "K", ""]
+    if val_format == "SI":
+        sipwr = 18
+        
+        if print_units == "ops":
+            units = ["E", "P", "T", "G", "M", "K", ""]
+        else:
+            units = [" EB", " PB", " TB", " GB", " MB", " KB", " B"]
+
+        for s in units:
+            if value > 10 ** sipwr or (10 ** sipwr) == 1:
+                return "{0:.{2}f}{1}".format(value / (10 ** sipwr), s, precision)
+            sipwr -= 3
     else:
-        units = [" EB", " PB", " TB", " GB", " MB", " KB", " B"]
-
-    for s in units:
-        if value > 10 ** sipwr or (10 ** sipwr) == 1:
-            return "{0:.{2}f}{1}".format(value / (10 ** sipwr), s, precision)
-        sipwr -= 3
-
-    return "??" # you shouldn't get here
+        # Or else what? WHAT?
+        pass
 
 
 def basic_sysinfo():
