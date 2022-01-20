@@ -18,7 +18,7 @@ class SlorControl:
 
     def __init__(self, root_config):
         self.config = root_config
-        self.slordb = SlorDB()
+        self.slordb = SlorDB(root_config)
 
     def exec(self):
 
@@ -125,7 +125,7 @@ class SlorControl:
                 (int(self.config["ttl_sz_cache"]/DEFAULT_CACHE_OVERRUN_OBJ)+1),
                 human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
-        cft_text += "Stats database:     {0}\n".format(self.db_file)
+        cft_text += "Stats database:     {0}\n".format(self.slordb.db_file)
         cft_text += "Stages:\n"
         stagecount = 0
         
@@ -158,6 +158,8 @@ class SlorControl:
                 cft_text += "{} {}: {}\n".format(" "*19, stagecount, "tag - pure tagging (metadata) workload")
             elif stage == "sleep":
                 cft_text += "{} {}: {}\n".format(" "*19, stagecount, "sleep - delay between workloads")
+            elif stage == "cleanup":
+                cft_text += "{} {}: {}\n".format(" "*19, stagecount, "cleanup - remove all objects and buckets")
 
         return cft_text
         
@@ -263,8 +265,8 @@ class SlorControl:
             for i in items:
                 sys.stdout.write("{:<15}".format(i))
             sys.stdout.write("\n")
-        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout")) and \
-             all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout")):
+        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
+             all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
             sys.stdout.write("\r")
             sys.stdout.write("\u2502"+" "*26)
             items = []
@@ -433,5 +435,7 @@ class SlorControl:
         if stage == "head":
             config["type"] = "head"
             config["readmap"] = mapslice
+        if stage == "cleanup":
+            config["type"] = "cleanup"
 
         return config

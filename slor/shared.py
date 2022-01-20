@@ -48,6 +48,7 @@ DRIVER_REPORT_TIMER = 5  # seconds
 LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout")
 PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write", "sleep")
+UNKNOWN_PROGRESS = ("cleanup",)
 MIXED_LOAD_TYPES = ("read", "write", "head", "delete", "tag_read", "tag_write", "reread", "overwrite")
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
@@ -56,7 +57,7 @@ STATS_DB_DIR = "/dev/shm"
 TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
-POSIX_DB_TMP = "/tmp"
+POSIX_DB_TMP = "/tmp/"
 
 class bcolors:
     HEADER = '\033[95m'

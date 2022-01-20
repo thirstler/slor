@@ -12,6 +12,7 @@ import stage.write
 import stage.head
 import stage.delete
 import stage.mixed
+import stage.cleanup
 import sys
 from s3primitives import S3primitives
 
@@ -33,6 +34,8 @@ def _driver_t(socket, config, id):
         wc = stage.delete.Delete(socket, config, id).exec()
     elif config["type"] == "mixed":
         wc = stage.mixed.Mixed(socket, config, id).exec()
+    elif config["type"] == "cleanup":
+        wc = stage.cleanup.CleanUp(socket, config, id).exec()
 
     try:
         del wc
@@ -168,27 +171,46 @@ class SlorDriver:
     def thread_control(self, config):
         time.sleep(config["w_id"] * config["startup_delay"])
         delay_time = config["startup_delay"]/config["threads"]
-        ##
-        # Receive work
-        for id in range(0, config["threads"]):
 
-            if "readmap" in config:
+        if config["type"] == "cleanup":
+            drivers = len(config["driver_list"])
+            buckets = config["bucket_count"]
+            who = []
+            for n in range(0, drivers):
+                who.append([])
+            for n in range(0, buckets):
+                who[n % drivers].append("{}{}".format(config["bucket_prefix"], n))
 
-                chunk = int(len(config["readmap"])/config["threads"])
-
-                # Divide the readmap here if we're using one
-                offset = id * chunk
-                end = offset + chunk
-                config["mapslice"] = config["readmap"][offset:end]
+            for id, bucket in enumerate(who[config["w_id"]]):
+                config["bucket"] = bucket
+                self.pipes.append((Pipe()))
+                self.procs.append(
+                    Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
+                )
+                self.procs[-1].start()
+        else:
 
             ##
-            # Create socket for talking to thread and launch
-            self.pipes.append((Pipe()))
-            self.procs.append(
-                Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
-            )
-            time.sleep(delay_time)
-            self.procs[-1].start()
+            # Receive work
+            for id in range(0, config["threads"]):
+
+                if "readmap" in config:
+
+                    chunk = int(len(config["readmap"])/config["threads"])
+
+                    # Divide the readmap here if we're using one
+                    offset = id * chunk
+                    end = offset + chunk
+                    config["mapslice"] = config["readmap"][offset:end]
+
+                ##
+                # Create socket for talking to thread and launch
+                self.pipes.append((Pipe()))
+                self.procs.append(
+                    Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
+                )
+                time.sleep(delay_time)
+                self.procs[-1].start()
 
         ##
         # Monitoring and return the responses
@@ -220,7 +242,7 @@ class SlorDriver:
             n.join()
 
         self.procs.clear()
-        print(len(self.procs))
+        
         # Alert controller that the current workload is finished
         self.log_to_controller({"status": "done"})
 

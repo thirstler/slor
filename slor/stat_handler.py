@@ -76,7 +76,12 @@ class statHandler:
         self.global_sample["wrkld_eff"] = 0
         self.global_sample["perc"] = 0
 
-        count = len(self.config["driver_list"]) * self.config["driver_proc"]
+        # Process count for the cleanup stageonly uses 1 worker per bucket
+        if self.stage == "cleanup":
+            count = self.config["bucket_count"]
+        else:
+            count = len(self.config["driver_list"]) * self.config["driver_proc"]
+
         for w in self.standing_sample:
             for t in self.standing_sample[w]:
                 self.global_sample["start"] += self.standing_sample[w][t]["start"]
@@ -139,14 +144,13 @@ class statHandler:
 
         sys.stdout.write("\u2502 {:<9}".format(self.stage + ":"))
         if len(self.operations) > 1:
-
             if self.stage in PROGRESS_BY_TIME:
                 perc = (time.time()-self.progress_start_time)/self.config["run_time"]
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
                 self.progress(self.global_sample["perc"], final=final)
-
+            
             stat_func = self.rotate_mixed_stat_func(final)
             for o in self.operations:
                 sys.stdout.write(" {}".format(stat_func(operation=o)))
@@ -163,6 +167,8 @@ class statHandler:
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
                 self.progress(self.global_sample["perc"], final=final)
+            elif self.stage in UNKNOWN_PROGRESS:
+                self.dunno(final=final)
 
             sys.stdout.write(" {} {} {} {} {}".format(
                 self.ops_sec(operation=self.operations[0]),
@@ -203,6 +209,15 @@ class statHandler:
         self.last_rm_time = nownow
         self.last_rm_count = x
 
+    def dunno(self, width=10, final=False):
+        blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
+        if final:
+            sys.stdout.write("\u2592" * width)
+            sys.stdout.write(" 100%")
+        else:
+            for b in range(0, width):
+                sys.stdout.write(blocks[random.randint(0,13)])
+            sys.stdout.write("   ?%")
 
     def progress(self, perc, width=10, final=False):
         if final: perc = 1

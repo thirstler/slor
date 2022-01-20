@@ -66,14 +66,17 @@ class S3primitives:
         return resp
 
     def list_bucket(self, bucket, paged=True):
+        lspgntr = None
         if paged:
-            lspgntr = self.s3client("list_object_versions")
+            lspgntr = self.s3client.get_paginator("list_object_versions")
             self.page_iterator = lspgntr.paginate(
                 Bucket=bucket,
                 MaxKeys=1000
             )
         else:
             pass # fuck off
+
+        return self.page_iterator
 
     def get_listing_page(self) -> iter:
         return self.page_iterator

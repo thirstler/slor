@@ -1,6 +1,6 @@
 import sqlite3
 from shared import *
-import os.path
+import os
 from pathlib import Path
 import json
 
@@ -9,14 +9,13 @@ class SlorDB:
     db_file = None
     db_conn = None
     db_cursor = None
+    config = None
 
     def __init__(self, config):
+        self.config = config
+        dbroot = POSIX_DB_TMP
         if os.name == "nt":
             dbroot = WINDOWS_DB_TMP
-        elif os.name == "posix":
-            dbroot = POSIX_DB_TMP
-        else:
-            return
 
         if self.db_conn == None:
             self.db_file = Path("{}{}.db".format(dbroot, self.config["name"]))
@@ -29,7 +28,7 @@ class SlorDB:
 
     def mk_data_store(self, host):
         for x in ".-":
-            host = host.replace(x)
+            host = host.replace(x, "_")
         self.db_cursor.execute(
             "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
                 host
@@ -41,7 +40,7 @@ class SlorDB:
     
     def store_stat(self, message):
         for x in ".-":
-            message["w_id"] = message["w_id"].replace(x)
+            message["w_id"] = message["w_id"].replace(x, "_")
         
         # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
