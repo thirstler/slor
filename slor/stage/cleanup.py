@@ -1,7 +1,6 @@
 from shared import *
 from process import SlorProcess
 import boto3
-import json
 
 class CleanUp(SlorProcess):
 

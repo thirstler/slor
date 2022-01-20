@@ -1,4 +1,4 @@
-import sys
+import sys, os
 import argparse
 from multiprocessing.connection import Client
 from multiprocessing import Process
@@ -66,6 +66,9 @@ def generate_tasks(args):
             sys.stderr.write("your mixed load profile values don't equal 100\n")
             sys.exit(1)
 
+    if "complex" in loads:
+        complex_workload = self.chk_complex(args.complex)
+
     # Always happens:
     loads.insert(0, "init")
 
@@ -76,6 +79,19 @@ def generate_tasks(args):
 
 
     return {"loadorder": loads, "mixed_profile": mix_prof_obj}
+
+def chk_complex(self, workload_input):
+    if not os.path.exists(workload_input):
+        sys.stderr.write("file not found: {}".format(workload_input))
+        sys.exit(1)
+    try:
+        workload = json.load(workload_input)
+    except Exception as e:
+        sys.stderr.write("error: {}".format(e))
+        sys.exit(1)
+    
+    
+
 
 
 def run():
@@ -136,6 +152,11 @@ def run():
         help="object size to use; accepts values with common suffixes (1MB, 1MiB) and ranges (1KB-12MiB) - defaults to {0}".format(
             DEFAULT_OBJECT_SIZE
         ),
+    )
+    parser.add_argument(
+        "--complex",
+        default=sys.stdin,
+        help="complex workload file in YAML format"
     )
     parser.add_argument(
         "--driver-list",
