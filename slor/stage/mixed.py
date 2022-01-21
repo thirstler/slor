@@ -27,7 +27,7 @@ class Mixed(SlorProcess):
             resp = self.s3ops.get_object(key[0], key[1])
             self.stop_io(sz=resp["ContentLength"])
         except Exception as e:
-            sys.stderr.write(e)
+            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -52,7 +52,7 @@ class Mixed(SlorProcess):
             self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
             self.stop_io(sz=size)
         except Exception as e:
-            sys.stderr.write(e)
+            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -64,14 +64,14 @@ class Mixed(SlorProcess):
             self.s3ops.head_object(hat[0], hat[1])
             self.stop_io()
         except Exception as e:
-            sys.stderr.write(e)
+            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
     def _delete(self):
         """ Only delete from the written pool """
         if len(self.writemap) == 0:
-            raise KeyError("nothing to delete")
+            sys.stderr.write("keylist empty, nothing to delete")
 
         indx = random.randint(0, len(self.writemap)-1)
         key = self.writemap.pop(indx)
@@ -81,7 +81,7 @@ class Mixed(SlorProcess):
             self.s3ops.delete_object(key[0], key[1])
             self.stop_io()
         except Exception as e:
-            sys.stderr.write(e)
+            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -98,7 +98,7 @@ class Mixed(SlorProcess):
             resp = self.s3ops.get_object(key[0], key[1])
             self.stop_io(sz=resp["ContentLength"])
         except Exception as e:
-            sys.stderr.write(e)
+            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -108,14 +108,14 @@ class Mixed(SlorProcess):
         key = self.get_key_from_existing()
         size = len(body_data)
 
-        #try:
-        self.start_io("overwrite")
-        self.s3ops.put_object(key[0], key[1], body_data)
-        self.stop_io(sz=size)
-        #except Exception as e:
-        #    sys.stderr.write(str(e))
-        #    sys.stderr.flush()
-        #    self.stop_io(failed=True)
+        try:
+            self.start_io("overwrite")
+            self.s3ops.put_object(key[0], key[1], body_data)
+            self.stop_io(sz=size)
+        except Exception as e:
+            sys.stderr.write(str(e))
+            sys.stderr.flush()
+            self.stop_io(failed=True)
 
     def do(self, operation):
         

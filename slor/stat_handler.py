@@ -62,11 +62,13 @@ class statHandler:
             self.global_counter += self.standing_sample[data["w_id"]][data["t_id"]]["st"][o]["ios"]
         self.standing_sample[data["w_id"]][data["t_id"]]["iotime"] = iotime
 
-        # Add a benchmark process efficency figure
-        self.standing_sample[data["w_id"]][data["t_id"]]["wrkld_eff"] = \
-            self.standing_sample[data["w_id"]][data["t_id"]]["iotime"] / \
-            self.standing_sample[data["w_id"]][data["t_id"]]["walltime"]
-
+        try:
+            # Add a benchmark process efficiency figure
+            self.standing_sample[data["w_id"]][data["t_id"]]["wrkld_eff"] = \
+                self.standing_sample[data["w_id"]][data["t_id"]]["iotime"] / \
+                self.standing_sample[data["w_id"]][data["t_id"]]["walltime"]
+        except:
+            self.standing_sample[data["w_id"]][data["t_id"]]["wrkld_eff"] = 0
 
     def mk_global_sample(self):
         self.global_sample.clear()
@@ -194,7 +196,10 @@ class statHandler:
         else: return
 
         perc = 1 if final else (x/outof)
-        rate = (x - self.last_rm_count)/(nownow-self.last_rm_time)
+        try:
+            rate = (x - self.last_rm_count)/(nownow-self.last_rm_time)
+        except ZeroDivisionError:
+            rate = 0
 
         sys.stdout.write("\r\u2502 readmap: ")
         self.progress(perc, final=final)

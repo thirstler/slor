@@ -68,3 +68,150 @@ mixed = {
     }
 }
 
+Complex workload structure:
+
+{
+    "prefix_struct": [
+        {
+            "num_prefix": INT,
+            "key_length": INT,
+            "ratio" INT,           # weight for determining probability of objects getting placed here on write
+            "prefix_struc": [
+                {
+                    "num_prefix": INT,
+                    "key_length": INT,
+                    "ratio": INT,  # sub-ratio of parent
+                    "prefix_struc": [ ... ]
+                }
+            ]
+        }
+    ],
+    "work": [
+        {
+            "stream_name": arbitrary name, streams with the same name will share object operations with other streams (overwrite).
+            "action": oneof(read, write, reread, overwrite, head, delete)
+            "object_size": bytes or range,
+            "key_length": length or range, in chars, for keys
+            "ratio": weight number to be used relative to the other operations to determine occurrence probability for this operation,
+        }
+    ]
+}
+
+Example workload file contents:
+{
+    "name": "Demo Workload File"
+    "access_key": "admin",             #
+    "secret_key": "password",          #
+    "endpoint": "http://localhost",    # 
+    "verify_tls": False,               # Theses items can be located in the "workgroup" section as well
+    "region": "us-east-1",             #
+    "bucket_prefix": "bench-bucket-",  #
+    "bucket_count": 8,                 #
+    "prefix_struct": [                 # Prefix structure can be defined in the workgroup
+        {
+            "num_prefix": 20,
+            "key_length": 20
+            "ratio": 5,
+            "prefix_struct": [
+                {
+                    "num_prefix": 25,
+                    "key_length": 18,
+                    "ratio": 1
+                    "prefix_struct": [
+                        {
+                            "num_prefix": 12,
+                            "key_length": 18,
+                            "ratio": 1
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "num_prefix": 20,
+            "key_length": 14
+            "ratio": 1,
+            "prefix_struct": [
+                "num_prefix": 12,
+                "key_length": 20,
+                "ratio": 1,
+                "prefix_struct": [
+                    {
+                        "num_prefix": 25,
+                        "key_length": 18,
+                        "ratio": 1
+                    }
+                ]
+            ]
+        },
+    ],
+    "workgroups": [
+        {
+            "time": 3600,
+            "auto_prepare": "1000G" # use the write ratios to create this amount of data ahead of time
+            "auto_overrun": "1.7T"  # Write a lot of garbage after prepare stage to overrun page/controller caches
+            "prefix_struct": {}
+            "work": [
+                {
+                    "stream_name": "indexes",
+                    "action": "write",
+                    "object_size": "1K-15K",
+                    "key_length" "4-12",
+                    "ratio": 50
+                },
+                {
+                    "stream_name": "indexes",
+                    "action": "read",
+                    "ratio": 50
+                },
+                {
+                    "stream_name": "indexes",
+                    "action": "reread",
+                    "ratio": 10
+                },
+                {
+                    "stream_name": "indexes",
+                    "action": "overwrite",
+                    "object_size": "1K-15K",
+                    "key_length" "4-12",
+                    "ratio": 10
+                },
+                {
+                    "stream_name": "indexes",
+                    "action": "delete",
+                    "ratio": 2
+                },
+                {
+                    "stream_name": "blobs",
+                    "action": "write",
+                    "object_size": "4M-22M",
+                    "key_length" "18",
+                    "ratio": 500
+                },
+                {
+                    "stream_name": "blobs",
+                    "action": "read",
+                    "ratio": 5000
+                },
+                {
+                    "stream_name": "blobs",
+                    "action": "reread",
+                    "ratio": 10000
+                },
+                {
+                    "stream_name": "blobs",
+                    "action": "head",
+                    "ratio": 5000
+                },
+                {
+                    "stream_name": "blobs",
+                    "action": "delete",
+                    "ratio": 100
+                }
+            ]
+        }
+    ]
+}
+
+
+

@@ -68,10 +68,10 @@ class SlorControl:
         print("\ndone.\n")
 
     def top_box(self):
-        print(u"\u256D{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+        print(u"\u250C{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
 
     def bottom_box(self):
-        print(u"\u2570{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+        print(u"\u2514{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
 
     def box_text(self, text):
         text_lines = text.split("\n")

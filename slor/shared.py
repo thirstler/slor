@@ -184,7 +184,7 @@ def get_keys(profile):
 
     return (access_key, secret_key)
 
-def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_lowercase) -> str:
+def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_uppercase) -> str:
     if type(key_desc) == int:
         key_desc = (key_desc, key_desc)
     return "{0}{1}".format(

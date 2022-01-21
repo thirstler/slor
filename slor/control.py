@@ -5,6 +5,7 @@ from multiprocessing import Process
 from slor_c import *
 from shared import *
 from driver import _slor_driver, _driver_t, SlorDriver
+from workload import *
 import json
 
 ###############################################################################
@@ -66,9 +67,6 @@ def generate_tasks(args):
             sys.stderr.write("your mixed load profile values don't equal 100\n")
             sys.exit(1)
 
-    if "complex" in loads:
-        complex_workload = self.chk_complex(args.complex)
-
     # Always happens:
     loads.insert(0, "init")
 
@@ -79,19 +77,6 @@ def generate_tasks(args):
 
 
     return {"loadorder": loads, "mixed_profile": mix_prof_obj}
-
-def chk_complex(self, workload_input):
-    if not os.path.exists(workload_input):
-        sys.stderr.write("file not found: {}".format(workload_input))
-        sys.exit(1)
-    try:
-        workload = json.load(workload_input)
-    except Exception as e:
-        sys.stderr.write("error: {}".format(e))
-        sys.exit(1)
-    
-    
-
 
 
 def run():
@@ -154,9 +139,9 @@ def run():
         ),
     )
     parser.add_argument(
-        "--complex",
-        default=sys.stdin,
-        help="complex workload file in YAML format"
+        "--workload-file",
+        default=None,
+        help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
     )
     parser.add_argument(
         "--driver-list",
@@ -206,66 +191,70 @@ def run():
     )
     args = parser.parse_args()
 
-    # if no cmd line args, get from profile, then env (in that order)
-    if not args.access_key and not args.secret_key:
-        args.access_key, args.secret_key = get_keys(args.profile)
-
-    # Must be AWS if no endpoint is given, to keep boto3 easy we should
-    # construct the AWS endpoint explicitly.
-    if args.endpoint == "":
-        args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
-
-    key_sz = args.key_length.split("-")
-    if len(key_sz) == 1:
-        key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
+    if args.workload_file:
+        pass
+        #root_config = parse_workload(args.workload_file)
+        #print(root_config)
+        #exit()
     else:
-        key_sz = (int(key_sz[0]),
-                  int(key_sz[1]),
-                  int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
+        # if no cmd line args, get from profile, then env (in that order)
+        if not args.access_key and not args.secret_key:
+            args.access_key, args.secret_key = get_keys(args.profile)
 
-    tasks = generate_tasks(args)
+        # Must be AWS if no endpoint is given, to keep boto3 easy we should
+        # construct the AWS endpoint explicitly.
+        if args.endpoint == "":
+            args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
 
-    # Start a driver here if there isn't one specified
-    driver = None
-    if args.driver_list == "":
-        args.driver_list = os.uname().nodename
-        print("no driver address specified, starting one here")
-        driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
-        driver.start()
-        time.sleep(2)
+        key_sz = args.key_length.split("-")
+        if len(key_sz) == 1:
+            key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
+        else:
+            key_sz = (int(key_sz[0]),
+                    int(key_sz[1]),
+                    int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
 
-    if args.prepare_objects != None:
-        ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
-    else:
-        ttl_prepare_sz = calc_prepare_size(
-            parse_size_range(args.object_size),
-            int(args.stage_time),
-            int(args.iop_limit),
-        )
-    root_config = {
-        "name": args.name,
-        "verbose": args.verbose,
-        "access_key": args.access_key,
-        "secret_key": args.secret_key,
-        "endpoint": args.endpoint,
-        "verify": args.verify,
-        "region": args.region,
-        "key_sz": key_sz,
-        "sz_range": parse_size_range(args.object_size),
-        "run_time": int(args.stage_time),
-        "bucket_count": int(args.bucket_count),
-        "bucket_prefix": args.bucket_prefix,
-        "driver_list": parse_driver_list(args.driver_list),
-        "sleeptime": float(args.sleep),
-        "driver_proc": int(args.processes_per_driver),
-        "ttl_sz_cache": parse_size(args.cachemem_size),
-        "iop_limit": int(args.iop_limit),
-        "ttl_prepare_sz": ttl_prepare_sz,
-        "tasks": tasks,
-        "mixed_profile": json.loads(args.mixed_profile)
-    }
+        tasks = generate_tasks(args)
 
-    
+        # Start a driver here if there isn't one specified
+        driver = None
+        if args.driver_list == "":
+            args.driver_list = os.uname().nodename
+            print("no driver address specified, starting one here")
+            driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
+            driver.start()
+            time.sleep(2)
+
+        if args.prepare_objects != None:
+            ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
+        else:
+            ttl_prepare_sz = calc_prepare_size(
+                parse_size_range(args.object_size),
+                int(args.stage_time),
+                int(args.iop_limit),
+            )
+        root_config = {
+            "name": args.name,
+            "verbose": args.verbose,
+            "access_key": args.access_key,
+            "secret_key": args.secret_key,
+            "endpoint": args.endpoint,
+            "verify": args.verify,
+            "region": args.region,
+            "key_sz": key_sz,
+            "sz_range": parse_size_range(args.object_size),
+            "run_time": int(args.stage_time),
+            "bucket_count": int(args.bucket_count),
+            "bucket_prefix": args.bucket_prefix,
+            "driver_list": parse_driver_list(args.driver_list),
+            "sleeptime": float(args.sleep),
+            "driver_proc": int(args.processes_per_driver),
+            "ttl_sz_cache": parse_size(args.cachemem_size),
+            "iop_limit": int(args.iop_limit),
+            "ttl_prepare_sz": ttl_prepare_sz,
+            "tasks": tasks,
+            "mixed_profile": json.loads(args.mixed_profile)
+        }
 
     handle = SlorControl(root_config)
     handle.exec()
