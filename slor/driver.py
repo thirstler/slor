@@ -308,7 +308,7 @@ def run():
     parser.add_argument(
         "--bindaddr",
         default="0.0.0.0",
-        help="bind to specific address (defaults to 0.0.0.0)",
+        help="bind to specific address (defaults to 0.0.0.0)"
     )
     parser.add_argument(
         "--listen",

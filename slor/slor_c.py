@@ -4,7 +4,7 @@ import random
 import time
 from shared import *
 import os.path
-import stat_handler
+from stat_handler import statHandler
 from db_ops import SlorDB
 
 class SlorControl:
@@ -282,7 +282,7 @@ class SlorControl:
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
         
-        self.stats_h = stat_handler.statHandler(self.config, stage)
+        self.stats_h = statHandler(self.config, stage)
         if self.get_readmap_len() > 0:
             self.stats_h.set_count_target(self.get_readmap_len())
 
@@ -325,29 +325,6 @@ class SlorControl:
         return (objcount - (objcount % blksz) + blksz)
 
 
-    def mk_read_map(self, key_desc={"min": 40, "max": 40}):
-        
-        objcount = self.get_readmap_len()
-        stat_h = stat_handler.statHandler(self.config, "readmap")
-        fin = False
-        for z in range(0, objcount):
-
-            self.readmap.append(
-                (
-                    "{0}{1}".format(
-                        self.config["bucket_prefix"],
-                        random.randrange(0, self.config["bucket_count"]),
-                    ),
-                    gen_key(
-                        key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
-                    ),
-                )
-            )
-            if (z+1) == objcount:
-                fin = True
-            stat_h.readmap_progress(z, objcount, final=fin)
-
-
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
             return
@@ -377,6 +354,29 @@ class SlorControl:
 
         return False
     
+    
+    def mk_read_map(self, key_desc={"min": 40, "max": 40}):
+    
+        objcount = self.get_readmap_len()
+        stat_h = statHandler(self.config, "readmap")
+        fin = False
+        for z in range(0, objcount):
+
+            self.readmap.append(
+                (
+                    "{0}{1}".format(
+                        self.config["bucket_prefix"],
+                        random.randrange(0, self.config["bucket_count"]),
+                    ),
+                    gen_key(
+                        key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
+                    ),
+                )
+            )
+            if (z+1) == objcount:
+                fin = True
+            stat_h.readmap_progress(z, objcount, final=fin)
+
 
     def mk_stage(self, target, stage, wid):
 

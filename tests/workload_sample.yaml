@@ -1,83 +1,119 @@
 {
     "name": "Demo Workload File",
-    "access_key": "admin",             #
-    "secret_key": "password",          #
-    #"endpoint": "http://localhost",    # Global configuration in the root.
-    "verify_tls": False,               # Theses items can be located in the "workgroup" section as well
-    "region": "us-east-1",             #
-    "bucket_prefix": "bench-bucket-",  #
-    "bucket_count": 8,                 #
-    "prefix_struct": [                 # Prefix structure can also be defined per workgroup
-        {
-            "num_prefix": 20,          # Number of prefixes at this level (root)
-            "key_length": 20,          # length (or range of possible lengths) of the prefix
-            "ratio": 5,                # weighted value used to determine probability of placement at this level
-            "prefix_struct": [         # A nested struct defines additional layer of delimited prefixes 
-                {
-                    "num_prefix": 25,
-                    "key_length": "18-25",
-                    "ratio": 1,
-                    "prefix_struct": [
-                        {
-                            "num_prefix": 12,
-                            "key_length": 18,
-                            "ratio": 1
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "num_prefix": 20,
-            "key_length": 14,
-            "ratio": 2,
-            "prefix_struct": [
-                {
-                    "num_prefix": 12,
-                    "key_length": 20,
-                    "ratio": 1,
-                    "prefix_struct": [
-                        {
-                            "num_prefix": 25,
-                            "key_length": 18,
-                            "ratio": 1
-                        }
-                    ]
-                }
-            ]
-        },
-    ],
+    "global": {
+        "access_key": "admin",
+        "secret_key": "password",          ##
+        "endpoint": "http://localhost",    # Global configuration items are
+        "verify_tls": False,               # applied to each workgroup.
+        "region": "us-east-1",             # Values present in the workgroup
+        "bucket_prefix": "bench-bucket-",  # will take precedence.
+        "bucket_count": 8,                 ##
+        "time": 60,
+        "auto_prepare": "1000G",
+        "workers": 128,
+        "prefix_struct": [           # A prefix structure can be defined, leave it out if you don't want one
+            {
+                "num_prefix": 5,     # Number of prefixes at this level 
+                "key_length": 20,    # length (or range of possible lengths) of the prefix keys
+                "ratio": 5,          # weighted value used to determine probability of object placement at this level
+                "prefix_struct": [   # A nested struct defines additional layer of delimited prefixes 
+                    {
+                        "num_prefix": 8,
+                        "key_length": "18-25",
+                        "ratio": 1,
+                        "prefix_struct": [
+                            {
+                                "num_prefix": 3,
+                                "key_length": "4-18",
+                                "ratio": 5
+                            }
+                        ]
+                    },
+                    {
+                        "num_prefix": 5,
+                        "key_length": "18-25",
+                        "ratio": 3,
+                        "prefix_struct": [
+                            {
+                                "num_prefix": 7,
+                                "key_length": 12,
+                                "ratio": 5
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "num_prefix": 3,
+                "key_length": 14,
+                "ratio": 1,
+                "prefix_struct": [
+                    {
+                        "num_prefix": 9,
+                        "key_length": 20,
+                        "ratio": 1,
+                        "prefix_struct": [
+                            {
+                                "num_prefix": 3,
+                                "key_length": 18,
+                                "ratio": 1
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
     "workgroups": [
         {
-            #"name": "workgroup 1",
+            "name": "workgroup 1",
             "time": 3600,
-            "auto_prepare": "1000G", # use the write ratios to create this amount of data ahead of time
-            "overrun": "1.7T",  # Write a lot of garbage after prepare stage to overrun page/controller caches
-            "clean": True,           # Cleans/removes buckets when done with this workgroup
+            "auto_prepare": "1000G",
+            "overrun": "1.7T",
+            "clean": True,
+            "workers": 128,
+            "stream": [
+                {
+                    "stream_name": "read test",
+                    "action": write,
+                    "object_size": "256K",
+                    "key_length": "4-12",
+                    "ratio": 1
+                }
+            ]
+
+        },
+        {
+            "name": "workgroup 2",
+            "time": 3600,
+            "auto_prepare": "1000G",
+            "overrun": "1.7T",
+            "clean": True,
+            "workers": 128,
             "work": [
                 {
                     "stream_name": "indexes",
                     "action": "write",
                     "object_size": "1K-15K",
                     "key_length": "4-12",
-                    "ratio": 50
+                    "ratio": 5
                 },
                 {
                     "stream_name": "indexes",
                     "action": "read",
-                    "ratio": 50
+                    "ratio": 5
                 },
                 {
                     "stream_name": "indexes",
                     "action": "reread",
-                    "ratio": 10
+                    "ratio": 1
                 },
                 {
                     "stream_name": "indexes",
                     "action": "overwrite",
                     "object_size": "1K-15K",
                     "key_length": "4-12",
-                    "ratio": 10
+                    "ratio": 1
                 },
                 {
                     "stream_name": "indexes",
@@ -89,27 +125,27 @@
                     "action": "write",
                     "object_size": "4M-22M",
                     "key_length": "18",
-                    "ratio": 500
+                    "ratio": 50
                 },
                 {
                     "stream_name": "blobs",
                     "action": "read",
-                    "ratio": 5000
+                    "ratio": 500
                 },
                 {
                     "stream_name": "blobs",
                     "action": "reread",
-                    "ratio": 10000
+                    "ratio": 1000
                 },
                 {
                     "stream_name": "blobs",
                     "action": "head",
-                    "ratio": 5000
+                    "ratio": 500
                 },
                 {
                     "stream_name": "blobs",
                     "action": "delete",
-                    "ratio": 100
+                    "ratio": 10
                 }
             ]
         }

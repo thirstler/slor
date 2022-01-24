@@ -223,6 +223,7 @@ class statHandler:
             for b in range(0, width):
                 sys.stdout.write(blocks[random.randint(0,13)])
             sys.stdout.write("   ?%")
+            
 
     def progress(self, perc, width=10, final=False):
         if final: perc = 1
@@ -234,7 +235,7 @@ class statHandler:
             fillchar = u"\u2592"
             leading_char = " "
         sys.stdout.write(u"{}{}{}{:>3}%".format(fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100)))
-        #sys.stdout.write(u"{}{}{:>4}%".format(u"\u2585"*char_w, u"\u2500"*(width-char_w), math.ceil(perc*100)))
+
 
     def failure_count(self, stat_sample=None, operation=None):
         if not stat_sample:

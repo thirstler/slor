@@ -4,80 +4,9 @@ from multiprocessing.connection import Client
 from multiprocessing import Process
 from slor_c import *
 from shared import *
-from driver import _slor_driver, _driver_t, SlorDriver
+from driver import _slor_driver
 from workload import *
 import json
-
-###############################################################################
-## Configuration generation tasks
-##
-def calc_prepare_size(sizerange, runtime, iops):
-    if len(sizerange) > 1:
-        avgsz = (sizerange[0] + sizerange[1]) / 2
-    else:
-        avgsz = sizerange[0]
-
-    return avgsz * iops * runtime
-
-
-def parse_size_range(stringval):
-
-    if not "-" in stringval:
-        sz = parse_size(stringval)
-        return (sz, sz, sz)
-
-    else:
-        vals = stringval.split("-")
-        low = int(parse_size(vals[0].strip()))
-        high = int(parse_size(vals[1].strip()))
-        avg = (low + high) / 2
-        return (low, high, avg)
-
-
-def parse_driver_list(stringval):
-    hostlist = []
-    for hostport in stringval.split(","):
-        if ":" in hostport:
-            host = hostport.split(":")[0]
-            port = int(hostport.split(":")[1])
-        else:
-            host = hostport
-            port = int(DEFAULT_DRIVER_PORT)
-        hostlist.append({"host": host, "port": port})
-    return hostlist
-
-
-def generate_tasks(args):
-
-    loads = list(args.loads.split(","))
-    #print(loads)
-    mix_prof_obj = {}
-    for l in loads:
-        if l not in LOAD_TYPES:
-            sys.stderr.write('"{0}" is not a load option\n'.format(l))
-            sys.exit(1)
-
-    if "mixed" in loads:
-        perc = 0
-        mix_prof_obj = json.loads(args.mixed_profile)
-        for l in MIXED_LOAD_TYPES:
-            if l in mix_prof_obj:
-                perc += int(mix_prof_obj[l])
-        if perc != 100:
-            sys.stderr.write("your mixed load profile values don't equal 100\n")
-            sys.exit(1)
-
-    # Always happens:
-    loads.insert(0, "init")
-
-    # Create a readmap and add prep stage if needed
-    if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
-        loads.insert(1, "readmap")
-        loads.insert(2, "prepare")
-
-
-    return {"loadorder": loads, "mixed_profile": mix_prof_obj}
-
 
 def run():
     parser = argparse.ArgumentParser(
@@ -178,11 +107,6 @@ def run():
         ),
     )
     parser.add_argument(
-        "--delimiter-config",
-        default=DEFAULT_DELIMITER_CONFIG,
-        help="comma-delimited count, depth and length of delimited prefixes (see README)"
-    )
-    parser.add_argument(
         "--bucket-count",
         default=DEFAULT_BUCKET_COUNT,
         help="number of buckets to distribute over, defaults to '{0}'".format(
@@ -192,73 +116,15 @@ def run():
     args = parser.parse_args()
 
     if args.workload_file:
-        pass
-        #root_config = parse_workload(args.workload_file)
-        #print(root_config)
-        #exit()
+        root_config = parse_workload(args.workload_file)
     else:
-        # if no cmd line args, get from profile, then env (in that order)
-        if not args.access_key and not args.secret_key:
-            args.access_key, args.secret_key = get_keys(args.profile)
+        root_config = classic_workload(args)
 
-        # Must be AWS if no endpoint is given, to keep boto3 easy we should
-        # construct the AWS endpoint explicitly.
-        if args.endpoint == "":
-            args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
-
-        key_sz = args.key_length.split("-")
-        if len(key_sz) == 1:
-            key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
-        else:
-            key_sz = (int(key_sz[0]),
-                    int(key_sz[1]),
-                    int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
-
-        tasks = generate_tasks(args)
-
-        # Start a driver here if there isn't one specified
-        driver = None
-        if args.driver_list == "":
-            args.driver_list = os.uname().nodename
-            print("no driver address specified, starting one here")
-            driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
-            driver.start()
-            time.sleep(2)
-
-        if args.prepare_objects != None:
-            ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
-        else:
-            ttl_prepare_sz = calc_prepare_size(
-                parse_size_range(args.object_size),
-                int(args.stage_time),
-                int(args.iop_limit),
-            )
-        root_config = {
-            "name": args.name,
-            "verbose": args.verbose,
-            "access_key": args.access_key,
-            "secret_key": args.secret_key,
-            "endpoint": args.endpoint,
-            "verify": args.verify,
-            "region": args.region,
-            "key_sz": key_sz,
-            "sz_range": parse_size_range(args.object_size),
-            "run_time": int(args.stage_time),
-            "bucket_count": int(args.bucket_count),
-            "bucket_prefix": args.bucket_prefix,
-            "driver_list": parse_driver_list(args.driver_list),
-            "sleeptime": float(args.sleep),
-            "driver_proc": int(args.processes_per_driver),
-            "ttl_sz_cache": parse_size(args.cachemem_size),
-            "iop_limit": int(args.iop_limit),
-            "ttl_prepare_sz": ttl_prepare_sz,
-            "tasks": tasks,
-            "mixed_profile": json.loads(args.mixed_profile)
-        }
+    if args.driver_list == "":
+        driver = start_driver(args)
 
     handle = SlorControl(root_config)
     handle.exec()
     
-    # Join the driver if we started one
-    if driver != None:
-        driver.join()
+    try: driver.join()
+    except: pass

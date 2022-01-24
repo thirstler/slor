@@ -1,8 +1,15 @@
-import yaml, json
+"""
+Workload generation tasks
+"""
+import yaml, json, time
 from shared import *
+from driver import _slor_driver
+from multiprocessing import Process
+from stat_handler import *
+import copy
 
 def parse_workload(file):
-    workloads = []
+    
     try:
         workload_f = yaml.safe_load(open(file, "r"))
     except Exception as e:
@@ -10,42 +17,21 @@ def parse_workload(file):
         return None
     if "workgroups" not in workload_f:
         print("no workgroups in the workload file")
+        
+    config = {"config_type": "advanced"}
 
-    global_config_template = {}
-    stage_chain = []
-    for item in ("name", "access_key", "secret_key", "endpoint", "region", "bucket_prefix", "bucket_count", "verify_tls", "prefix_struct"):
-        if item in workload_f:
-            global_config_template[item] = workload_f[item]
+    # Global items for use in workload definitions
+    global_config_template = workload_f["global"]
 
     if "name" not in workload_f:
-        global_config_template["name"] = "unnamed"
+        config["name"] = "unnamed"
 
     for i, work in enumerate(workload_f["workgroups"]):
-        work.update(global_config_template)
-        
-        work["prefix_list"] = build_prefix_list(work["prefix_struct"])
-        
-        # Normalize work item ratios into percentages
-        mult = 0
-        for item in work["work"]:
-            mult += item["ratio"]
-        mult = 1/mult
 
-        for item in work["work"]:
-            item["ratio"] *= mult
-            if "object_size" in item:
-                item["object_size"] = item["object_size"].split("-")
-                if len(item["object_size"]) == 1:
-                    item["object_size"].append(item["object_size"][0])
-                item["object_size"][0] = parse_size(item["object_size"][0])
-                item["object_size"][1] = parse_size(item["object_size"][1])
-
-            if "key_length" in item:
-                item["key_length"] = item["key_length"].split("-")
-                if len(item["key_length"]) == 1:
-                    item["key_length"].append(item["key_length"][0])
-                item["key_length"][0] = int(item["key_length"][0])
-                item["key_length"][1] = int(item["key_length"][1])
+        # Place global items where not configured
+        for item in global_config_template:
+            if item not in work:
+                work[item] = global_config_template[item]
 
         if "auto_prepare" in work:
             work["auto_prepare"] = parse_size(work["auto_prepare"])
@@ -57,47 +43,225 @@ def parse_workload(file):
         if not "name" in work:
             work["name"] =  global_config_template["name"] + "_{}".format(i) if "name" in global_config_template else str(i)
 
+        if "prefix_struct" in work:
+            work["prefix_list"] = tuple(build_prefix_list(work["prefix_struct"]))
+            work["prefix_placement_map"] = tuple(build_prefix_placement_map(work["prefix_list"]))
+
+
+        for item in work["work"]:
+
+            if "object_size" in item:
+                item["object_size"] = parse_size_range(item["object_size"])
+            if "key_length" in item:
+                item["key_length"] = parse_size_range(item["key_length"])
+
         # Check workgroup:
         if not all(x in work for x in ("name", "access_key", "secret_key", "endpoint", "bucket_prefix", "bucket_count")):
             work["prefix_list"].clear()
-            print(json.dumps(work))
             sys.stderr.write("missing minimal config item(s)\n")
+            sys.exit(1)
 
+    return workload_f
 
-        workloads.append(work)
+def build_prefix_placement_map(keylist):
+    ratio_ttl = 0
+    for key in keylist:
+        ratio_ttl += key[1]
 
-    return workloads
+    prefix_pmap = []
+    
+    ki = 0
+    while ki < len(keylist):
+        for m in range(0, keylist[ki][1]):
+            prefix_pmap.append(ki)
+        ki += 1
 
+    return prefix_pmap
 
 def build_prefix_list(struct_def):
+
     keylist = _build_prefix_list(struct_def)
-
-    # Normalize ratios into percentages
-    mult = 0
-    for k, r in keylist:
-        mult += r
-    mult = 1/mult
-
-    for i in range(0, len(keylist)):
-        keylist[i][1] *= mult
     
+    mult = 1
+    loopon = True
+    while loopon:
+        if any((x[1]*mult) < 100 for x in keylist):
+            mult += 1
+        else:
+            break
+
+    for key in keylist:
+        key[1] = int(key[1] * mult)
+
+    # Finally, tuple-fy
+    for k in range(0, len(keylist)):
+        keylist[k] = (keylist[k][0],  keylist[k][1])
+
     return keylist
 
-    
+def _build_prefix_list(struct_def, prefix_key="", ratio_mult=1, delimiter='/'):
 
-def _build_prefix_list(struct_def, parent="", ratio_mult=1.0):
-    keylist = []
+    keys = []
+    for prefix_s in struct_def:
+        prefix_s["key_length"] = parse_size_range(prefix_s["key_length"])
+        for k in range(0, prefix_s["num_prefix"]):
+            key = prefix_key + gen_key(key_desc=prefix_s["key_length"]) + delimiter
+            keys.append([key, (prefix_s["ratio"]*ratio_mult)])
+            if "prefix_struct" in prefix_s:
+                keys += _build_prefix_list(prefix_s["prefix_struct"],
+                        prefix_key=key,
+                        ratio_mult=(prefix_s["ratio"]/prefix_s["num_prefix"]))
+    
+    return keys
+
+def build_prefix_keys(struct_def):
+    
     for prefix in struct_def:
+        keylist = []
+        # Generate keys
+        prefix["key_length"] = parse_size_range(prefix["key_length"])
         for kc in range(0, int(prefix["num_prefix"])):
-            keylen = [prefix["key_length"],] if type(prefix["key_length"]) == int else prefix["key_length"].split("-")
-            if len(keylen) == 1:
-                keylen.append(keylen[0])
-            key = parent + gen_key(key_desc=(int(keylen[0]), int(keylen[1]))) + "/"
-            keylist.append([key, (int(prefix["ratio"]) * ratio_mult)])
-            if "prefix_struct" in prefix:
-                keylist.pop(-1)
-                keylist += _build_prefix_list(prefix["prefix_struct"], parent=key, ratio_mult=float(prefix["ratio"])/int(prefix["num_prefix"]))
-    
-    return keylist
+            key = gen_key(key_desc=prefix["key_length"]) + "/"
+            keylist.append(key)
+        prefix["keys"] = copy.copy(keylist)
 
+        if "prefix_struct" in prefix:
+            build_prefix_keys(prefix["prefix_struct"])
+
+
+def calc_prepare_size(sizerange, runtime, iops):
+    if len(sizerange) > 1:
+        avgsz = (sizerange[0] + sizerange[1]) / 2
+    else:
+        avgsz = sizerange[0]
+
+    return avgsz * iops * runtime
+
+
+def parse_size_range(stringval):
+    if type(stringval) == list or type(stringval) == tuple:
+        return stringval # this has already been processed
+    if type(stringval) == int or type(stringval) == float:
+        return (int(stringval),  int(stringval),  int(stringval))
+    if not "-" in stringval:
+        sz = parse_size(stringval)
+        return (sz, sz, sz)
+    else:
+        vals = stringval.split("-")
+        low = int(parse_size(vals[0].strip()))
+        high = int(parse_size(vals[1].strip()))
+        avg = (low + high) / 2
+        return (low, high, avg)
+
+
+def parse_driver_list(stringval):
+    hostlist = []
+    for hostport in stringval.split(","):
+        if ":" in hostport:
+            host = hostport.split(":")[0]
+            port = int(hostport.split(":")[1])
+        else:
+            host = hostport
+            port = int(DEFAULT_DRIVER_PORT)
+        hostlist.append({"host": host, "port": port})
+    return hostlist
+
+
+def generate_tasks(args):
+
+    loads = list(args.loads.split(","))
+    #print(loads)
+    mix_prof_obj = {}
+    for l in loads:
+        if l not in LOAD_TYPES:
+            sys.stderr.write('"{0}" is not a load option\n'.format(l))
+            sys.exit(1)
+
+    if "mixed" in loads:
+        perc = 0
+        mix_prof_obj = json.loads(args.mixed_profile)
+        for l in MIXED_LOAD_TYPES:
+            if l in mix_prof_obj:
+                perc += int(mix_prof_obj[l])
+        if perc != 100:
+            sys.stderr.write("your mixed load profile values don't equal 100\n")
+            sys.exit(1)
+
+    # Always happens:
+    loads.insert(0, "init")
+
+    # Create a readmap and add prep stage if needed
+    if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
+        loads.insert(1, "readmap")
+        loads.insert(2, "prepare")
+
+    return {"loadorder": loads, "mixed_profile": mix_prof_obj}
+
+
+def basic_workload(args):
+    pass
+
+def classic_workload(args):
+    # if no cmd line args, get from profile, then env (in that order)
+    if not args.access_key and not args.secret_key:
+        args.access_key, args.secret_key = get_keys(args.profile)
+
+    # Must be AWS if no endpoint is given, to keep boto3 easy we should
+    # construct the AWS endpoint explicitly.
+    if args.endpoint == "":
+        args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
+
+    key_sz = args.key_length.split("-")
+    if len(key_sz) == 1:
+        key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
+    else:
+        key_sz = (int(key_sz[0]),
+                int(key_sz[1]),
+                int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
+
+    tasks = generate_tasks(args)
+
+
+    if args.prepare_objects != None:
+        ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
+    else:
+        ttl_prepare_sz = calc_prepare_size(
+            parse_size_range(args.object_size),
+            int(args.stage_time),
+            int(args.iop_limit),
+        )
+    root_config = {
+        "name": args.name,
+        "config_type": "basic",
+        "verbose": args.verbose,
+        "access_key": args.access_key,
+        "secret_key": args.secret_key,
+        "endpoint": args.endpoint,
+        "verify": args.verify,
+        "region": args.region,
+        "key_sz": key_sz,
+        "sz_range": parse_size_range(args.object_size),
+        "run_time": int(args.stage_time),
+        "bucket_count": int(args.bucket_count),
+        "bucket_prefix": args.bucket_prefix,
+        "driver_list": parse_driver_list(args.driver_list),
+        "sleeptime": float(args.sleep),
+        "driver_proc": int(args.processes_per_driver),
+        "ttl_sz_cache": parse_size(args.cachemem_size),
+        "iop_limit": int(args.iop_limit),
+        "ttl_prepare_sz": ttl_prepare_sz,
+        "tasks": tasks,
+        "mixed_profile": json.loads(args.mixed_profile)
+    }
+    return root_config
+
+def start_driver(args):
+
+    args.driver_list = os.uname().nodename
+    print("no driver address specified, starting one here")
+    driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
+    driver.start()
+    time.sleep(2)
+
+    return driver
 

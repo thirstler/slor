@@ -29,7 +29,6 @@ DEFAULT_READMAP_PREFIX = "read/"
 DEFAULT_CACHE_OVERRUN_OBJ = 8388608
 DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
 DEFAULT_SLEEP_TIME = 30
-DEFAULT_DELIMITER_CONFIG="0,0,0"
 
 # Root help message
 ROOT_HELP = """
@@ -74,6 +73,10 @@ class bcolors:
 ## Globally shared routines
 ##
 def parse_size(stringval: str) -> float:
+
+   #if float(stringval)
+
+
     """Parse human input for size values"""
     pwr = 10
     sipwr = 3

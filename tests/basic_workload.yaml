@@ -1,0 +1,75 @@
+name: 128 workers, 1M, GET/PUT/HEAD/DELETE, mixed, cleanup
+global:
+  access_key: admin
+  secret_key: password
+  endpoint: http://localhost
+  verify_tls: False
+  region: us-east-1
+  bucket_prefix: bench-bucket-
+  bucket_count: 8
+  time: 120
+  auto_prepare: 1000G
+  workers: 128
+workgroups:
+  - name: Read
+    time: 3600
+    auto_prepare: 1000G
+    overrun: 1.7T
+    workers: 128
+    work:
+    - stream_name: Read
+      action: read
+      object_size: 1M
+      key_length: 20
+      ratio: 1
+  - name: Write
+    time: 3600
+    workers: 128
+    work:      
+    - stream_name: Write
+      action: write
+      object_size: 1M
+      key_length: 20
+      ratio: 1
+  - name: Head
+    time: 3600
+    workers: 128
+    work:      
+    - stream_name: Head
+      action: head
+      ratio: 1
+  - name: Mixed read/write 70/30
+    time: 3600
+    workers: 128
+    overrun: 1.7T
+    work:
+    - stream_name: Read
+      action: read
+      ratio: 7
+    - stream_name: Write
+      action: read
+      object_size: 1M
+      key_length: 20
+      ratio: 3
+  - name: Mixed read/write 30/70
+    time: 3600
+    workers: 128
+    overrun: 1.7T
+    work:
+    - stream_name: Read
+      action: read
+      ratio: 3
+    - stream_name: Write
+      action: read
+      object_size: 1M
+      key_length: 20
+      ratio: 7
+  - name: Delete
+    time: 3600
+    workers: 128
+    clean: True
+    work:
+    - stream_name: Delete
+      action: delete
+      ratio: 1
+    
