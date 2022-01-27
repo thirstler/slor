@@ -62,6 +62,7 @@ def parse_workload(file):
             sys.exit(1)
 
     return workload_f
+    
 
 def build_prefix_placement_map(keylist):
     ratio_ttl = 0
@@ -77,6 +78,7 @@ def build_prefix_placement_map(keylist):
         ki += 1
 
     return prefix_pmap
+
 
 def build_prefix_list(struct_def):
 
@@ -98,6 +100,7 @@ def build_prefix_list(struct_def):
         keylist[k] = (keylist[k][0],  keylist[k][1])
 
     return keylist
+
 
 def _build_prefix_list(struct_def, prefix_key="", ratio_mult=1, delimiter='/'):
 
@@ -193,13 +196,15 @@ def generate_tasks(args):
     # Create a readmap and add prep stage if needed
     if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
         loads.insert(1, "readmap")
-        loads.insert(2, "prepare")
+        if not args.use_readmap:
+            loads.insert(2, "prepare")
 
     return {"loadorder": loads, "mixed_profile": mix_prof_obj}
 
 
 def basic_workload(args):
     pass
+
 
 def classic_workload(args):
     # if no cmd line args, get from profile, then env (in that order)
@@ -251,9 +256,14 @@ def classic_workload(args):
         "iop_limit": int(args.iop_limit),
         "ttl_prepare_sz": ttl_prepare_sz,
         "tasks": tasks,
-        "mixed_profile": json.loads(args.mixed_profile)
+        "mixed_profile": json.loads(args.mixed_profile),
+        "save_readmap": args.save_readmap,
+        "use_readmap": args.use_readmap,
+        "prepare_objects": args.prepare_objects,
+        "key_prefix": args.key_prefix
     }
     return root_config
+
 
 def start_driver(args):
 

@@ -18,5 +18,10 @@ if __name__ == "__main__":
 
         driver.run()
 
+    elif sys.argv[1] == "analysis":
+        import analysis as analysis
+
+        analysis.run()
+
     else:
         sys.stderr.write(ROOT_HELP)

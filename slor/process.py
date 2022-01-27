@@ -97,7 +97,7 @@ class SlorProcess:
 
         if final:
             message = self.benchmark_struct
-            # This is a little silly bt
+            # This is a little silly but
             for o in self.operations:
                 self.benchmark_struct["st"][o]["resp"] = \
                     self.sample_struct["st"][self.current_op]["resp"] 

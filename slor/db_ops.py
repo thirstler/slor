@@ -27,24 +27,18 @@ class SlorDB:
             self.db_cursor = self.db_conn.cursor()
 
     def mk_data_store(self, host):
-        for x in ".-":
-            host = host.replace(x, "_")
-        self.db_cursor.execute(
-            "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(
-                host
-            )
-        )
+        host = self.host_table_hash(host)
+        query =  "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(host)
+        self.db_cursor.execute(query)
         self.db_cursor.execute(
             "CREATE INDEX {0}_ts_i ON {0} (ts)".format(host)
         )
     
     def store_stat(self, message):
-        for x in ".-":
-            message["w_id"] = message["w_id"].replace(x, "_")
-        
+        host = self.host_table_hash(message["w_id"])
         # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
-            message["w_id"],
+            host,
             message["t_id"],
             message["time"],
             message["stage"],
@@ -52,3 +46,6 @@ class SlorDB:
         )
         self.db_cursor.execute(sql)
         self.db_conn.commit()
+
+    def host_table_hash(self, hostname):
+        return "h"+hex(hash(hostname))[2:]

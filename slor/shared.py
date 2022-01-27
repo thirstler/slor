@@ -32,7 +32,7 @@ DEFAULT_SLEEP_TIME = 30
 
 # Root help message
 ROOT_HELP = """
-Usage slor.py [controller|driver] [options]
+Usage slor.py [controller|driver|analysis] [options]
 
 Slor is a distributed load generation and benchmarking tool. Please see
 README.md for more information.
@@ -64,10 +64,13 @@ class bcolors:
     OKCYAN = '\033[96m'
     OKGREEN = '\033[92m'
     WARNING = '\033[93m'
+    MAGENTA = '\033[35m'
+    CYAN = '\033[36m'
     FAIL = '\033[91m'
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+    GRAY = '\033[38;5;243m'
 
 ###############################################################################
 ## Globally shared routines

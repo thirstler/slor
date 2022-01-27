@@ -6,6 +6,7 @@ from shared import *
 import os.path
 from stat_handler import statHandler
 from db_ops import SlorDB
+import json
 
 class SlorControl:
 
@@ -34,7 +35,9 @@ class SlorControl:
         
         print("")
         self.top_box()
-        sys.stdout.write("\u2502 STAGES ({})\n\u2502\n".format(len(self.config["tasks"]["loadorder"])))
+        sys.stdout.write("\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"])))
+        sys.stdout.write("processes reporting: {0}red{3} = none, {1}green{3} = some, {2}blue{3} = all".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
+        sys.stdout.write("\n\u2502\n")
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
 
             if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
@@ -42,6 +45,7 @@ class SlorControl:
                 random.shuffle(self.readmap)
 
             if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
+                sys.stdout.write("\u2502 {}Note:{} blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n".format(bcolors.BOLD, bcolors.ENDC))
                 continue
             elif stage[:5] == "sleep":
                 try:
@@ -53,9 +57,6 @@ class SlorControl:
                 time.sleep(st)
                 continue
             elif stage == "readmap":
-                sys.stdout.write("\r\u2502"+" "*26)
-                sys.stdout.write("{:<15}".format("throughput"))
-                sys.stdout.write("\n")
                 self.mk_read_map()
                 continue
 
@@ -89,36 +90,43 @@ class SlorControl:
         cft_text += "User key:           {0}\n".format(self.config["access_key"])
         cft_text += "Target endpoint:    {0}\n".format(self.config["endpoint"])
         cft_text += "Stage run time:     {0}s\n".format(self.config["run_time"])
-        cft_text += "Object size(s):     {0}\n".format(
-            human_readable(self.config["sz_range"][0], precision=0)
-            if self.config["sz_range"][0] == self.config["sz_range"][1]
-            else "low: {0}, high: {1} (avg: {2})".format(
-                human_readable(self.config["sz_range"][0], precision=0),
-                human_readable(self.config["sz_range"][1], precision=0),
-                human_readable(self.config["sz_range"][2], precision=0)
-            ))
-        cft_text += "Key length(s):      {0}\n".format(
-            self.config["key_sz"][0]
-            if self.config["key_sz"][0] == self.config["key_sz"][1]
-            else "low: {0}, high:  {1} (avg: {2})".format(
-                self.config["key_sz"][0],
-                self.config["key_sz"][1],
-                self.config["key_sz"][2]
-            ))
-        cft_text += "Prepared objects:   {0} (readmap length)\n".format(
-            human_readable(self.get_readmap_len(), print_units="ops"))
-        cft_text += "Upper IO limit:     {0}\n".format(self.config["iop_limit"])
-        cft_text += "Bucket prefix:      {0}\n".format(self.config["bucket_prefix"])
-        cft_text += "Num buckets:        {0}\n".format(self.config["bucket_count"])
+        if self.config["save_readmap"]:
+            cft_text += "Saving readmap:     {0}\n".format(self.config["save_readmap"])
+        if self.config["use_readmap"]:
+            cft_text += "Using readmap:      {0}\n".format(self.config["use_readmap"])
+        else:
+
+            cft_text += "Object size(s):     {0}\n".format(
+                human_readable(self.config["sz_range"][0], precision=0)
+                if self.config["sz_range"][0] == self.config["sz_range"][1]
+                else "low: {0}, high: {1} (avg: {2})".format(
+                    human_readable(self.config["sz_range"][0], precision=0),
+                    human_readable(self.config["sz_range"][1], precision=0),
+                    human_readable(self.config["sz_range"][2], precision=0)
+                ))
+            cft_text += "Key length(s):      {0}\n".format(
+                self.config["key_sz"][0]
+                if self.config["key_sz"][0] == self.config["key_sz"][1]
+                else "low: {0}, high:  {1} (avg: {2})".format(
+                    self.config["key_sz"][0],
+                    self.config["key_sz"][1],
+                    self.config["key_sz"][2]
+                ))
+            cft_text += "Prepared objects:   {0} (readmap length)\n".format(
+                human_readable(self.get_readmap_len(), print_units="ops"))
+            cft_text += "Upper IO limit:     {0}\n".format(self.config["iop_limit"])
+            cft_text += "Bucket prefix:      {0}\n".format(self.config["bucket_prefix"])
+            cft_text += "Num buckets:        {0}\n".format(self.config["bucket_count"])
+            cft_text += "Prepared data size: {0}\n".format(
+                human_readable(self.config["ttl_prepare_sz"]),
+                ((int(self.config["ttl_prepare_sz"])/DEFAULT_CACHE_OVERRUN_OBJ)+1),
+                human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
+            )
+
         cft_text += "Driver processes:   {0}\n".format(len(self.config["driver_list"]))
         cft_text += "Procs per driver:   {0} ({1} worker processes total)\n".format(
                 self.config["driver_proc"],
                 (int(self.config["driver_proc"]) * len(self.config["driver_list"])),
-            )
-        cft_text += "Prepared data size: {0}\n".format(
-                human_readable(self.config["ttl_prepare_sz"]),
-                ((int(self.config["ttl_prepare_sz"])/DEFAULT_CACHE_OVERRUN_OBJ)+1),
-                human_readable(DEFAULT_CACHE_OVERRUN_OBJ)
             )
         cft_text += "Cache overrun size: {0} ({1} x {2} objects)\n".format(
                 human_readable(self.config["ttl_sz_cache"]),
@@ -193,7 +201,6 @@ class SlorControl:
         return ret_val
 
     def check_driver_info(self, data):
-
         self.config["driver_node_names"].append(data["uname"].node)
 
         sys.stdout.write(" hostname: {0};".format(data["uname"].node))
@@ -232,6 +239,15 @@ class SlorControl:
                 )
         sys.stdout.write("\n")
 
+    def poll_for_response(self, all=True):
+        num_drivers = len(self.config["driver_list"])
+        return_msg = []
+
+        for i in range(0, len(self.config["driver_list"])):
+            while self.conn[i].poll():
+                return_msg.append(self.conn[i].recv())
+        return return_msg
+
     def exec_stage(self, stage):
         """
         Contains the main loop communicating with driver processes
@@ -254,10 +270,11 @@ class SlorControl:
                 workloads[bc % n_wrkrs]["bucket_list"].append(
                     "{0}{1}".format(self.config["bucket_prefix"], bc)
                 )
-        
+
+        # Draw column headers for data
         if stage == "mixed":
             sys.stdout.write("\r")
-            sys.stdout.write("\u2502"+" "*26)
+            sys.stdout.write("\u2502" + " "*26)
             items = []
             for o in self.config["mixed_profile"]:
                 items.append("{}".format(o))
@@ -268,17 +285,19 @@ class SlorControl:
         elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
              all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
             sys.stdout.write("\r")
-            sys.stdout.write("\u2502"+" "*26)
+            sys.stdout.write("\u2502" + " "*26)
             items = []
-            for o in ("throughput", "bandwidth", "resp ms", "failures", "elapsed"):
+            for o in ("throughput ", "bandwidth ", "resp ms ", "failures ", "elapsed     "):
                 items.append("{}".format(o))
             for i in items:
-                sys.stdout.write("{:<15}".format(i))
+                sys.stdout.write("{:>15}".format(i))
             sys.stdout.write("\n")
 
         # Send workloads to driver
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": wl})
+        
+        resp = self.poll_for_response()
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
         
@@ -335,7 +354,6 @@ class SlorControl:
         """
         Filters messages from drivers and take the appropriate action
         """
-        #try:
         if type(message) == str:
             print(message)
         elif "message" in message:
@@ -344,9 +362,7 @@ class SlorControl:
             self.stats_h.update_standing_sample(message)
             self.slordb.store_stat(message)
         else:
-            pass  # ignore
-        #except Exception as e:
-        #    print("fuuuuck: {} - {}".format(str(e), message))
+            pass 
 
     def check_status(self, mesg):
         if "status" in mesg and mesg["status"] == "done":
@@ -356,27 +372,54 @@ class SlorControl:
     
     
     def mk_read_map(self, key_desc={"min": 40, "max": 40}):
-    
-        objcount = self.get_readmap_len()
-        stat_h = statHandler(self.config, "readmap")
-        fin = False
-        for z in range(0, objcount):
 
-            self.readmap.append(
-                (
-                    "{0}{1}".format(
-                        self.config["bucket_prefix"],
-                        random.randrange(0, self.config["bucket_count"]),
-                    ),
-                    gen_key(
-                        key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
-                    ),
+        # config items that need to be saved/restored with the readmap
+        cfg_keys = ("sz_range", "bucket_prefix", "bucket_count", "key_sz", "ttl_prepare_sz", "prepare_objects")
+        cfg_out = ""
+        if self.config["use_readmap"]:
+            with open(self.config["use_readmap"], "r") as fh:
+                rmpcfg = json.load(fh)
+                fh.close()
+                self.readmap = rmpcfg["readmap"]
+                cfg_out += "\u2502     {}: {}\n".format("length", human_readable(len(self.readmap), print_units="ops"))
+                for cfg in cfg_keys:
+                    try:
+                        self.config[cfg] = rmpcfg[cfg]
+                        cfg_out += "\u2502     {}: {}\n".format(cfg, self.config[cfg])
+                    except:
+                        sys.stderr.write("failed to find config item {} in {}\n".format(cfg, self.config["use_readmap"]))
+            sys.stdout.write("\r\u2502" + " readmap restored from file:\n")
+            sys.stdout.write(cfg_out)
+        else:
+            sys.stdout.write("C" +  "{}{:<15}".format(" "*26, "throughput"))
+            objcount = self.get_readmap_len()
+            stat_h = statHandler(self.config, "readmap")
+            fin = False
+            for z in range(0, objcount):
+
+                self.readmap.append(
+                    (
+                        "{0}{1}".format(
+                            self.config["bucket_prefix"],
+                            random.randrange(0, self.config["bucket_count"]),
+                        ),
+                        self.config["key_prefix"] + gen_key(
+                            key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
+                        ),
+                    )
                 )
-            )
-            if (z+1) == objcount:
-                fin = True
-            stat_h.readmap_progress(z, objcount, final=fin)
-
+                if (z+1) == objcount:
+                    fin = True
+                stat_h.readmap_progress(z, objcount, final=fin)
+        
+        if self.config["save_readmap"]:
+            save_contents = {"readmap": self.readmap}
+            for cfg in cfg_keys:
+                save_contents[cfg] = self.config[cfg]
+                
+            with open(self.config["save_readmap"], "w") as fh:
+                fh.write(json.dumps(save_contents))
+                fh.close()
 
     def mk_stage(self, target, stage, wid):
 
@@ -391,7 +434,7 @@ class SlorControl:
             "endpoint": self.config["endpoint"],
             "verify": self.config["verify"],
             "region": self.config["region"],
-            "run_time": self.config["run_time"],
+            "run_time": int(self.config["run_time"]) + (DRIVER_REPORT_TIMER*2),
             "bucket_count": int(self.config["bucket_count"]),
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
@@ -404,7 +447,8 @@ class SlorControl:
                 self.config["ttl_sz_cache"] / len(self.config["driver_list"])
             ),
             "mixed_profile": self.config["mixed_profile"],
-            "startup_delay": (DRIVER_REPORT_TIMER/len(self.config["driver_list"]))
+            "startup_delay": (DRIVER_REPORT_TIMER/len(self.config["driver_list"])),
+            "key_prefix": self.config["key_prefix"]
         }
 
         # Work out the readmap slices

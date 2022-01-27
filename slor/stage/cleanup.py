@@ -56,7 +56,7 @@ class CleanUp(SlorProcess):
                 self.stop_io()
 
             except Exception as e:
-                sys.stderr.write("fail: {)\n".format(str(e)))
+                sys.stderr.write("fail: {}\n".format(str(e)))
                 sys.stderr.flush()
                 self.stop_io(failed=True)
 

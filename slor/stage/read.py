@@ -33,11 +33,12 @@ class Read(SlorProcess):
                 try:
                     self.start_io("read")
                     resp = self.s3ops.get_object(pkey[0], pkey[1])
-                    self.stop_io(sz=resp["ContentLength"])
+                    if resp["ResponseMetadata"]["HTTPStatusCode"] != 200:
+                        self.stop_io(failed=True)
+                    else:
+                        self.stop_io(sz=resp["ContentLength"])
 
                 except Exception as e:
-                    sys.stderr.write("fail[{0}] {1}/{2}: {3}\n".format(self.id, pkey[0], pkey[1], str(e)))
-                    sys.stderr.flush()
                     self.stop_io(failed=True)
                 
                 if self.unit_start >= self.benchmark_stop:

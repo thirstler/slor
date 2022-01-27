@@ -21,7 +21,7 @@ class Delete(SlorProcess):
 
             try:
                 self.start_io("delete")
-                resp = self.s3ops.delete_object(pkey[0], pkey[1])
+                self.s3ops.delete_object(pkey[0], pkey[1])
                 self.stop_io()
 
             except Exception as e:

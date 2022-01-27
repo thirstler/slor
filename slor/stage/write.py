@@ -20,7 +20,7 @@ class Write(SlorProcess):
             bucket = "{}{}".format(
                 self.config["bucket_prefix"],
                 str(int(random.random() * self.config["bucket_count"])))
-            key  = gen_key(self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX)
+            key  = self.config["key_prefix"] + gen_key(self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX)
             blen = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
             body = self.get_bytes_from_pool(blen)
             try:

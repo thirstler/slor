@@ -25,7 +25,7 @@ workgroups:
   - name: Write
     time: 3600
     workers: 128
-    work:      
+    work:
     - stream_name: Write
       action: write
       object_size: 1M
@@ -34,7 +34,7 @@ workgroups:
   - name: Head
     time: 3600
     workers: 128
-    work:      
+    work:
     - stream_name: Head
       action: head
       ratio: 1

@@ -1,4 +1,3 @@
-import sys, os
 import argparse
 from multiprocessing.connection import Client
 from multiprocessing import Process
@@ -6,7 +5,6 @@ from slor_c import *
 from shared import *
 from driver import _slor_driver
 from workload import *
-import json
 
 def run():
     parser = argparse.ArgumentParser(
@@ -51,7 +49,7 @@ def run():
     parser.add_argument(
         "--prepare-objects",
         default=None,
-        help="directly specify the number of objects to prepare (overrides calculation with --iop-limit) ",
+        help="directly specify the amount of objects to prepare (count or size; e.g. 1.2TB, 50000K) - overrides calculation with --iop-limit",
     )
     parser.add_argument(
         "--key-length",
@@ -59,6 +57,11 @@ def run():
         help="key length(s) to use, can be single number or range (e.g. 10,50) - defaults to {0}".format(
             DEFAULT_KEY_LENGTH
         ),
+    )
+    parser.add_argument(
+        "--key-prefix",
+        default="",
+        help="prefix for all written keys (prepared or for write tests)",
     )
     parser.add_argument(
         "--object-size",
@@ -112,6 +115,16 @@ def run():
         help="number of buckets to distribute over, defaults to '{0}'".format(
             DEFAULT_BUCKET_COUNT
         ),
+    )
+    parser.add_argument(
+        "--save-readmap",
+        default=False,
+        help="save readmap (location of prepared objects) for use in later runs"
+    )
+    parser.add_argument(
+        "--use-readmap",
+        default=False,
+        help="use readmap - this will obviate a prepare step and assume objects in the readmap exist"
     )
     args = parser.parse_args()
 

@@ -45,7 +45,7 @@ class Mixed(SlorProcess):
         body_data = self.get_bytes_from_pool(size)
         self.writemap.append(
             ("{}{}".format(self.config["bucket_prefix"], random.randint(0, self.config["bucket_count"]-1)),
-            gen_key(key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX))
+             self.config["key_prefix"] + gen_key(key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX))
         )
         try:
             self.start_io("write")
@@ -71,10 +71,15 @@ class Mixed(SlorProcess):
     def _delete(self):
         """ Only delete from the written pool """
         if len(self.writemap) == 0:
-            sys.stderr.write("keylist empty, nothing to delete")
+            return
 
-        indx = random.randint(0, len(self.writemap)-1)
-        key = self.writemap.pop(indx)
+        indx = random.randint(0, len(self.writemap))
+        try:
+            
+            key = self.writemap.pop(indx)
+        except Exception as e:
+            sys.stderr.write("{}:{} - {}".format(len(self.writemap), indx,  e))
+            return
 
         try:
             self.start_io("delete")
@@ -88,7 +93,7 @@ class Mixed(SlorProcess):
     def _reread(self):
         """ Only reread from the written pool """
         if len(self.writemap) == 0:
-            raise KeyError("nothing to read")
+            return
 
         indx = random.randint(0, len(self.writemap)-1)
         key = self.writemap[indx]

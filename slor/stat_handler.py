@@ -14,17 +14,21 @@ class statHandler:
     count_target = 0
     global_counter = 0
     progress_start_time = 0
+    stage_start_time = 0
     last_rm_count = 0
     last_rm_time = 0
     stat_rotation = float(0)
     stat_types = ("throughput", "bandwidth", "response")
     last_stage = None
+    reported_in = ()
+    ttl_procs = 0
 
     def __init__(self, config, stage):
         self.config = config
         self.operations = ()
         self.stage = stage
-        self.progress_start_time = time.time()
+        self.stage_start_time = time.time()
+        self.progress_start_time = self.stage_start_time
 
         if self.stage == "mixed":
             for s in config["mixed_profile"]:
@@ -35,6 +39,10 @@ class statHandler:
             else:
                 self.operations = (self.stage,)
 
+        # How many processes in this job are we expecting?
+        self.ttl_procs = len(self.config["driver_list"]) * self.config["driver_proc"]
+
+        # Create standing sample
         for w in self.config["driver_list"]:
             w = w["host"]
             self.standing_sample[w] = {}
@@ -48,6 +56,10 @@ class statHandler:
         self.count_target = count
 
     def update_standing_sample(self, data):
+        sample_addr = "{}:{}".format(data["w_id"], data["t_id"])
+        if sample_addr not in self.reported_in:
+            self.reported_in += (sample_addr,)
+
         self.standing_sample[data["w_id"]][data["t_id"]] = data["value"]
 
         # Add a wall-time figure
@@ -144,10 +156,26 @@ class statHandler:
         self.mk_global_sample()
         sys.stdout.write("\r")
 
-        sys.stdout.write("\u2502 {:<9}".format(self.stage + ":"))
+        # change color to indicated if all processes have checked on or not
+        if final:
+            color = ""
+        elif len(self.reported_in) == 0:
+            color = bcolors.FAIL
+        elif self.ttl_procs > len(self.reported_in):
+            color = bcolors.OKGREEN
+        elif self.ttl_procs == len(self.reported_in):
+            color = bcolors.OKBLUE
+        else: # should never happen
+            color = bcolors.FAIL
+            
+        sys.stdout.write("\u2502 {}{:<9}{}".format(color, self.stage + ":", bcolors.ENDC))
         if len(self.operations) > 1:
             if self.stage in PROGRESS_BY_TIME:
-                perc = (time.time()-self.progress_start_time)/self.config["run_time"]
+                if len(self.reported_in) == 0:
+                    perc = 0
+                    self.progress_start_time = time.time()
+                else:
+                    perc = (time.time()-self.progress_start_time)/self.config["run_time"]
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
@@ -164,7 +192,11 @@ class statHandler:
             # Single operation
 
             if self.stage in PROGRESS_BY_TIME:
-                perc = (time.time()-self.progress_start_time)/self.config["run_time"]
+                if len(self.reported_in) == 0:
+                    perc = 0
+                    self.progress_start_time = time.time()
+                else:
+                    perc = (time.time()-self.progress_start_time)/self.config["run_time"]
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
@@ -191,7 +223,7 @@ class statHandler:
         
     def readmap_progress(self, x, outof, final=False):
 
-        if (x % 100) == 0 or final == True:
+        if (x % 1000) == 0 or final == True:
             nownow = time.time()
         else: return
 
@@ -214,27 +246,26 @@ class statHandler:
         self.last_rm_time = nownow
         self.last_rm_count = x
 
-    def dunno(self, width=10, final=False):
+    def dunno(self, width=10, final=False, color=""):
         blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
         if final:
-            sys.stdout.write("\u2592" * width)
-            sys.stdout.write(" 100%")
+            sys.stdout.write("{}{}{} 100%".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC))
         else:
             for b in range(0, width):
                 sys.stdout.write(blocks[random.randint(0,13)])
             sys.stdout.write("   ?%")
             
 
-    def progress(self, perc, width=10, final=False):
+    def progress(self, perc, width=10, final=False, color=""):
         if final: perc = 1
         blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588") # eighth blocks
         fillchar = u"\u2588"
         char_w = perc*width
         leading_char = blocks[math.floor((char_w*8) % 8)]
         if final:
-            fillchar = u"\u2592"
+            color = bcolors.GRAY
             leading_char = " "
-        sys.stdout.write(u"{}{}{}{:>3}%".format(fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100)))
+        sys.stdout.write(u"{}{}{}{}{:>3}%{}".format(color, fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100), bcolors.ENDC))
 
 
     def failure_count(self, stat_sample=None, operation=None):
@@ -248,7 +279,7 @@ class statHandler:
         return("[{:>8} ttl]".format(rate))
 
     def elapsed_time(self):
-        elapsed = time.time() - self.progress_start_time
+        elapsed = time.time() - self.stage_start_time
         hours, remainder = divmod(elapsed, 3600)
         minutes, seconds = divmod(remainder, 60)
         return("[{:>8}]".format('{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))))
