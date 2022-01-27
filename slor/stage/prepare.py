@@ -4,20 +4,34 @@ import random
 
 class Prepare(SlorProcess):
 
+    r1 = None
+    r2 = None
+
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
         self.config = config
         self.operations = ("write",)
 
+    def ready(self):
+
+        sz_range = self.config["sz_range"]
+        self.r1 = int(sz_range[0])
+        self.r2 = int(sz_range[1])
+        self.mk_byte_pool(int(sz_range[1]) * 2)
+
+        ##
+        # Boiler-place
+        self.sock.send({"ready": True})
+        mesg = self.sock.recv()
+        if mesg["exec"]:
+            self.exec()
+        else:
+            return False
+        return True
 
     def exec(self):
 
-        sz_range = self.config["sz_range"]
-        r1 = int(sz_range[0])
-        r2 = int(sz_range[1])
-
-        self.mk_byte_pool(int(sz_range[1]) * 2)
         self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
         
@@ -25,7 +39,7 @@ class Prepare(SlorProcess):
             if self.check_for_messages() == "stop":
                 break
             
-            c_len = random.randint(r1, r2)
+            c_len = random.randint(self.r1, self.r2)
             body_data = self.get_bytes_from_pool(c_len)
 
             for i in range(0, PREPARE_RETRIES):

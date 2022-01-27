@@ -9,28 +9,28 @@ import stage.write
 import stage.head
 import stage.delete
 import stage.mixed
-import stage.cleanup
+import stage.workload
 
 def _driver_t(socket, config, id):
     """
     Wrapper function to launch workload processes from a Process() call.
     """
     if config["type"] == "prepare":
-        wc = stage.prepare.Prepare(socket, config, id).exec()
+        wc = stage.prepare.Prepare(socket, config, id).ready()
     elif config["type"] == "blowout":
-        wc = stage.overrun.Overrun(socket, config, id).exec()
+        wc = stage.overrun.Overrun(socket, config, id).ready()
     elif config["type"] == "read":
-        wc = stage.read.Read(socket, config, id).exec()
+        wc = stage.read.Read(socket, config, id).ready()
     elif config["type"] == "write":
-        wc = stage.write.Write(socket, config, id).exec()
+        wc = stage.write.Write(socket, config, id).ready()
     elif config["type"] == "head":
-        wc = stage.head.Head(socket, config, id).exec()
+        wc = stage.head.Head(socket, config, id).ready()
     elif config["type"] == "delete":
-        wc = stage.delete.Delete(socket, config, id).exec()
+        wc = stage.delete.Delete(socket, config, id).ready()
     elif config["type"] == "mixed":
-        wc = stage.mixed.Mixed(socket, config, id).exec()
+        wc = stage.mixed.Mixed(socket, config, id).ready()
     elif config["type"] == "cleanup":
-        wc = stage.cleanup.CleanUp(socket, config, id).exec()
+        wc = stage.workload.CleanUp(socket, config, id).ready()
 
     try:
         del wc
@@ -163,9 +163,31 @@ class SlorDriver:
             #print(message)
             self.reset = True  # lost contact with controller need to close-up
 
+
+    def check_procs_ready(self):
+        ##
+        # Check for "ready" status from all launched processes
+        global_ready = True
+        for t in self.pipes:
+            status = t[0].recv()
+            if status["ready"] != True:
+                global_ready = False
+
+        if not global_ready:
+            return False
+        else:
+            self.sock.send({"ready": True})
+
+        # Wait for the go signal
+        mesg = self.sock.recv()
+        if mesg["exec"] == True:
+            for t in self.pipes:
+                status = t[0].send({"exec": True})
+
+        return True
+
+
     def thread_control(self, config):
-        time.sleep(config["w_id"] * config["startup_delay"])
-        delay_time = config["startup_delay"]/config["threads"]
 
         if config["type"] == "cleanup":
             drivers = len(config["driver_list"])
@@ -204,9 +226,12 @@ class SlorDriver:
                 self.procs.append(
                     Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
                 )
-                time.sleep(delay_time)
                 self.procs[-1].start()
 
+        
+        if not self.check_procs_ready():
+            return False
+        
         ##
         # Monitoring and return the responses
         while True:
@@ -265,6 +290,14 @@ class SlorDriver:
                 "type" in cmd_buffer["config"]
                 and cmd_buffer["config"]["type"] == "init"
             ):
+
+                ##
+                # Init is a proper stage and needs a ready messages relayed
+                self.sock.send({"ready": True})
+                mesg = self.sock.recv()
+                if not mesg["exec"]:
+                    return False
+
                 self.init_buckets(cmd_buffer["config"])
                 self.log_to_controller({"status": "done"})
                 return

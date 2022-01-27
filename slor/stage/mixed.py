@@ -6,6 +6,7 @@ class Mixed(SlorProcess):
     writemap = [] # tracker for all things written and deleted
     readmap_index = 0
     all_is_fair = False
+    dice = None
 
     def __init__(self, socket, config, id):
         self.sock = socket
@@ -14,6 +15,21 @@ class Mixed(SlorProcess):
         for x in self.config["mixed_profile"]:
             self.operations += (x,)
             
+    def ready(self):
+
+        self.dice = self.mk_dice()
+        self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
+
+        ##
+        # Boiler-place
+        self.sock.send({"ready": True})
+        mesg = self.sock.recv()
+        if mesg["exec"]:
+            self.exec()
+        else:
+            return False
+        return True
+
 
     def _read(self):
         if self.all_is_fair:
@@ -165,13 +181,11 @@ class Mixed(SlorProcess):
 
     def exec(self):
 
-        dice = self.mk_dice()
-        self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
         self.start_benchmark()
         self.start_sample()
         while True:
 
-            self.do(dice[random.randint(0,99)])
+            self.do(self.dice[random.randint(0,99)])
             
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()

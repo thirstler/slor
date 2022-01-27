@@ -295,7 +295,23 @@ class SlorControl:
 
         # Send workloads to driver
         for i, wl in enumerate(workloads):
+            print(wl)
             self.conn[i].send({"command": "workload", "config": wl})
+
+        ##
+        # Hand-shake
+        global_ready = True
+        for i, wl in enumerate(workloads):
+            print(i)
+            ready = self.conn[i].recv()
+            if ready["ready"] != True:
+                global_ready = False
+
+        if global_ready:
+            for i, wl in enumerate(workloads):
+                self.conn[i].send({"exec": True})
+        else:
+            return False
         
         resp = self.poll_for_response()
 

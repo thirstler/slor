@@ -11,6 +11,18 @@ class Head(SlorProcess):
         self.config = config
         self.operations = ("head",)
 
+    def ready(self):
+
+        ##
+        # Boiler-place
+        self.sock.send({"ready": True})
+        mesg = self.sock.recv()
+        if mesg["exec"]:
+            self.exec()
+        else:
+            return False
+        return True
+
     def exec(self):
 
         self.start_benchmark()

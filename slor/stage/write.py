@@ -10,9 +10,25 @@ class Write(SlorProcess):
         self.config = config
         self.operations = ("write",)
 
-    def exec(self):
+    def ready(self):
 
+        ##
+        # Things to do before ready status
         self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
+
+        ##
+        # Boiler-place
+        self.sock.send({"ready": True})
+        print("ready sent")
+        mesg = self.sock.recv()
+        print("waiting")
+        if mesg["exec"]:
+            self.exec()
+        else:
+            return False
+        return True
+    
+    def exec(self):
 
         self.start_benchmark()
         self.start_sample()
