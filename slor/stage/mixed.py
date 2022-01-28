@@ -7,6 +7,8 @@ class Mixed(SlorProcess):
     readmap_index = 0
     all_is_fair = False
     dice = None
+    wid_str = None
+    w_count = 0
 
     def __init__(self, socket, config, id):
         self.sock = socket
@@ -14,21 +16,16 @@ class Mixed(SlorProcess):
         self.config = config
         for x in self.config["mixed_profile"]:
             self.operations += (x,)
+        self.wid_str = str(self.config["w_id"])
             
     def ready(self):
 
         self.dice = self.mk_dice()
         self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
 
-        ##
-        # Boiler-place
-        self.sock.send({"ready": True})
-        mesg = self.sock.recv()
-        if mesg["exec"]:
+        if self.hand_shake():
+            self.delay()
             self.exec()
-        else:
-            return False
-        return True
 
 
     def _read(self):
@@ -41,7 +38,9 @@ class Mixed(SlorProcess):
         try:
             self.start_io("read")
             resp = self.s3ops.get_object(key[0], key[1])
+            data = resp["Body"].read()
             self.stop_io(sz=resp["ContentLength"])
+            del data
         except Exception as e:
             sys.stderr.write(str(e))
             sys.stderr.flush()
@@ -61,11 +60,12 @@ class Mixed(SlorProcess):
         body_data = self.get_bytes_from_pool(size)
         self.writemap.append(
             ("{}{}".format(self.config["bucket_prefix"], random.randint(0, self.config["bucket_count"]-1)),
-             self.config["key_prefix"] + gen_key(key_desc=self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX))
+             self.config["key_prefix"] + gen_key(key_desc=self.config["key_sz"], inc=self.w_count, prefix=DEFAULT_WRITE_PREFIX+self.wid_str))
         )
         try:
             self.start_io("write")
             self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
+            self.w_count += 1
             self.stop_io(sz=size)
         except Exception as e:
             sys.stderr.write(str(e))

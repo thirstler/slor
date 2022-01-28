@@ -20,15 +20,9 @@ class Prepare(SlorProcess):
         self.r2 = int(sz_range[1])
         self.mk_byte_pool(int(sz_range[1]) * 2)
 
-        ##
-        # Boiler-place
-        self.sock.send({"ready": True})
-        mesg = self.sock.recv()
-        if mesg["exec"]:
+        if self.hand_shake():
+            self.delay()
             self.exec()
-        else:
-            return False
-        return True
 
     def exec(self):
 

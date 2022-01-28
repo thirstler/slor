@@ -12,38 +12,28 @@ class Write(SlorProcess):
 
     def ready(self):
 
-        ##
-        # Things to do before ready status
         self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
-
-        ##
-        # Boiler-place
-        self.sock.send({"ready": True})
-        print("ready sent")
-        mesg = self.sock.recv()
-        print("waiting")
-        if mesg["exec"]:
+        if self.hand_shake():
+            self.delay()
             self.exec()
-        else:
-            return False
-        return True
     
     def exec(self):
-
+        w_str = str(self.config["w_id"])
         self.start_benchmark()
         self.start_sample()
+        ocount = 0
         while True:
             bucket = "{}{}".format(
                 self.config["bucket_prefix"],
                 str(int(random.random() * self.config["bucket_count"])))
-            key  = self.config["key_prefix"] + gen_key(self.config["key_sz"], prefix=DEFAULT_WRITE_PREFIX)
+            key  = gen_key(self.config["key_sz"], inc=ocount, prefix=DEFAULT_WRITE_PREFIX+self.config["key_prefix"]+w_str)
             blen = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
             body = self.get_bytes_from_pool(blen)
             try:
                 self.start_io("write")
                 self.s3ops.put_object(bucket, key, body)
                 self.stop_io(sz=blen)
-
+                ocount += 1
             except Exception as e:
                 sys.stderr.write("fail[{0}] {0}/{1}: {2}\n".format(self.id, bucket, key, str(e)))
                 sys.stderr.flush()
