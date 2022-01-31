@@ -240,7 +240,6 @@ class SlorControl:
         sys.stdout.write("\n")
 
     def poll_for_response(self, all=True):
-        num_drivers = len(self.config["driver_list"])
         return_msg = []
 
         for i in range(0, len(self.config["driver_list"])):
@@ -280,7 +279,7 @@ class SlorControl:
                 items.append("{}".format(o))
             items.append("elapsed")
             for i in items:
-                sys.stdout.write("{:<15}".format(i))
+                sys.stdout.write("{:>15} ".format(i))
             sys.stdout.write("\n")
         elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
              all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
@@ -296,7 +295,9 @@ class SlorControl:
         # Send workloads to driver
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": wl})
+
         
+        self.block_until_ready()
         resp = self.poll_for_response()
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
@@ -333,6 +334,22 @@ class SlorControl:
 
         self.last_stage = stage
 
+    def block_until_ready(self):
+        sys.stdout.write("\r\u2502   [waiting on worker processes...]")
+        sys.stdout.flush()
+        global_ready = True
+        
+        for i in range(0, len(self.config["driver_list"])):
+            ready = self.conn[i].recv()
+            if ready["ready"] != True:
+                global_ready = False
+        
+        if global_ready:
+            for i in range(0, len(self.config["driver_list"])):
+                self.conn[i].send({"exec": True})
+        
+        sys.stdout.write("\r \u2502                                  ")
+        sys.stdout.flush()
 
     def get_readmap_len(self):
         try:
@@ -404,7 +421,9 @@ class SlorControl:
                             random.randrange(0, self.config["bucket_count"]),
                         ),
                         self.config["key_prefix"] + gen_key(
-                            key_desc=self.config["key_sz"], prefix=DEFAULT_READMAP_PREFIX
+                            key_desc=self.config["key_sz"],
+                            inc=z,
+                            prefix=DEFAULT_READMAP_PREFIX
                         ),
                     )
                 )

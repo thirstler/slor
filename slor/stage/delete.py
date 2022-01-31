@@ -11,6 +11,12 @@ class Delete(SlorProcess):
         self.config = config
         self.operations = ("delete",)
 
+    def ready(self):
+
+        if self.hand_shake():
+            self.delay()
+            self.exec()
+
     def exec(self):
 
         self.start_benchmark()

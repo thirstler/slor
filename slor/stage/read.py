@@ -9,6 +9,12 @@ class Read(SlorProcess):
         self.config = config
         self.operations = ("read",)
 
+    def ready(self):
+
+        if self.hand_shake():
+            self.delay()
+            self.exec()
+
     def exec(self):
 
         self.start_benchmark()
@@ -23,7 +29,7 @@ class Read(SlorProcess):
 
             if rerun > 0:
                 sys.stderr.write(
-                    "WARNING: rereading objects (x{0}), consider increasing iop-limit\n".format(
+                    "WARNING: rereading objects (x{0}), consider preparing more objects\n".format(
                         rerun
                     )
                 )
@@ -33,12 +39,12 @@ class Read(SlorProcess):
                 try:
                     self.start_io("read")
                     resp = self.s3ops.get_object(pkey[0], pkey[1])
-                    if resp["ResponseMetadata"]["HTTPStatusCode"] != 200:
-                        self.stop_io(failed=True)
-                    else:
-                        self.stop_io(sz=resp["ContentLength"])
+                    data = resp["Body"].read()
+                    self.stop_io(sz=int(resp["ContentLength"]))
+                    del data
 
                 except Exception as e:
+                    print(str(e))
                     self.stop_io(failed=True)
                 
                 if self.unit_start >= self.benchmark_stop:

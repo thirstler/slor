@@ -11,10 +11,18 @@ class Overrun(SlorProcess):
         self.config = config
         self.operations = ("write",)
 
+    def ready(self):
+
+        self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ*2)
+
+        if self.hand_shake():
+            self.delay()
+            self.exec()
+
     def exec(self):
 
         count = int(self.config["cache_overrun_sz"]/self.config["threads"]/DEFAULT_CACHE_OVERRUN_OBJ)+1
-        self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ*2)
+       
         self.start_benchmark(("write",), target=count)
         self.start_sample()
 

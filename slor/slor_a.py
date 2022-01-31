@@ -1,4 +1,6 @@
+from re import I
 import sqlite3
+import json
 
 class SlorAnalysis:
     conn = None
@@ -11,10 +13,57 @@ class SlorAnalysis:
         self.conn = sqlite3.connect(db_file)
         self.stages = self.get_stages()
         for stage in self.stages:
-            self.get_stage_range(stage)
+            print(stage)
+            stage_range = self.get_stage_range(stage)
+            self.get_stats(stage, stage_range[0], stage_range[1])
+
+        
 
     def __del__(self):
         self.conn.close()
+
+    def get_stats(self, stage, start, stop):
+        """
+        One giant pass to avoid running the same queries over and over again.
+        """
+        workers = self.get_workers()
+        cur = self.conn.cursor()
+        iops = {}
+        bytes = {}
+        resp = {}
+        ops = []
+        row_count = 0
+        for i, worker in enumerate(workers):
+            query = "SELECT data FROM {} WHERE stage=\"{}\" AND ts >= {} AND ts <= {} ORDER BY ts".format(worker, stage, start, stop)
+            print(query)
+            data = cur.execute(query)
+            for row in data:
+                stat = json.loads(row[0])
+                if "final" in stat["value"]: continue
+                for op in stat["value"]["st"]:
+                    if op not in ops:
+                        ops.append(op)
+                    if op not in iops:
+                        iops[op] = 0
+                        bytes[op] = 0
+                        resp[op] = 0
+
+                    iops[op] += stat["value"]["st"][op]["ios/s"]
+                    bytes[op] += stat["value"]["st"][op]["bytes/s"]
+                    if len(stat["value"]["st"][op]["resp"]) > 0:
+                        resp_ttl = 0
+                        for r in stat["value"]["st"][op]["resp"]:
+                            resp_ttl += r
+                        resp[op] = resp_ttl/len(stat["value"]["st"][op]["resp"])
+
+                row_count += 1  
+                
+        for op in ops:
+            print(op)
+            print(iops[op]/row_count)
+            print(bytes[op]/row_count)
+            print(resp[op]/row_count)
+
 
     def get_workers(self):
         if self.workers != None:
@@ -37,7 +86,7 @@ class SlorAnalysis:
         workers = self.get_workers()
         cur = self.conn.cursor()
         for worker in workers:
-            for x in cur.execute("SELECT DISTINCT stage FROM (SELECT stage, ts FROM {} ORDER BY ts)".format(worker)):
+            for x in cur.execute("SELECT DISTINCT \"stage\" FROM (SELECT stage, ts FROM {} ORDER BY ts)".format(worker)):
                 if x[0] not in self.stages: self.stages.append(x[0])
         cur.close()
         return self.stages
@@ -75,8 +124,7 @@ class SlorAnalysis:
         for v in min_vals:
             if v > max: max = v
 
-        print("{}: {} - {} = {}".format(stage, min, max, (max - min)))
+        return((min, max))
 
-        #exit()
 
 

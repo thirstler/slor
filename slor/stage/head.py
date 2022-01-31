@@ -11,6 +11,13 @@ class Head(SlorProcess):
         self.config = config
         self.operations = ("head",)
 
+    def ready(self):
+
+        if self.hand_shake():
+            self.delay()
+            self.exec()
+        
+
     def exec(self):
 
         self.start_benchmark()

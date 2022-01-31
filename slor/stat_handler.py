@@ -56,6 +56,7 @@ class statHandler:
         self.count_target = count
 
     def update_standing_sample(self, data):
+
         sample_addr = "{}:{}".format(data["w_id"], data["t_id"])
         if sample_addr not in self.reported_in:
             self.reported_in += (sample_addr,)
@@ -109,7 +110,9 @@ class statHandler:
                     for op in self.standing_sample[w][t]["st"]:
                         self.global_sample["st"][op]["resp"] += self.standing_sample[w][t]["st"][op]["resp"]
                         self.global_sample["st"][op]["bytes"] += self.standing_sample[w][t]["st"][op]["bytes"]
+                        self.global_sample["st"][op]["bytes/s"] += self.standing_sample[w][t]["st"][op]["bytes/s"]
                         self.global_sample["st"][op]["ios"] += self.standing_sample[w][t]["st"][op]["ios"]
+                        self.global_sample["st"][op]["ios/s"] += self.standing_sample[w][t]["st"][op]["ios/s"]
                         self.global_sample["st"][op]["failures"] += self.standing_sample[w][t]["st"][op]["failures"]
                         self.global_sample["st"][op]["iotime"] += self.standing_sample[w][t]["st"][op]["iotime"]
                 except: pass
@@ -249,7 +252,7 @@ class statHandler:
     def dunno(self, width=10, final=False, color=""):
         blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
         if final:
-            sys.stdout.write("{}{}{} 100%".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC))
+            sys.stdout.write("{}{} 100%{}".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC))
         else:
             for b in range(0, width):
                 sys.stdout.write(blocks[random.randint(0,13)])
@@ -291,11 +294,13 @@ class statHandler:
         if stat_sample["walltime"] == 0:
             rate = 0
         else:
-            rate = human_readable(stat_sample["st"][operation]["bytes"]/stat_sample["walltime"])
+            #rate = human_readable(stat_sample["st"][operation]["bytes"]/stat_sample["walltime"])
+            rate = human_readable(stat_sample["st"][operation]["bytes/s"])
         return("[{:>10}/s]".format(rate))
 
 
     def ops_sec(self, stat_sample=None, operation=None, width=None):
+        
         color=""
         if not stat_sample:
             stat_sample = self.global_sample
@@ -303,8 +308,9 @@ class statHandler:
         if stat_sample["walltime"] == 0:
             h_rate = 0
         else:
-            float_rate = stat_sample["st"][operation]["ios"]/stat_sample["walltime"]
-            if float_rate > self.config["iop_limit"] and any(operation == x for x in ("read", "delete")):
+            #float_rate = stat_sample["st"][operation]["ios"]/stat_sample["walltime"]
+            float_rate = stat_sample["st"][operation]["ios/s"]
+            if self.config["iop_limit"] != 0 and float_rate > self.config["iop_limit"] and any(operation == x for x in ("read", "delete")):
                 color=bcolors.WARNING
                 
             h_rate = human_readable(float_rate, print_units="ops")

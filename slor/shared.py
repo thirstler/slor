@@ -18,7 +18,7 @@ DEFAULT_OBJECT_SIZE = "1MB"
 DEFAULT_DRIVER_PORT = "9256"
 DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "1"
-DEFAULT_UPPER_IOP_LIMIT = "10000"
+DEFAULT_UPPER_IOP_LIMIT = "0"
 DEFAULT_TESTS = "read,write,head,mixed,delete"
 DEFAULT_MIXED_PROFILE = '{"read": 60, "write": 25, "delete": 5, "head": 10 }'
 DEFAULT_PREPARE_SIZE = "8M"
@@ -190,16 +190,22 @@ def get_keys(profile):
 
     return (access_key, secret_key)
 
-def gen_key(key_desc=(40, 40), prefix="", chars=string.digits + string.ascii_uppercase) -> str:
+def gen_key(key_desc=(40, 40), prefix="", inc=None, chars=string.digits + string.ascii_uppercase) -> str:
     if type(key_desc) == int:
         key_desc = (key_desc, key_desc)
-    return "{0}{1}".format(
+    key =  "{0}{1}".format(
         prefix,
         "".join(
             random.choice(chars)
             for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1] else random.randrange(key_desc[0], key_desc[1]) )
         ),
     )
+    if inc:
+        inc=str(inc)
+        chars = len(inc)
+        key = (key[:-chars] + inc) if chars < len(key) else inc
+        
+    return key
 
 def sample_structure(operations):
     sample = {
@@ -213,7 +219,9 @@ def sample_structure(operations):
         sample["st"][t] = {
             "resp": [],      # list of response times (seconds)
             "bytes": 0,      # total bytes present in sample
+            "bytes/s": 0,
             "ios": 0,        # total io operations present in sample
+            "ios/s": 0,
             "failures": 0,   # total number of failures present in the sample
             "iotime": 0,     # time spend in io (seconds)
         }

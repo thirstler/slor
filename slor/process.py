@@ -27,7 +27,11 @@ class SlorProcess:
     target = None
     resp_placeholder = {}
 
-
+    def delay(self):
+        """calculate and execute the start-up dealy for this process"""
+        process_delay = (self.config["startup_delay"] * self.config["w_id"]) + ((self.config["startup_delay"]/self.config["threads"]) * self.id)
+        time.sleep(process_delay)
+    
     def new_sample(self, start=None):
         sample = sample_structure(self.operations)
         if start: sample["start"] = start
@@ -47,8 +51,11 @@ class SlorProcess:
         
     def stop_benchmark(self):
         self.benchmark_struct["end"] = time.time()
+        walltime = self.benchmark_struct["end"] - self.benchmark_struct["start"]
         for o in self.operations:
             self.benchmark_struct["st"][o]["resp"] = [self.resp_placeholder[o]]
+            self.benchmark_struct["st"][o]["bytes/s"] = self.benchmark_struct["st"][o]["bytes"]/walltime
+            self.benchmark_struct["st"][o]["ios/s"] = self.benchmark_struct["st"][o]["ios"]/walltime
         self.send_sample(final=True)
 
     def start_sample(self):
@@ -56,15 +63,23 @@ class SlorProcess:
 
     def stop_sample(self):
         self.sample_struct["end"] = time.time()
-        self.send_sample()
 
+        walltime = self.sample_struct["end"] - self.sample_struct["start"] 
         for o in self.operations:
+            # create metric values for the sample
+            self.sample_struct["st"][o]["bytes/s"] = self.sample_struct["st"][o]["bytes"]/walltime
+            self.sample_struct["st"][o]["ios/s"] = self.sample_struct["st"][o]["ios"]/walltime
+
+            # Update benchmark totals
             self.benchmark_struct["st"][o]["bytes"] += self.sample_struct["st"][o]["bytes"]
             self.benchmark_struct["st"][o]["iotime"] += self.sample_struct["st"][o]["iotime"]
             self.benchmark_struct["st"][o]["ios"] += self.sample_struct["st"][o]["ios"]
             self.benchmark_struct["st"][o]["failures"] += self.sample_struct["st"][o]["failures"]
             self.benchmark_struct["ios"] = self.sample_struct["ios"]
             self.benchmark_struct["perc"] = self.sample_struct["perc"]
+        
+        self.send_sample()
+        
 
     def start_io(self, type):
         self.current_op = type
@@ -93,25 +108,6 @@ class SlorProcess:
                 (self.resp_placeholder[self.current_op] + self.unit_time)/2
 
 
-    def send_sample(self, final=False):
-
-        if final:
-            message = self.benchmark_struct
-            # This is a little silly but
-            for o in self.operations:
-                self.benchmark_struct["st"][o]["resp"] = \
-                    self.sample_struct["st"][self.current_op]["resp"] 
-        else:
-            message = self.sample_struct
-
-        self.msg_to_driver(
-            type="stat",
-            stage=self.config["type"],
-            value=message,
-            time_ms=int(time.time() * 1000)
-        )
-
-
     ##
     # Random data handlers
     def get_bytes_from_pool(self, num_bytes) -> bytearray:
@@ -129,6 +125,32 @@ class SlorProcess:
 
     ##
     # IPC
+    def send_sample(self, final=False):
+
+        if final:
+            message = self.benchmark_struct
+            # This is a little silly but
+            for o in self.operations:
+                self.benchmark_struct["st"][o]["resp"] = \
+                    self.sample_struct["st"][self.current_op]["resp"] 
+        else:
+            message = self.sample_struct
+        
+        self.msg_to_driver(
+            type="stat",
+            stage=self.config["type"],
+            value=message,
+            time_ms=int(time.time() * 1000)
+        )
+
+    def hand_shake(self):
+        
+        self.sock.send({"ready": True})
+        mesg = self.sock.recv()
+        if mesg["exec"]:
+            return True
+        return False
+
     def check_for_messages(self):
         if self.sock.poll():
             msg = self.sock.recv()

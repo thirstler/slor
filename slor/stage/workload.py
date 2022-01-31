@@ -2,19 +2,13 @@ from shared import *
 from process import SlorProcess
 import boto3
 
-class CleanUp(SlorProcess):
+class Workload(SlorProcess):
 
     def __init__(self, socket, config, id):
         self.sock = socket
         self.id = id
         self.config = config
         self.operations = ("cleanup",)
-
-    def ready(self):
-
-        if self.hand_shake():
-            self.delay()
-            self.exec()
 
     def exec(self):
 
