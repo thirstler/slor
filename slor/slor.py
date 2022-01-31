@@ -14,12 +14,12 @@ if __name__ == "__main__":
         control.run()
 
     elif sys.argv[1] == "driver":
-        import driver as driver
+        import driver
 
         driver.run()
 
     elif sys.argv[1] == "analysis":
-        import analysis as analysis
+        import analysis
 
         analysis.run()
 

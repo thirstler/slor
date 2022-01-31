@@ -279,7 +279,7 @@ class SlorControl:
                 items.append("{}".format(o))
             items.append("elapsed")
             for i in items:
-                sys.stdout.write("{:<15}".format(i))
+                sys.stdout.write("{:>15} ".format(i))
             sys.stdout.write("\n")
         elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
              all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):

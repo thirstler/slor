@@ -17,13 +17,6 @@ def run():
     parser.add_argument(
         "--name", default="generic", help="name for this workload/benchmark"
     )
-    parser.add_argument(
-        "--bucket-prefix",
-        default=DEFAULT_BUCKET_PREFIX,
-        help='prefix to use when creating buckets (defaults to "{0}")'.format(
-            DEFAULT_BUCKET_PREFIX
-        ),
-    )
     parser.add_argument("--profile", default=DEFAULT_PROFILE_DEF)
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument(
@@ -50,6 +43,13 @@ def run():
         "--prepare-objects",
         default=None,
         help="directly specify the amount of objects to prepare (count or size; e.g. 1.2TB, 50000K) - overrides calculation with --iop-limit",
+    )
+    parser.add_argument(
+        "--bucket-prefix",
+        default=DEFAULT_BUCKET_PREFIX,
+        help='prefix to use when creating buckets (defaults to "{0}")'.format(
+            DEFAULT_BUCKET_PREFIX
+        ),
     )
     parser.add_argument(
         "--key-length",
