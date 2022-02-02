@@ -7,6 +7,7 @@ import os.path
 from stat_handler import statHandler
 from db_ops import SlorDB
 import json
+import copy
 
 class SlorControl:
 
@@ -16,6 +17,8 @@ class SlorControl:
     stat_buf = []
     last_stage = None
     slordb = None
+    mixed_count = 0
+    stage_itr = {}
 
     def __init__(self, root_config):
         self.config = root_config
@@ -23,7 +26,8 @@ class SlorControl:
 
     def exec(self):
 
-        print("\nS3 Load Ruler (SLOR) \u250C"+("\u252C"*11) + "\u2510")
+        print(BANNER)
+
         # Print config
         self.box_text(self.config_text())
 
@@ -38,6 +42,11 @@ class SlorControl:
         sys.stdout.write("\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"])))
         sys.stdout.write("processes reporting: {0}red{3} = none, {1}green{3} = some, {2}blue{3} = all".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
         sys.stdout.write("\n\u2502\n")
+
+        for stage in self.config["tasks"]["loadorder"]:
+            if self.config["tasks"]["loadorder"].count(stage) > 1:
+                self.stage_itr[stage] = -1
+
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
 
             if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
@@ -140,10 +149,12 @@ class SlorControl:
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
             stagecount += 1
             if stage == "mixed":
+                mixed_prof = self.config["tasks"]["mixed_profiles"][self.mixed_count]
+                self.mixed_count += 1
                 cft_text += "                    {0}: {1} (".format(stagecount, stage)
-                for j, m in enumerate(self.config["tasks"]["mixed_profile"]):
-                    cft_text += "{0}:{1}%".format(m, self.config["tasks"]["mixed_profile"][m])
-                    if (j + 1) < len(self.config["tasks"]["mixed_profile"]):
+                for j, m in enumerate(mixed_prof):
+                    cft_text += "{0}:{1}%".format(m, mixed_prof[m])
+                    if (j + 1) < len(mixed_prof):
                         cft_text += ", "
                 cft_text += ")\n"
             elif stage == "readmap":
@@ -169,6 +180,7 @@ class SlorControl:
             elif stage == "cleanup":
                 cft_text += "{} {}: {}\n".format(" "*19, stagecount, "cleanup - remove all objects and buckets")
 
+        self.mixed_count = 0 # total hack, set back to 0 for use later
         return cft_text
         
 
@@ -255,6 +267,9 @@ class SlorControl:
         workloads = []
         n_wrkrs = len(self.config["driver_list"])
 
+        if stage in self.stage_itr:
+            self.stage_itr[stage] += 1
+
         # Create the workloads
         for wc, target in enumerate(self.config["driver_list"]):
             stage_cfg = self.mk_stage(target, stage, wc)
@@ -275,7 +290,7 @@ class SlorControl:
             sys.stdout.write("\r")
             sys.stdout.write("\u2502" + " "*26)
             items = []
-            for o in self.config["mixed_profile"]:
+            for o in self.config["mixed_profiles"][self.mixed_count]:
                 items.append("{}".format(o))
             items.append("elapsed")
             for i in items:
@@ -302,7 +317,9 @@ class SlorControl:
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
         
-        self.stats_h = statHandler(self.config, stage)
+        stats_config = copy.deepcopy(self.config)
+        stats_config["mixed_profile"] = self.config["mixed_profiles"][self.mixed_count]
+        self.stats_h = statHandler(stats_config, stage)
         if self.get_readmap_len() > 0:
             self.stats_h.set_count_target(self.get_readmap_len())
 
@@ -332,6 +349,7 @@ class SlorControl:
             self.stats_h.show()
             time.sleep(0.01)
 
+        if stage == "mixed": self.mixed_count += 1
         self.last_stage = stage
 
     def block_until_ready(self):
@@ -377,7 +395,10 @@ class SlorControl:
             print("{0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
-            self.slordb.store_stat(message)
+            loc_stage_iter = None
+            if message["stage"] in self.stage_itr:
+                loc_stage_iter = str(self.stage_itr[message["stage"]])
+            self.slordb.store_stat(message, stage_itr=loc_stage_iter)
         else:
             pass 
 
@@ -465,7 +486,7 @@ class SlorControl:
             "cache_overrun_sz": int(
                 self.config["ttl_sz_cache"] / len(self.config["driver_list"])
             ),
-            "mixed_profile": self.config["mixed_profile"],
+            "mixed_profile": self.config["mixed_profiles"][self.mixed_count],
             "startup_delay": (DRIVER_REPORT_TIMER/len(self.config["driver_list"])),
             "key_prefix": self.config["key_prefix"]
         }

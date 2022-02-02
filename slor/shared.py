@@ -20,7 +20,7 @@ DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "1"
 DEFAULT_UPPER_IOP_LIMIT = "0"
 DEFAULT_TESTS = "read,write,head,mixed,delete"
-DEFAULT_MIXED_PROFILE = '{"read": 60, "write": 25, "delete": 5, "head": 10 }'
+DEFAULT_MIXED_PROFILE = '[{"read": 60, "write": 25, "delete": 5, "head": 10}]'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
 DEFAULT_WRITE_PREFIX = "write/"
@@ -44,6 +44,7 @@ LOG_TO_CONSOLE = True
 DRIVER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
+STATS_QUANTA = 5         # seconds (should probably be the same as DRIVER_REPORT_TIMER)
 LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout")
 PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write", "sleep")
@@ -58,6 +59,13 @@ WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
 
+BANNER = """
+┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
+│ S3 Load Ruler╵(SLOR)   ╵    ╵    ╵    ╵    ╵    │
+└─────────────────────────────────────────────────┘"""
+
+##
+# Colors used in console output
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'

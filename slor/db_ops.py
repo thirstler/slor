@@ -34,14 +34,18 @@ class SlorDB:
             "CREATE INDEX {0}_ts_i ON {0} (ts)".format(host)
         )
     
-    def store_stat(self, message):
+    def store_stat(self, message, stage_itr=None):
         host = self.host_table_hash(message["w_id"])
+        if stage_itr:
+            stage = "{}:{}".format(message["stage"], stage_itr)
+        else:
+            stage = message["stage"]
         # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', '{4}')".format(
             host,
             message["t_id"],
             message["time"],
-            message["stage"],
+            stage,
             json.dumps(message),
         )
         self.db_cursor.execute(sql)

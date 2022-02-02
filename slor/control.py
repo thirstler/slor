@@ -103,9 +103,9 @@ def run():
         help="sleeptime between workloads",
     )
     parser.add_argument(
-        "--mixed-profile",
+        "--mixed-profiles",
         default=DEFAULT_MIXED_PROFILE,
-        help="profile of mixed load percentages in JASON format, eg: '{0}'".format(
+        help="list of profiles of mixed loads in JSON format, eg: '{0}'".format(
             DEFAULT_MIXED_PROFILE
         ),
     )

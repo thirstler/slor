@@ -10,8 +10,15 @@ def run():
     parser.add_argument(
         "--input", required=True, help="database file to analyse"
     )
+    parser.add_argument("--csv-out", default=None, help="CSV output file with report and time-series data")
     args = parser.parse_args()
 
-    analysis = SlorAnalysis(args.input)
+    analysis = SlorAnalysis(args)
+
+    # Always show basic summary
+    analysis.print_basic_stats()
+
+    if args.csv_out:
+        analysis.export_csv()
 
 

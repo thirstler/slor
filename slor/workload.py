@@ -181,14 +181,16 @@ def generate_tasks(args):
             sys.exit(1)
 
     if "mixed" in loads:
-        perc = 0
-        mix_prof_obj = json.loads(args.mixed_profile)
-        for l in MIXED_LOAD_TYPES:
-            if l in mix_prof_obj:
-                perc += int(mix_prof_obj[l])
-        if perc != 100:
-            sys.stderr.write("your mixed load profile values don't equal 100\n")
-            sys.exit(1)
+        
+        mix_prof_obj = json.loads(args.mixed_profiles)
+        for mixed in mix_prof_obj:
+            perc = 0
+            for l in MIXED_LOAD_TYPES:
+                if l in mixed:
+                    perc += int(mixed[l])
+            if perc != 100:
+                sys.stderr.write("your mixed load profile values don't equal 100\n")
+                sys.exit(1)
 
     # Always happens:
     loads.insert(0, "init")
@@ -199,7 +201,7 @@ def generate_tasks(args):
         if not args.use_readmap:
             loads.insert(2, "prepare")
 
-    return {"loadorder": loads, "mixed_profile": mix_prof_obj}
+    return {"loadorder": loads, "mixed_profiles": mix_prof_obj}
 
 
 def basic_workload(args):
@@ -256,7 +258,7 @@ def classic_workload(args):
         "iop_limit": int(args.iop_limit),
         "ttl_prepare_sz": ttl_prepare_sz,
         "tasks": tasks,
-        "mixed_profile": json.loads(args.mixed_profile),
+        "mixed_profiles": json.loads(args.mixed_profiles),
         "save_readmap": args.save_readmap,
         "use_readmap": args.use_readmap,
         "prepare_objects": args.prepare_objects,
