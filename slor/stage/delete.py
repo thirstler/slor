@@ -23,7 +23,7 @@ class Delete(SlorProcess):
         self.start_sample()
         
         # Once done processing the prepared list, you're done.
-        for i, pkey in enumerate(self.config["mapslice"]):
+        for pkey in self.config["mapslice"]:
 
             try:
                 self.start_io("delete")
@@ -38,7 +38,6 @@ class Delete(SlorProcess):
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()
                 self.stop_benchmark()
-                stop = True # break outer loop
                 break
 
             elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:

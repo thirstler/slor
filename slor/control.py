@@ -6,6 +6,16 @@ from shared import *
 from driver import _slor_driver
 from workload import *
 
+def start_driver():
+
+    driver_list = '127.0.0.1'
+    print("no driver address specified, starting one here")
+    driver = Process(target=_slor_driver, args=(driver_list, DEFAULT_DRIVER_PORT, True))
+    driver.start()
+    time.sleep(2)
+
+    return driver
+
 def run():
     parser = argparse.ArgumentParser(
         description="Slor (S3 Load Ruler) is a distributed load generation and benchmarking tool for S3 storage"
@@ -127,14 +137,17 @@ def run():
         help="use readmap - this will obviate a prepare step and assume objects in the readmap exist"
     )
     args = parser.parse_args()
+    
+    if args.driver_list == "":
+        driver = start_driver()
+        args.driver_list = "127.0.0.1"
 
     if args.workload_file:
         root_config = parse_workload(args.workload_file)
     else:
         root_config = classic_workload(args)
 
-    if args.driver_list == "":
-        driver = start_driver(args)
+    
 
     handle = SlorControl(root_config)
     handle.exec()

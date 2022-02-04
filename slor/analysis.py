@@ -17,8 +17,8 @@ def run():
 
     # Always show basic summary
     analysis.print_basic_stats()
-
-    if args.csv_out:
-        analysis.export_csv()
+    #analysis.get_all_csv()
+    #if args.csv_out:
+    #    analysis.get_all_csv()
 
 

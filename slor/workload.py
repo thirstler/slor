@@ -176,13 +176,16 @@ def generate_tasks(args):
     #print(loads)
     mix_prof_obj = {}
     for l in loads:
-        if l not in LOAD_TYPES:
+        ld_name = l.split(":")
+        if ld_name[0] not in LOAD_TYPES:
             sys.stderr.write('"{0}" is not a load option\n'.format(l))
             sys.exit(1)
 
     if "mixed" in loads:
         
         mix_prof_obj = json.loads(args.mixed_profiles)
+        check_mixed_workloads(mix_prof_obj, loads)
+
         for mixed in mix_prof_obj:
             perc = 0
             for l in MIXED_LOAD_TYPES:
@@ -207,6 +210,23 @@ def generate_tasks(args):
 def basic_workload(args):
     pass
 
+def verify_endpoint(endpoint):
+    if endpoint[:7] == "http://" or endpoint[:8] == "https://":
+        return endpoint
+    else:
+        return ("http://" + endpoint)
+
+def check_mixed_workloads(mix_prof_obj, loads):
+    #if loads.count("mixed") != len(mix_prof_obj):
+    mcount = 0
+    for w in loads:
+        if w[:5] == "mixed": mcount += 1
+
+    if mcount != len(mix_prof_obj):
+        sys.stderr.write("\nCONFIG ERROR: you have {} mixed load(s) queued, but {} mixed profile(s) defined\n\n".format(
+                loads.count("mixed"), len(mix_prof_obj)))
+        sys.exit(1)
+    
 
 def classic_workload(args):
     # if no cmd line args, get from profile, then env (in that order)
@@ -228,7 +248,6 @@ def classic_workload(args):
 
     tasks = generate_tasks(args)
 
-
     if args.prepare_objects != None:
         ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
     else:
@@ -243,7 +262,7 @@ def classic_workload(args):
         "verbose": args.verbose,
         "access_key": args.access_key,
         "secret_key": args.secret_key,
-        "endpoint": args.endpoint,
+        "endpoint": verify_endpoint(args.endpoint),
         "verify": args.verify,
         "region": args.region,
         "key_sz": key_sz,
@@ -266,14 +285,4 @@ def classic_workload(args):
     }
     return root_config
 
-
-def start_driver(args):
-
-    args.driver_list = os.uname().nodename
-    print("no driver address specified, starting one here")
-    driver = Process(target=_slor_driver, args=(args.driver_list, DEFAULT_DRIVER_PORT, True))
-    driver.start()
-    time.sleep(2)
-
-    return driver
 

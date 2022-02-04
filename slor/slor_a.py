@@ -58,6 +58,13 @@ class SlorAnalysis:
             stats[stage] = self.get_stats(stage, stage_range[0], stage_range[1])
         return stats
 
+    def get_all_csv(self):
+        stages = self.get_stages()
+        for stage in stages:
+            stage_range = self.get_stage_range(stage)
+            series = self.get_series(stage, stage_range[0], stage_range[1])
+            print(series)
+
 
     def get_tick(self, timestamp, quanta=STATS_QUANTA):
         return int(timestamp)-(int(timestamp) % quanta)
@@ -97,6 +104,9 @@ class SlorAnalysis:
                     series_master[tick][op]["ios/s"] += stat["value"]["st"][op]["ios/s"]
                     series_master[tick][op]["iotime"] += stat["value"]["st"][op]["iotime"]
                     series_master[tick][op]["failures"] += stat["value"]["st"][op]["failures"]/stat["value"]["walltime"]
+                    
+                    if len(stat["value"]["st"][op]["resp"]) == 0: continue
+                    
                     resp = 0
                     for r in stat["value"]["st"][op]["resp"]:
                         resp += r
@@ -148,6 +158,8 @@ class SlorAnalysis:
                 ##
                 # Process each operation in the sample
                 for op in stat["value"]["st"]:
+
+                    # Maintain a list of all the ops we're tracing
                     if op not in ops:
                         ops.append(op)
 

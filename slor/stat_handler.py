@@ -22,13 +22,16 @@ class statHandler:
     last_stage = None
     reported_in = ()
     ttl_procs = 0
+    duration = 0
 
-    def __init__(self, config, stage):
+
+    def __init__(self, config, stage, duration):
         self.config = config
         self.operations = ()
         self.stage = stage
         self.stage_start_time = time.time()
         self.progress_start_time = self.stage_start_time
+        self.duration = duration
 
         if self.stage == "mixed":
             for s in config["mixed_profile"]:
@@ -178,7 +181,7 @@ class statHandler:
                     perc = 0
                     self.progress_start_time = time.time()
                 else:
-                    perc = (time.time()-self.progress_start_time)/self.config["run_time"]
+                    perc = (time.time()-self.progress_start_time)/self.duration
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
@@ -199,7 +202,7 @@ class statHandler:
                     perc = 0
                     self.progress_start_time = time.time()
                 else:
-                    perc = (time.time()-self.progress_start_time)/self.config["run_time"]
+                    perc = (time.time()-self.progress_start_time )/(self.duration + (DRIVER_REPORT_TIMER*2))
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
             elif self.stage in PROGRESS_BY_COUNT:
