@@ -24,30 +24,132 @@ class SlorAnalysis:
     def export_csv(self):
         pass
 
+    def format_key_value(self, key, value, l_col=26, r_col=18):
+        return "{2:<{0}}{4}{3:<{1}}{5}".format(l_col, r_col, key, value, bcolors.BOLD, bcolors.ENDC)
+
     def print_basic_stats(self):
         stats = self.get_all_basic_stats()
+        global_config = self.get_config()
+        print(global_config)
 
-        print("Workload Summary")
-        print("----------------")
+        print(BANNER)
+
+        print("GLOBAL CONFIGURATION")
+        left = []
+        left.append(self.format_key_value("Workload name:", global_config["name"]))
+        
+       
+        
+        left.append(self.format_key_value("Default runtime:", global_config["run_time"]))
+        left.append(self.format_key_value("Bucket prefix:", global_config["bucket_prefix"]))
+        left.append(self.format_key_value("Default bucket count:", global_config["bucket_count"]))
+        left.append(self.format_key_value("Target buckets:", ""))
+        for b in range(0, global_config["bucket_count"]):
+            left.append(self.format_key_value("",  "{}{}".format(global_config["bucket_prefix"], b), l_col=4,r_col=40))
+
+        right = []
+        right.append(self.format_key_value("Object size config:",
+            ("{} - {}  avg: {}".format(
+                human_readable(global_config["sz_range"][0]),
+                human_readable(global_config["sz_range"][1]),
+                human_readable(global_config["sz_range"][2]))
+            if global_config["sz_range"][0] != global_config["sz_range"][1] else
+                (human_readable(global_config["sz_range"][0]))
+            )
+        ))
+        right.append(self.format_key_value("Key length config:", "{} - {}  avg: {}".format(
+                global_config["key_sz"][0],
+                global_config["key_sz"][1],
+                global_config["key_sz"][2])
+            if global_config["key_sz"][0] != global_config["key_sz"][1] else
+                global_config["key_sz"][0]))
+        right.append("Drivers:")
+        for b in global_config["driver_list"]:
+            right.append("  {}{}:{}{}".format(bcolors.BOLD,
+                b["host"], b["port"], bcolors.ENDC))
+        right.append(self.format_key_value("Processes per driver:", "{} ({} ttl)".format(
+            global_config["driver_proc"], global_config["driver_proc"]*len(global_config["driver_list"]))))
+        right.append(self.format_key_value("Cache overrun target:", global_config["ttl_sz_cache"]))
+        right.append(self.format_key_value("Prepared data size:", human_readable(global_config["ttl_prepare_sz"])))
+        right.append("IOs/sec target (used to calculate prepared data size):")
+        right.append("  {:20}".format("{}{}{} ops ({} ops x {} sec x {} = {})".format(
+                bcolors.BOLD,
+                human_readable(global_config["iop_limit"], print_units="ops"),
+                bcolors.ENDC,
+                human_readable(global_config["iop_limit"], print_units="ops"),
+                global_config["run_time"], human_readable(global_config["sz_range"][2]),
+                human_readable(global_config["run_time"]*global_config["iop_limit"]*global_config["sz_range"][2]))))
+        
+        text = ""
+        for z in range(0, max(len(left), len(right))):
+            if z not in left: left.append("")
+            if z not in right: right.append("")
+            text += "{:<50} {:<30}\n".format(left[z], right[z])
+
+        box_text(text)
+
+
+        print("WORKLOAD STATISTICS")
+
         for stage in stats:
-            print(stage)
-            stage_range = self.get_stage_range(stage)
-            for operation in stats[stage]["operations"]:
-                alias =  stats[stage]["operations"][operation]
-                print("  operation class: {}".format(operation))
-                print("    Workload sample len.:  {:.2f} sec".format( (stage_range[1]-stage_range[0])/1000 ))
-                print("    Average Object Size:   {}".format(human_readable(alias["ttl_bytes"]/alias["ttl_operations"])))
-                print("    Average Bandwidth:     {}/s".format(human_readable(alias["bytes/s"])))
-                print("    Average IO/s:          {} op/s".format(human_readable(alias["iops/s"], print_units="ops")))
-                print("    Average Response time: {:.4f} ms".format(alias["resp_avg"]*1000))
-                print("    Resp. percentiles (% below):")
-                print("      0.99999:             {:.4f} ms".format(alias["resp_perc"]["0.99999"]*1000))
-                print("      0.9999:              {:.4f} ms".format(alias["resp_perc"]["0.9999"]*1000))
-                print("      0.999:               {:.4f} ms".format(alias["resp_perc"]["0.999"]*1000))
-                print("      0.99:                {:.4f} ms".format(alias["resp_perc"]["0.99"]*1000))
-                print("      0.9:                 {:.4f} ms".format(alias["resp_perc"]["0.9"]*1000))
-                print("      0.5:                 {:.4f} ms".format(alias["resp_perc"]["0.5"]*1000))
 
+            start, stop = self.get_stage_range(stage)
+            series = self.get_series(stage, start, stop)
+            print(str(series))
+            # Start new "test" string #
+            text = "STAGE: " + stage + "\n\n"
+            text += "Global Stage Stats (all operations)\n"
+            text += "     Window: {0}{1:<12.2f}{2} {3}- wall time of analysed sample{2}\n".format(
+                bcolors.BOLD, stats[stage]["global"]["window"], bcolors.ENDC, bcolors.GRAY)
+            text += "   I/O time: {0}{1:<12.2f}{2} {3}- cumulative time spent during I/O (vs other processesing){2}\n".format(
+                bcolors.BOLD, stats[stage]["global"]["iotime"], bcolors.ENDC, bcolors.GRAY)
+            text += "  Wall time: {0}{1:<12.2f}{2} {3}- cumulative wall time of workers{2}\n".format(
+                bcolors.BOLD, stats[stage]["global"]["walltime"], bcolors.ENDC, bcolors.GRAY)
+            text += "  Efficency: {0}{1:<12.2f}{2} {3}- workload efficency (io-time/wall-time){2}\n".format(
+                bcolors.BOLD, stats[stage]["global"]["wrkld_eff"], bcolors.ENDC, bcolors.GRAY)
+            text += "   IO count: {0}{1:<12}{2} {3}- sum of all IO operations in this stage{2}\n".format(
+                bcolors.BOLD, human_readable(stats[stage]["global"]["ios"], print_units="ops"), bcolors.ENDC, bcolors.GRAY)
+            text += "      Ops/s: {0}{1:<12}{2} {3}- global operations per second{2}\n\n".format(
+                bcolors.BOLD, human_readable(stats[stage]["global"]["ios"]/stats[stage]["global"]["window"],
+                print_units="ops"), bcolors.ENDC, bcolors.GRAY)
+            stage_range = self.get_stage_range(stage)
+            for i, operation in enumerate(stats[stage]["operations"]):
+                alias =  stats[stage]["operations"][operation]
+                text += "Operation class: {}{}{}\n".format(bcolors.BOLD, operation, bcolors.ENDC)
+
+                left = []
+                left.append(self.format_key_value("  Workload sample len.:", (stage_range[1]-stage_range[0])/1000))
+                left.append(self.format_key_value("  Average object size:", human_readable(alias["ttl_bytes"]/alias["ttl_operations"])))
+                left.append(self.format_key_value("  Average bandwidth:", "{}/s".format(human_readable(alias["bytes/s"]))))
+                left.append(self.format_key_value("  Total bytes:", human_readable(alias["ttl_bytes"])))
+                left.append(self.format_key_value("  Average IO/s:", human_readable(alias["iops/s"], print_units="ops")))
+                left.append(self.format_key_value("  Total operations:", human_readable(alias["ttl_operations"], print_units="ops")))
+                left.append(self.format_key_value("  Share of stage ops:", "{:.2f}%".format((alias["ttl_operations"]/stats[stage]["global"]["ios"])*100)))
+                left.append(self.format_key_value("  Failed operations:", "{} ({:.2f}%)".format(
+                    human_readable(alias["failures"], print_units="ops"),
+                    alias["failures"]/alias["ttl_operations"])))
+  
+
+
+                right = []
+                right.append(self.format_key_value("Response time average:", "{:.2f} ms".format(alias["resp_avg"]*1000)))
+                right.append(self.format_key_value("Response time percentiles (% below):", ""))
+                right.append(self.format_key_value("  0.99999:", "{:.4f} ms".format(alias["resp_perc"]["0.99999"]*1000)))
+                right.append(self.format_key_value("  0.9999:", "{:.4f} ms".format(alias["resp_perc"]["0.9999"]*1000)))
+                right.append(self.format_key_value("  0.999:", "{:.4f} ms".format(alias["resp_perc"]["0.999"]*1000)))
+                right.append(self.format_key_value("  0.99:", "{:.4f} ms".format(alias["resp_perc"]["0.99"]*1000)))
+                right.append(self.format_key_value("  0.9:", "{:.4f} ms".format(alias["resp_perc"]["0.9"]*1000)))
+                right.append(self.format_key_value("  0.5 (median):", "{:.4f} ms".format(alias["resp_perc"]["0.5"]*1000)))
+                
+                for z in range(0, max(len(left), len(right))):
+                    if z not in left: left.append("")
+                    if z not in right: right.append("")
+                    text += "{:<50} {:<30}\n".format(left[z], right[z])
+
+                if (i+1) < len(stats[stage]["operations"]):
+                    text += '\n'
+
+            box_text(text)
 
     def get_all_basic_stats(self):
         stats = {}
@@ -113,6 +215,17 @@ class SlorAnalysis:
                     series_master[tick][op]["resp"] = resp/len(stat["value"]["st"][op]["resp"])
         
         return series_master
+
+    def get_config(self, stage="global"):
+
+        query = "SELECT * FROM config WHERE stage='{}'".format(stage)
+        cur = self.conn.cursor()
+        data = cur.execute(query)
+
+        # only 1 row or there's some issue
+        retval = json.loads(next(data)[2])
+        cur.close()
+        return retval
 
 
     def get_stats(self, stage, start, stop):
@@ -187,11 +300,12 @@ class SlorAnalysis:
                 "iotime": g_iotime,
                 "walltime": g_wall,
                 "wrkld_eff": g_wrkld_eff/sample_count,
-                "ios": g_ios
+                "ios": 0
             },
             "operations": {}
         }
         for op in ops:
+            returnval["global"]["ios"] += iops[op]
             returnval["operations"][op] = {
                 "iops/s": iops[op]/window,
                 "bytes/s": bytes[op]/window,
@@ -203,6 +317,7 @@ class SlorAnalysis:
                 "resp_perc": self.get_precentiles(resp_all[op])
             }
 
+        cur.close()
         return returnval
             
 
@@ -225,6 +340,7 @@ class SlorAnalysis:
         query = "SELECT name FROM sqlite_master WHERE type='table'"
         cur = self.conn.cursor()
         for x in cur.execute(query):
+            if x[0] == "config": continue
             self.workers.append(x[0])
         cur.close()
         

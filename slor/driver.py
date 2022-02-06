@@ -4,7 +4,7 @@ import sys
 from slor_d import SlorDriver
 from multiprocessing.connection import Listener
 
-def _slor_driver(bindaddr, bindport, exit_on_disconnect):
+def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):
     """Non-cli entry point"""
     try:
         server_sock = Listener((bindaddr, int(bindport)))
@@ -12,11 +12,11 @@ def _slor_driver(bindaddr, bindport, exit_on_disconnect):
         print(e)
         sys.exit(1)
         
-    print("ready on  {}:{}".format(bindaddr, bindport))
+    if not quiet: print("ready on  {}:{}".format(bindaddr, bindport))
     while True:
         # There will only ever be one connection, no connection handling
         sock = server_sock.accept()
-        print(" new connection")
+        if not quiet: print(" new connection")
         handle = SlorDriver(sock, bindaddr, bindport)
         handle.exec()
         sock.close()

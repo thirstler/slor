@@ -58,14 +58,6 @@ TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
-
-BANNER = """
-┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
-│ S3 Load Ruler╵(SLOR)   ╵    ╵    ╵    ╵    ╵    │
-└─────────────────────────────────────────────────┘
- ▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁
- """
-
 ##
 # Colors used in console output
 class bcolors:
@@ -81,6 +73,13 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     GRAY = '\033[38;5;243m'
+
+
+BANNER = """
+┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
+│{0}SLOR{1} {2}▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁{1}│
+└────┴────┴────┴────┴────┴────┴────┴────┴────┴────┘
+""".format(bcolors.BOLD,bcolors.ENDC,bcolors.OKBLUE)
 
 ###############################################################################
 ## Globally shared routines
@@ -236,3 +235,17 @@ def sample_structure(operations):
             "iotime": 0,     # time spend in io (seconds)
         }
     return sample
+
+
+def top_box():
+    print(u"\u250C{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+
+def bottom_box():
+    print(u"\u2514{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+
+def box_text(text):
+    text_lines = text.split("\n")
+    top_box()
+    for line in text_lines:
+        print(u"\u2502 "+line)
+    bottom_box()

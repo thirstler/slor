@@ -139,7 +139,7 @@ def run():
     args = parser.parse_args()
     
     if args.driver_list == "":
-        driver = start_driver()
+        driver = start_driver(quiet=True)
         args.driver_list = "127.0.0.1"
 
     if args.workload_file:

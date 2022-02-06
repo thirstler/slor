@@ -29,7 +29,7 @@ class SlorControl:
         print(BANNER)
 
         # Print config
-        self.box_text(self.config_text())
+        box_text(self.config_text())
 
         # Gather and show driver info
         print("")
@@ -38,9 +38,9 @@ class SlorControl:
             sys.exit(1)
         
         print("")
-        self.top_box()
+        top_box()
         sys.stdout.write("\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"])))
-        sys.stdout.write("processes reporting: {0}red{3} = none, {1}green{3} = some, {2}blue{3} = all".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
+        sys.stdout.write("processes reporting: {0}none{3}, {1}some{3}, {2}all{3}".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
         sys.stdout.write("\n\u2502\n")
 
         for stage_val in self.config["tasks"]["loadorder"]:
@@ -53,7 +53,7 @@ class SlorControl:
             stage, duration = self.parse_stage_string(stage)
 
             if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
-                sys.stdout.write("\r\u2502   [shuffling readmap...]   ")
+                sys.stdout.write("\r\u2502   [   shuffling readmap...   ]   ")
                 sys.stdout.flush()
                 random.shuffle(self.readmap)
 
@@ -61,7 +61,8 @@ class SlorControl:
                 sys.stdout.write("\u2502 {}Note:{} blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n".format(bcolors.BOLD, bcolors.ENDC))
                 continue
             elif stage == "sleep":
-                sys.stdout.write("\u2502 [sleeping ({})...]".format(duration))
+
+                sys.stdout.write("\u2502     [     sleeping ({})...     ]   ".format(duration))
                 sys.stdout.flush()
                 time.sleep(duration)
                 continue
@@ -74,21 +75,9 @@ class SlorControl:
         for c in self.conn:
             c.close()
 
-        self.bottom_box()
+        bottom_box()
         print("\ndone.\n")
-
-    def top_box(self):
-        print(u"\u250C{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
-
-    def bottom_box(self):
-        print(u"\u2514{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
-
-    def box_text(self, text):
-        text_lines = text.split("\n")
-        self.top_box()
-        for line in text_lines:
-            print(u"\u2502 "+line)
-        self.bottom_box()
+        print("run {} analysis --input {}\n".format(sys.argv[0], self.slordb.db_file))
 
 
     def config_text(self):
@@ -204,7 +193,7 @@ class SlorControl:
         ret_val = True
         self.config["driver_node_names"] = []
         
-        self.top_box()
+        top_box()
         print(u"\u2502 DRIVERS ({})".format(len(self.config["driver_list"])))
         print(u"\u2502")
         for i, hostport in enumerate(self.config["driver_list"]):
@@ -225,7 +214,7 @@ class SlorControl:
                     )
                 )
                 ret_val = False
-        self.bottom_box()
+        bottom_box()
         return ret_val
 
     def check_driver_info(self, data):
@@ -274,7 +263,7 @@ class SlorControl:
             while self.conn[i].poll():
                 return_msg.append(self.conn[i].recv())
         return return_msg
-        
+
 
     def print_workload_headers(self, header_items):
         sys.stdout.write("\r")
@@ -303,6 +292,7 @@ class SlorControl:
             stage_cfg = self.mk_stage(target, stage, wc, duration)
             if stage_cfg:
                 workloads.append(stage_cfg)
+                self.slordb.commit_stage_config(stage, stage_cfg)
             else:
                 return
 
@@ -370,7 +360,8 @@ class SlorControl:
             self.last_stage = stage
 
     def block_until_ready(self):
-        sys.stdout.write("\r\u2502   [waiting on worker processes...]")
+
+        sys.stdout.write("\r\u2502   [   waiting on worker processes...   ]")
         sys.stdout.flush()
         global_ready = True
         
@@ -483,8 +474,8 @@ class SlorControl:
         if len(items) == 2:
             return items[0], int(items[1])
         else:
+            # Sleep time has it's own global config so deal with it here
             return items[0], int(self.config["sleeptime"]) if items[0] == "sleep" else int(self.config["run_time"])
-
 
     def mk_stage(self, target, stage, wid, duration):
        

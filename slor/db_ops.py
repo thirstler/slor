@@ -3,6 +3,7 @@ from shared import *
 import os
 from pathlib import Path
 import json
+import time
 
 class SlorDB:
 
@@ -25,6 +26,16 @@ class SlorDB:
                 vcount += 1
             self.db_conn = sqlite3.connect(self.db_file.as_posix())
             self.db_cursor = self.db_conn.cursor()
+            query = "CREATE TABLE config (ts INT, stage STRING, data JSON)"
+            self.db_cursor.execute(query)
+            query = "INSERT INTO config VALUES ({}, 'global', '{}')".format(time.time(), json.dumps(config))
+            self.db_cursor.execute(query)
+            self.db_conn.commit()
+
+    def commit_stage_config(self, stage, config):
+        query = "INSERT INTO config VALUES ({}, '{}', '{}')".format(time.time(), stage, json.dumps(config))
+        self.db_cursor.execute(query)
+        self.db_conn.commit()
 
     def mk_data_store(self, host):
         host = self.host_table_hash(host)
@@ -33,7 +44,8 @@ class SlorDB:
         self.db_cursor.execute(
             "CREATE INDEX {0}_ts_i ON {0} (ts)".format(host)
         )
-    
+        self.db_conn.commit()
+
     def store_stat(self, message, stage_itr=None):
         host = self.host_table_hash(message["w_id"])
         if stage_itr:
