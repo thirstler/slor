@@ -2,6 +2,7 @@ from re import I
 import sqlite3
 import json
 from  shared import *
+import datetime
 
 class SlorAnalysis:
     conn = None
@@ -9,17 +10,18 @@ class SlorAnalysis:
     workers = None
     processes = {}
     stats = {}
-    not_workload = ("prepare", "blowout", "cleanup")
+    #not_workload = ("prepare", "blowout", "cleanup")
+    not_workload = ("cleanup")
 
     def __init__(self, args):
 
-        self.csv_output = args.csv_out
         self.db_file = args.input
         self.conn = sqlite3.connect(args.input)
         
         
     def __del__(self):
-        self.conn.close()
+        if self.conn:
+            self.conn.close()
 
     def export_csv(self):
         pass
@@ -28,18 +30,16 @@ class SlorAnalysis:
         return "{2:<{0}}{4}{3:<{1}}{5}".format(l_col, r_col, key, value, bcolors.BOLD, bcolors.ENDC)
 
     def print_basic_stats(self):
+
         stats = self.get_all_basic_stats()
-        global_config = self.get_config()
-        print(global_config)
+        global_config = self.get_config()[0]
+        #print(global_config)
 
         print(BANNER)
 
         print("GLOBAL CONFIGURATION")
         left = []
         left.append(self.format_key_value("Workload name:", global_config["name"]))
-        
-       
-        
         left.append(self.format_key_value("Default runtime:", global_config["run_time"]))
         left.append(self.format_key_value("Bucket prefix:", global_config["bucket_prefix"]))
         left.append(self.format_key_value("Default bucket count:", global_config["bucket_count"]))
@@ -92,13 +92,45 @@ class SlorAnalysis:
         print("WORKLOAD STATISTICS")
 
         for stage in stats:
+            
+            s_config = self.get_config(stage=stage)
+            rmkeys = 0
+            for driver in s_config:
+                rmkeys += len(driver["readmap"])
+                driver["readmap"].clear()
 
-            start, stop = self.get_stage_range(stage)
-            series = self.get_series(stage, start, stop)
-            print(str(series))
             # Start new "test" string #
             text = "STAGE: " + stage + "\n\n"
-            text += "Global Stage Stats (all operations)\n"
+            left = []
+            left.append(self.format_key_value("Stage configuration:", ""))
+            left.append(self.format_key_value("Run time:", s_config[0]["run_time"]))
+            left.append(self.format_key_value("Keys in readmap:", rmkeys))
+            right = []
+            left.append(self.format_key_value("Object size config:",
+                ("{} - {}  (avg: {})".format(
+                    human_readable(s_config[0]["sz_range"][0]),
+                    human_readable(s_config[0]["sz_range"][1]),
+                    human_readable(s_config[0]["sz_range"][2]))
+                if s_config[0]["sz_range"][0] != s_config[0]["sz_range"][1] else
+                    (human_readable(s_config[0]["sz_range"][0]))
+                )
+            ))
+            left.append(self.format_key_value("Key length config:", "{} - {}  avg: {}".format(
+                    s_config[0]["key_sz"][0],
+                    s_config[0]["key_sz"][1],
+                    s_config[0]["key_sz"][2])
+                if s_config[0]["key_sz"][0] != s_config[0]["key_sz"][1] else
+                    s_config[0]["key_sz"][0]))
+            if stage[:5] == "mixed":
+                left.append("Mixed profile config:")
+                left.append("  "+json.dumps(s_config[0]["mixed_profile"]))
+
+            for z in range(0, max(len(left), len(right))):
+                if z not in left: left.append("")
+                if z not in right: right.append("")
+                text += "{:<50} {:<30}\n".format(left[z], right[z])
+
+            text += "\nAggregate Stage Stats (all operations)\n"
             text += "     Window: {0}{1:<12.2f}{2} {3}- wall time of analysed sample{2}\n".format(
                 bcolors.BOLD, stats[stage]["global"]["window"], bcolors.ENDC, bcolors.GRAY)
             text += "   I/O time: {0}{1:<12.2f}{2} {3}- cumulative time spent during I/O (vs other processesing){2}\n".format(
@@ -122,7 +154,7 @@ class SlorAnalysis:
                 left.append(self.format_key_value("  Average object size:", human_readable(alias["ttl_bytes"]/alias["ttl_operations"])))
                 left.append(self.format_key_value("  Average bandwidth:", "{}/s".format(human_readable(alias["bytes/s"]))))
                 left.append(self.format_key_value("  Total bytes:", human_readable(alias["ttl_bytes"])))
-                left.append(self.format_key_value("  Average IO/s:", human_readable(alias["iops/s"], print_units="ops")))
+                left.append(self.format_key_value("  Average ops/s:", human_readable(alias["iops/s"], print_units="ops")))
                 left.append(self.format_key_value("  Total operations:", human_readable(alias["ttl_operations"], print_units="ops")))
                 left.append(self.format_key_value("  Share of stage ops:", "{:.2f}%".format((alias["ttl_operations"]/stats[stage]["global"]["ios"])*100)))
                 left.append(self.format_key_value("  Failed operations:", "{} ({:.2f}%)".format(
@@ -151,6 +183,7 @@ class SlorAnalysis:
 
             box_text(text)
 
+
     def get_all_basic_stats(self):
         stats = {}
         self.stages = self.get_stages()
@@ -160,17 +193,38 @@ class SlorAnalysis:
             stats[stage] = self.get_stats(stage, stage_range[0], stage_range[1])
         return stats
 
-    def get_all_csv(self):
+
+    def dump_csv(self):
         stages = self.get_stages()
         for stage in stages:
+            print("STAGE,"+stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
-            print(series)
+            
+            headers = []
+            for ts in series:
+                for item in series[ts]:
+                    if item not in headers:
+                        headers.append(item)
+            
+            
+            for operation in headers:
+                print("Operation,"+operation)
+                sys.stdout.write("time,")
+                stats = ("bytes/s", "ios/s", "resp", "iotime", "failures")
+                print(",".join(stats))
+                #for x in stats: sys.stdout.write(x) 
+                for ts in series:
+                    row = []
+                    row.append(datetime.datetime.fromtimestamp(ts).isoformat())
+                    for stat in stats:
+                        row.append(str(series[ts][operation][stat]))
+                    print(",".join(row))
 
 
     def get_tick(self, timestamp, quanta=STATS_QUANTA):
         return int(timestamp)-(int(timestamp) % quanta)
-
+  
 
     def get_series(self, stage, start, stop):
         workers = self.get_workers()
@@ -178,9 +232,9 @@ class SlorAnalysis:
         series_master = {}
         start_s = start/1000
         stop_s = stop/1000
-
+        
         for i in range(self.get_tick(start_s), self.get_tick(stop_s)+STATS_QUANTA, STATS_QUANTA):
-            series_master[i] = {"global": {}}
+            series_master[i] = {}
 
         for i, worker in enumerate(workers):
             query = "SELECT data,ts FROM {} WHERE stage=\"{}\" AND ts >= {} AND ts <= {} ORDER BY ts".format(worker, stage, start, stop)
@@ -200,7 +254,6 @@ class SlorAnalysis:
                             "iotime": 0,
                             "failures": 0
                         }
-        
 
                     series_master[tick][op]["bytes/s"] += stat["value"]["st"][op]["bytes/s"]
                     series_master[tick][op]["ios/s"] += stat["value"]["st"][op]["ios/s"]
@@ -222,8 +275,9 @@ class SlorAnalysis:
         cur = self.conn.cursor()
         data = cur.execute(query)
 
-        # only 1 row or there's some issue
-        retval = json.loads(next(data)[2])
+        retval = []
+        for row in data:
+            retval.append(json.loads(row[2]))
         cur.close()
         return retval
 

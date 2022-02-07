@@ -220,8 +220,6 @@ class statHandler:
 
         if final: sys.stdout.write("\n")
         sys.stdout.flush()
-
-
         
         #print(self.stat_rotation)
         self.last_show = now
