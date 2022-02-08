@@ -257,7 +257,7 @@ class statHandler:
         else:
             for b in range(0, width):
                 sys.stdout.write(blocks[random.randint(0,13)])
-            sys.stdout.write("   ?%")
+            sys.stdout.write(" ???%")
             
 
     def progress(self, perc, width=10, final=False, color=""):

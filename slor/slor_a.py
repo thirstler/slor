@@ -10,11 +10,10 @@ class SlorAnalysis:
     workers = None
     processes = {}
     stats = {}
-    #not_workload = ("prepare", "blowout", "cleanup")
-    not_workload = ("cleanup")
+    not_workload = ("prepare", "blowout", "cleanup") # Skip theses stages when doing analysis
 
     def __init__(self, args):
-
+        
         self.db_file = args.input
         self.conn = sqlite3.connect(args.input)
         
@@ -82,8 +81,8 @@ class SlorAnalysis:
         
         text = ""
         for z in range(0, max(len(left), len(right))):
-            if z not in left: left.append("")
-            if z not in right: right.append("")
+            if z not in left: left.append(self.format_key_value("", ""))
+            if z not in right: right.append(self.format_key_value("", ""))
             text += "{:<50} {:<30}\n".format(left[z], right[z])
 
         box_text(text)
@@ -96,8 +95,9 @@ class SlorAnalysis:
             s_config = self.get_config(stage=stage)
             rmkeys = 0
             for driver in s_config:
-                rmkeys += len(driver["readmap"])
-                driver["readmap"].clear()
+                if "readmap" in driver:
+                    rmkeys += len(driver["readmap"])
+                    driver["readmap"].clear()
 
             # Start new "test" string #
             text = "STAGE: " + stage + "\n\n"
@@ -131,7 +131,7 @@ class SlorAnalysis:
                 text += "{:<50} {:<30}\n".format(left[z], right[z])
 
             text += "\nAggregate Stage Stats (all operations)\n"
-            text += "     Window: {0}{1:<12.2f}{2} {3}- wall time of analysed sample{2}\n".format(
+            text += "     Window: {0}{1:<12.2f}{2} {3}- sample window in seconds{2}\n".format(
                 bcolors.BOLD, stats[stage]["global"]["window"], bcolors.ENDC, bcolors.GRAY)
             text += "   I/O time: {0}{1:<12.2f}{2} {3}- cumulative time spent during I/O (vs other processesing){2}\n".format(
                 bcolors.BOLD, stats[stage]["global"]["iotime"], bcolors.ENDC, bcolors.GRAY)
@@ -174,8 +174,8 @@ class SlorAnalysis:
                 right.append(self.format_key_value("  0.5 (median):", "{:.4f} ms".format(alias["resp_perc"]["0.5"]*1000)))
                 
                 for z in range(0, max(len(left), len(right))):
-                    if z not in left: left.append("")
-                    if z not in right: right.append("")
+                    if z not in left: left.append(self.format_key_value("", ""))
+                    if z not in right: right.append(self.format_key_value("", ""))
                     text += "{:<50} {:<30}\n".format(left[z], right[z])
 
                 if (i+1) < len(stats[stage]["operations"]):
@@ -197,6 +197,7 @@ class SlorAnalysis:
     def dump_csv(self):
         stages = self.get_stages()
         for stage in stages:
+            if stage in self.not_workload: continue
             print("STAGE,"+stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
@@ -363,7 +364,7 @@ class SlorAnalysis:
             returnval["operations"][op] = {
                 "iops/s": iops[op]/window,
                 "bytes/s": bytes[op]/window,
-                "failures": fail[op]/window,
+                "failures": fail[op],
                 "iotime": iotime[op],
                 "resp_avg": resp[op]/len(resp_all[op]),
                 "ttl_operations": iops[op],
