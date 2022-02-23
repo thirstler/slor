@@ -3,113 +3,87 @@ import time
 import random
 from shared import *
 from s3primitives import S3primitives
+from sample import perfSample
+import pickle
+import json
 
 class SlorProcess:
 
     sock = None
     config = None
     id = None                # Process ID (unique to the driver, not the whole distributed job)
+    w_id = None              # hostname used to identify the driver
     s3client = None
     stop = False
     byte_pool = 0
     s3ops = None
 
-    fail_count = 0
-    op_count = 0
     benchmark_stop = 0       # when this benchmark is _supposed_ to stop
-    unit_start = 0           # start of individual I/O 
-    unit_time = 0            # time to complete I/O
+    unit_start = 0           # start of individual I/O
     sample_struct = None
-    benchmark_struct = None      
     default_op = None
     current_op = None
     operations = ()          # Operation types in this workload
-    target = None
-    resp_placeholder = {}
+    sample_count = 0
+    benchark_io_count = 0
+
+    def __init__(self):
+        pass
 
     def delay(self):
-        """calculate and execute the start-up dealy for this process"""
+        """calculate and execute the start-up delay for this process"""
         process_delay = (self.config["startup_delay"] * self.config["w_id"]) + ((self.config["startup_delay"]/self.config["threads"]) * self.id)
         time.sleep(process_delay)
-    
-    def new_sample(self, start=None):
-        sample = sample_structure(self.operations)
-        if start: sample["start"] = start
-        return sample
-    
-    ##
+     
+
     # Benchmark timing functions
-    def start_benchmark(self, ops=None, target=None):
+    def start_benchmark(self, ops=None, target=None) -> None:
         self.s3ops = S3primitives(self.config)
-        self.benchmark_struct = self.new_sample(time.time())
-        self.benchmark_struct["final"] = True
-        self.benchmark_stop = self.benchmark_struct["start"] + self.config["run_time"]
-        if ops: self.operations = ops
-        if target: self.target = target
+        self.count_target = target
+
+    def stop_benchmark(self) -> None:
+        pass
+
+    def start_sample(self) -> None:
+        self.sample_struct = perfSample(
+            driver_id=self.w_id, 
+            process_id=self.id,
+            count_target=self.count_target,
+            start_io_count=self.benchark_io_count,
+            sample_seq=self.sample_count
+        )
         for o in self.operations:
-            self.resp_placeholder[o] = 0
-        
-    def stop_benchmark(self):
-        self.benchmark_struct["end"] = time.time()
-        walltime = self.benchmark_struct["end"] - self.benchmark_struct["start"]
-        for o in self.operations:
-            self.benchmark_struct["st"][o]["resp"] = [self.resp_placeholder[o]]
-            self.benchmark_struct["st"][o]["bytes/s"] = self.benchmark_struct["st"][o]["bytes"]/walltime
-            self.benchmark_struct["st"][o]["ios/s"] = self.benchmark_struct["st"][o]["ios"]/walltime
-        self.send_sample(final=True)
+            self.sample_struct.add_operation_class(o)
+        self.sample_count += 1
+        self.sample_struct.start()
 
-    def start_sample(self):
-        self.sample_struct = self.new_sample(start=time.time())
+    def stop_sample(self) -> None:
+        self.sample_struct.stop()
+        self.sample_struct.ttl = self.sample_struct.window_end + (DRIVER_REPORT_TIMER + 1)
+        self.send_sample(json.loads(self.sample_struct.dump_json()))
+        self.benchark_io_count = self.sample_struct.global_io_count
+        del self.sample_struct
 
-    def stop_sample(self):
-        self.sample_struct["end"] = time.time()
-
-        walltime = self.sample_struct["end"] - self.sample_struct["start"] 
-        for o in self.operations:
-            # create metric values for the sample
-            self.sample_struct["st"][o]["bytes/s"] = self.sample_struct["st"][o]["bytes"]/walltime
-            self.sample_struct["st"][o]["ios/s"] = self.sample_struct["st"][o]["ios"]/walltime
-
-            # Update benchmark totals
-            self.benchmark_struct["st"][o]["bytes"] += self.sample_struct["st"][o]["bytes"]
-            self.benchmark_struct["st"][o]["iotime"] += self.sample_struct["st"][o]["iotime"]
-            self.benchmark_struct["st"][o]["ios"] += self.sample_struct["st"][o]["ios"]
-            self.benchmark_struct["st"][o]["failures"] += self.sample_struct["st"][o]["failures"]
-            self.benchmark_struct["ios"] = self.sample_struct["ios"]
-            self.benchmark_struct["perc"] = self.sample_struct["perc"]
-        
-        self.send_sample()
-        
-
-    def start_io(self, type):
+    def start_io(self, type) -> None:
         self.current_op = type
-        self.unit_time = 0
         self.unit_start = time.time()
 
-    def stop_io(self, failed=False, sz=None):
 
-        self.unit_time = time.time() - self.unit_start
+    def stop_io(self, failed=False, sz=0, final=False) -> None:
+ 
+        unit_time = time.time() - self.unit_start
         if failed:
-            self.sample_struct["st"][self.current_op]["failures"] += 1
-            self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
+            self.sample_struct.add_failures(self.current_op, 1)
         else:
-            self.op_count += 1
-            self.sample_struct["st"][self.current_op]["resp"].append(self.unit_time)
-            self.sample_struct["st"][self.current_op]["ios"] += 1
-            self.sample_struct["st"][self.current_op]["iotime"] += self.unit_time
-            self.sample_struct["ios"] = self.op_count
-            if sz:
-                self.sample_struct["st"][self.current_op]["bytes"] += sz
-            if self.target:
-                self.sample_struct["perc"] = self.op_count/self.target
-            
-            # A weighted figure to go in the benchmark sample
-            self.resp_placeholder[self.current_op] = \
-                (self.resp_placeholder[self.current_op] + self.unit_time)/2
+            self.sample_struct.add_resp_time(self.current_op, unit_time)
+            self.sample_struct.add_ios(self.current_op)
+            self.sample_struct.add_bytes(self.current_op, sz)
+        
+        self.sample_struct.final = final
 
 
     ##
-    # Random data handlers
+    # Random-data handlers
     def get_bytes_from_pool(self, num_bytes) -> bytearray:
         start = random.randrange(0, self.pool_sz)
         ext = start + num_bytes
@@ -118,6 +92,7 @@ class SlorProcess:
         else:
             return self.byte_pool[start:ext]
 
+
     def mk_byte_pool(self, num_bytes) -> None:
         self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
         self.pool_sz = num_bytes
@@ -125,17 +100,7 @@ class SlorProcess:
 
     ##
     # IPC
-    def send_sample(self, final=False):
-
-        if final:
-            message = self.benchmark_struct
-            # This is a little silly but
-            for o in self.operations:
-                self.benchmark_struct["st"][o]["resp"] = \
-                    self.sample_struct["st"][self.current_op]["resp"] 
-        else:
-            message = self.sample_struct
-        
+    def send_sample(self, message):
         self.msg_to_driver(
             type="stat",
             stage=self.config["type"],
@@ -144,7 +109,6 @@ class SlorProcess:
         )
 
     def hand_shake(self):
-        
         self.sock.send({"ready": True})
         mesg = self.sock.recv()
         if mesg["exec"]:

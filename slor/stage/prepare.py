@@ -7,9 +7,10 @@ class Prepare(SlorProcess):
     r1 = None
     r2 = None
 
-    def __init__(self, socket, config, id):
+    def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
+        self.w_id = w_id
         self.config = config
         self.operations = ("write",)
 
@@ -28,7 +29,7 @@ class Prepare(SlorProcess):
 
         self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
-        
+        count = 0
         for skey in self.config["mapslice"]:
             if self.check_for_messages() == "stop":
                 break
@@ -41,7 +42,8 @@ class Prepare(SlorProcess):
                 try:
                     self.start_io("write")
                     self.s3ops.put_object(skey[0], skey[1], body_data)
-                    self.stop_io(sz=c_len)
+                    self.stop_io(sz=len(body_data))
+                    count += 1
                     break # worked, no need to retry
 
                 except Exception as e:
@@ -51,7 +53,7 @@ class Prepare(SlorProcess):
                     continue # Keep trying, you can do it
 
             # Report-in every now and then
-            if (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
+            if (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()
 

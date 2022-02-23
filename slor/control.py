@@ -16,6 +16,23 @@ def start_driver():
 
     return driver
 
+def input_checks(args):
+
+    keepgoing = True
+    
+    if args.force: return True
+
+    if args.save_readmap and (any(args.loads.find(x) for x in ("cleanup", "delete")) or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))):
+        sys.write.stdout("It looks like you're saving the readmap but have delete operations in your\n")
+        sys.write.stdout("workload. If you try to use this readmap for subsequent loads there will be\n")
+        sys.write.stdout("objects missing. ")
+        yn = input("You sure you mean this? (y/n): ")
+        if yn[0].upper == "N":
+            keepgoing = False
+
+    return keepgoing
+            
+
 def run():
     parser = argparse.ArgumentParser(
         description="Slor (S3 Load Ruler) is a distributed load generation and benchmarking tool for S3 storage"
@@ -136,10 +153,19 @@ def run():
         default=False,
         help="use readmap - this will obviate a prepare step and assume objects in the readmap exist"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="force 'yes' answer to any requests for input (e.g. 'are you sure?')"
+    )
     args = parser.parse_args()
     
+    if not input_checks(args):
+        sys.exit(1)
+
     if args.driver_list == "":
-        driver = start_driver(quiet=True)
+        driver = start_driver()
         args.driver_list = "127.0.0.1"
 
     if args.workload_file:

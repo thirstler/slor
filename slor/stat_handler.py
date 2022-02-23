@@ -1,10 +1,13 @@
-from pyclbr import Function
-import time, os
+from re import S
+import stat
+import time
 from shared import *
 import math
+from sample import perfSample
+import json
 
 class statHandler:
-    
+
     config = None
     standing_sample = {}
     global_sample = {}
@@ -12,7 +15,7 @@ class statHandler:
     last_show = 0
     stage = None
     count_target = 0
-    global_counter = 0
+    global_io_counter = 0
     progress_start_time = 0
     stage_start_time = 0
     last_rm_count = 0
@@ -24,6 +27,9 @@ class statHandler:
     ttl_procs = 0
     duration = 0
 
+    def __del__(self):
+        self.standing_sample.clear()
+        self.global_sample.clear()
 
     def __init__(self, config, stage, duration):
         self.config = config
@@ -37,7 +43,7 @@ class statHandler:
             for s in config["mixed_profile"]:
                 self.operations += (s,)
         else:
-            if any(stage == x for x in ("prepare", "blowout")):
+            if any(self.stage == x for x in ("prepare", "blowout")):
                 self.operations = ("write",)
             else:
                 self.operations = (self.stage,)
@@ -45,106 +51,95 @@ class statHandler:
         # How many processes in this job are we expecting?
         self.ttl_procs = len(self.config["driver_list"]) * self.config["driver_proc"]
 
-        # Create standing sample
-        for w in self.config["driver_list"]:
-            w = w["host"]
-            self.standing_sample[w] = {}
-            for p in range(0, self.config["driver_proc"]):
-                self.standing_sample[w][p] = sample_structure(self.operations)
-                self.standing_sample[w][p]["walltime"] = 0
-                self.standing_sample[w][p]["iotime"] = 0
-                self.standing_sample[w][p]["wrkld_eff"] = 0
 
     def set_count_target(self,count):
         self.count_target = count
 
     def update_standing_sample(self, data):
+        #print(data)
 
         sample_addr = "{}:{}".format(data["w_id"], data["t_id"])
-        if sample_addr not in self.reported_in:
-            self.reported_in += (sample_addr,)
-
-        self.standing_sample[data["w_id"]][data["t_id"]] = data["value"]
-
-        # Add a wall-time figure
-        self.standing_sample[data["w_id"]][data["t_id"]]["walltime"] = \
-            self.standing_sample[data["w_id"]][data["t_id"]]["end"] - \
-                self.standing_sample[data["w_id"]][data["t_id"]]["start"]
-
-        # Add IO time for all operations and a global count figure
-        iotime = 0
-        for o in self.standing_sample[data["w_id"]][data["t_id"]]["st"]:
-            iotime += self.standing_sample[data["w_id"]][data["t_id"]]["st"][o]["iotime"]
-            self.global_counter += self.standing_sample[data["w_id"]][data["t_id"]]["st"][o]["ios"]
-        self.standing_sample[data["w_id"]][data["t_id"]]["iotime"] = iotime
-
-        try:
-            # Add a benchmark process efficiency figure
-            self.standing_sample[data["w_id"]][data["t_id"]]["wrkld_eff"] = \
-                self.standing_sample[data["w_id"]][data["t_id"]]["iotime"] / \
-                self.standing_sample[data["w_id"]][data["t_id"]]["walltime"]
-        except:
-            self.standing_sample[data["w_id"]][data["t_id"]]["wrkld_eff"] = 0
-
-    def mk_global_sample(self):
-        self.global_sample.clear()
-        self.global_sample = sample_structure(self.operations)
-        self.global_sample["walltime"] = 0
-        self.global_sample["iotime"] = 0
-        self.global_sample["wrkld_eff"] = 0
-        self.global_sample["perc"] = 0
-
-        # Process count for the cleanup stageonly uses 1 worker per bucket
-        if self.stage == "cleanup":
-            count = self.config["bucket_count"]
+        #try:
+        if sample_addr not in self.standing_sample:
+            self.standing_sample[sample_addr] = perfSample(from_json=data["value"])
         else:
-            count = len(self.config["driver_list"]) * self.config["driver_proc"]
+            self.standing_sample[sample_addr].from_json(data["value"])
 
-        for w in self.standing_sample:
-            for t in self.standing_sample[w]:
-                self.global_sample["start"] += self.standing_sample[w][t]["start"]
-                self.global_sample["end"] += self.standing_sample[w][t]["end"]
-                self.global_sample["walltime"] += self.standing_sample[w][t]["walltime"]
-                self.global_sample["iotime"] += self.standing_sample[w][t]["iotime"]
-                self.global_sample["wrkld_eff"] += self.standing_sample[w][t]["wrkld_eff"]
-                self.global_sample["perc"] += self.standing_sample[w][t]["perc"]
-                self.global_sample["ios"] += self.standing_sample[w][t]["ios"]
-                try:
-                    for op in self.standing_sample[w][t]["st"]:
-                        self.global_sample["st"][op]["resp"] += self.standing_sample[w][t]["st"][op]["resp"]
-                        self.global_sample["st"][op]["bytes"] += self.standing_sample[w][t]["st"][op]["bytes"]
-                        self.global_sample["st"][op]["bytes/s"] += self.standing_sample[w][t]["st"][op]["bytes/s"]
-                        self.global_sample["st"][op]["ios"] += self.standing_sample[w][t]["st"][op]["ios"]
-                        self.global_sample["st"][op]["ios/s"] += self.standing_sample[w][t]["st"][op]["ios/s"]
-                        self.global_sample["st"][op]["failures"] += self.standing_sample[w][t]["st"][op]["failures"]
-                        self.global_sample["st"][op]["iotime"] += self.standing_sample[w][t]["st"][op]["iotime"]
-                except: pass
-
-        # fix global figures
-        self.global_sample["start"] /= count
-        self.global_sample["end"] /= count
-        self.global_sample["walltime"] /= count
-        self.global_sample["iotime"] /= count
-        self.global_sample["wrkld_eff"] /= count
-        self.global_sample["perc"] /= count
 
     def rotate_mixed_stat_func(self, final):
         if final: self.stat_rotation = 0
         if self.stat_types[int(self.stat_rotation)] == "throughput":
-            disp_func=self.ops_sec
+            disp_func=self.disp_ops_sec
         elif self.stat_types[int(self.stat_rotation)] == "bandwidth":
-            disp_func=self.bytes_sec
+            disp_func=self.disp_bytes_sec
         elif self.stat_types[int(self.stat_rotation)] == "response":
-            disp_func=self.resp_avg
+            disp_func=self.disp_resp_avg
         self.stat_rotation += 0.20
         if self.stat_rotation >= 3:
             self.stat_rotation = 0
         return disp_func
 
 
-    def show(self, final=False):
-        now = time.time()
+    # one-off routines to make things a little more readable
+    def expire_standing_samples(self, ref_time=time.time()):
+        for sid in self.standing_sample:
+            if self.standing_sample[sid].ttl > ref_time:
+                del self.standing_sample[sid]
 
+    def get_standing_window_average(self):
+        window_avg = 0
+        for sid in self.standing_sample:
+            window_avg += (self.standing_sample[sid].window_end - self.standing_sample[sid].window_start)
+        return window_avg
+
+    def mk_merged_sample(self):
+        now = time.time()
+        if self.stage in PROGRESS_BY_COUNT:
+            target = self.count_target
+        else:
+            target = None
+        stat_sample = perfSample(count_target=target)
+        stat_sample.init_global_sample()
+        for sid in self.standing_sample:
+            stat_sample.merge(self.standing_sample[sid])
+
+        window_avg = self.get_standing_window_average()
+
+        if len(self.standing_sample) > 0:
+            window_avg /= len(self.standing_sample)
+            stat_sample.start(start_time=(now-window_avg))
+            stat_sample.stop(stop_time=now)
+
+        return stat_sample
+
+    def print_workload_headers(self, header_items):
+        sys.stdout.write("\r")
+        sys.stdout.write("\u2502" + " "*25)
+        items = []
+        for o in header_items:
+            items.append("{}".format(o))
+        for i in items:
+            sys.stdout.write("{:>15}".format(i))
+        sys.stdout.write("    elapsed")
+        sys.stdout.write("\n")
+
+    def headers(self, mixed_count):
+        """ Show headers for the stage we're about to display stats for """
+        if self.stage == "mixed":
+            hlist = []
+            for x in  self.config["mixed_profiles"][mixed_count]:
+                hlist.append(x)
+            hlist.append("total")
+            self.print_workload_headers(hlist)
+            
+        elif any(self.stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
+             all(self.stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
+            self.print_workload_headers(("throughput", "bandwidth", "resp ms", "failures"))
+
+    def show(self, final=False):
+
+        # Determine if it's time to show the next sample or not
+        now = time.time()
         if (self.last_show + SHOW_STATS_RATE) >= now and final != True:
             return
 
@@ -158,76 +153,102 @@ class statHandler:
             if final: sys.stdout.write("\n")
             sys.stdout.flush()
             return
-            
-        self.mk_global_sample()
+
         sys.stdout.write("\r")
+
+        stat_sample = self.mk_merged_sample()
+        self.expire_standing_samples(ref_time=now)
+
+        if stat_sample.global_io_count < 1:
+            sys.stdout.write("\r\u2502 [ waiting for processes... ]")
+            sys.stdout.flush()
+            return
 
         # change color to indicated if all processes have checked on or not
         if final:
             color = ""
-        elif len(self.reported_in) == 0:
+        elif len(self.standing_sample) == 0:
             color = bcolors.FAIL
-        elif self.ttl_procs > len(self.reported_in):
+        elif self.ttl_procs > len(self.standing_sample):
             color = bcolors.OKGREEN
-        elif self.ttl_procs == len(self.reported_in):
+        elif self.ttl_procs == len(self.standing_sample):
             color = bcolors.OKBLUE
         else: # should never happen
             color = bcolors.FAIL
-            
+
         sys.stdout.write("\u2502 {}{:<9}{}".format(color, self.stage + ":", bcolors.ENDC))
-        if len(self.operations) > 1:
+
+        # Multipal operations in the sample, output rotating information
+        if len(stat_sample.operations) > 1:
+
+            # Workloads with time limit (any benchmark workload)
             if self.stage in PROGRESS_BY_TIME:
-                if len(self.reported_in) == 0:
-                    perc = 0
+                perc = 0
+                # Nothing reported in yet set values
+                if stat_sample.sample_seq == 0:
                     self.progress_start_time = time.time()
                 else:
                     perc = (time.time()-self.progress_start_time)/self.duration
-                if perc > 1: perc = 1
+
+                if perc > 1: perc = 1 # Just in case
+
                 self.progress(perc, final=final)
+
+            # Work-to-finish workloads (won't happen w/mixed workload)
             elif self.stage in PROGRESS_BY_COUNT:
-                self.progress(self.global_sample["perc"], final=final)
-            
-            stat_func = self.rotate_mixed_stat_func(final)
+
+                self.progress(stat_sample.percent_complete(), final=final)
+
             for o in self.operations:
-                sys.stdout.write(" {}".format(stat_func(operation=o)))
-            
+                sys.stdout.write(" {}".format(self.disp_ops_sec(stat_sample.get_rate("ios", o))))
+            sys.stdout.write(" {}".format(self.disp_ops_sec(stat_sample.get_workload_io_rate())))
+
             sys.stdout.write(" {}".format(self.elapsed_time()))
 
+        # Discrete operation
         else:
 
-            # Single operation
-
             if self.stage in PROGRESS_BY_TIME:
-                if len(self.reported_in) == 0:
-                    perc = 0
+                perc = 0
+                # Nothing to report,set  dummy values
+                if stat_sample.global_io_count == 0:
                     self.progress_start_time = time.time()
                 else:
                     perc = (time.time()-self.progress_start_time )/(self.duration + (DRIVER_REPORT_TIMER*2))
                 if perc > 1: perc = 1
                 self.progress(perc, final=final)
+
+            # Work-to-finish workloads (prepare, blowout)
             elif self.stage in PROGRESS_BY_COUNT:
-                self.progress(self.global_sample["perc"], final=final)
+
+                self.progress(stat_sample.percent_complete(), final=final)
+
+            # Unknown terminus (cleanup)
             elif self.stage in UNKNOWN_PROGRESS:
                 self.dunno(final=final)
 
-            sys.stdout.write(" {} {} {} {} {}".format(
-                self.ops_sec(operation=self.operations[0]),
-                self.bytes_sec(operation=self.operations[0]),
-                self.resp_avg(operation=self.operations[0]),
-                self.failure_count(operation=self.operations[0]),
-                self.elapsed_time()
-            ))
+            for op in stat_sample.operations:
+                sys.stdout.write(" {} {} {} {} {}".format(
+                    self.disp_ops_sec(stat_sample.get_rate("ios", op)),
+                    self.disp_bytes_sec(stat_sample.get_rate("bytes", op)),
+                    self.disp_resp_avg(stat_sample.get_resp_avg(op)),
+                    self.disp_failure_count(stat_sample.get_metric("failures", op)),
+                    self.elapsed_time()
+                ))
 
         if final: sys.stdout.write("\n")
         sys.stdout.flush()
+
+        
+        del stat_sample
         
         #print(self.stat_rotation)
         self.last_show = now
 
-        
+
     def readmap_progress(self, x, outof, final=False):
 
-        if (x % 1000) == 0 or final == True:
+        if (x % 1000) == 0 or final:
             nownow = time.time()
         else: return
 
@@ -242,8 +263,8 @@ class statHandler:
         sys.stdout.write(" {}".format(
             "[{:>7} op/s]".format(human_readable(rate, print_units="ops"))
         ))
-        
-        if final: 
+
+        if final:
             sys.stdout.write("\n")
 
         sys.stdout.flush()
@@ -251,20 +272,22 @@ class statHandler:
         self.last_rm_count = x
 
     def dunno(self, width=10, final=False, color=""):
-        blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
+        #blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
+        blocks = ("\u2588", "\u2589", "\u258A", "\u258B", "\u258C", "\u258D", "\u258E", "\u258F", "\u2590")
+        
         if final:
             sys.stdout.write("{}{} 100%{}".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC))
         else:
             for b in range(0, width):
-                sys.stdout.write(blocks[random.randint(0,13)])
+                sys.stdout.write(blocks[random.randint(0,len(blocks)-1)])
             sys.stdout.write(" ???%")
-            
+
 
     def progress(self, perc, width=10, final=False, color=""):
-        if final: perc = 1
+        if final or perc > 1: perc = 1
         blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588") # eighth blocks
         fillchar = u"\u2588"
-        char_w = perc*width
+        char_w = perc * width
         leading_char = blocks[math.floor((char_w*8) % 8)]
         if final:
             color = bcolors.GRAY
@@ -272,66 +295,21 @@ class statHandler:
         sys.stdout.write(u"{}{}{}{}{:>3}%{}".format(color, fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100), bcolors.ENDC))
 
 
-    def failure_count(self, stat_sample=None, operation=None):
-        if not stat_sample:
-            stat_sample = self.global_sample
-
-        if stat_sample["walltime"] == 0:
-            rate = 0
-        else:   
-            rate = human_readable(stat_sample["st"][operation]["failures"], print_units="ops")
-        return("[{:>8} ttl]".format(rate))
-
     def elapsed_time(self):
         elapsed = time.time() - self.stage_start_time
         hours, remainder = divmod(elapsed, 3600)
         minutes, seconds = divmod(remainder, 60)
         return("[{:>8}]".format('{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))))
 
-    def bytes_sec(self, stat_sample=None, operation=None, width=None):
-        if not stat_sample:
-            stat_sample = self.global_sample
+    def disp_bytes_sec(self, bytes_sec):
+        return("[{:>10}/s]".format(human_readable(bytes_sec)))
 
-        if stat_sample["walltime"] == 0:
-            rate = 0
-        else:
-            #rate = human_readable(stat_sample["st"][operation]["bytes"]/stat_sample["walltime"])
-            rate = human_readable(stat_sample["st"][operation]["bytes/s"])
-        return("[{:>10}/s]".format(rate))
-
-
-    def ops_sec(self, stat_sample=None, operation=None, width=None):
-        
-        color=""
-        if not stat_sample:
-            stat_sample = self.global_sample
-
-        if stat_sample["walltime"] == 0:
-            h_rate = 0
-        else:
-            #float_rate = stat_sample["st"][operation]["ios"]/stat_sample["walltime"]
-            float_rate = stat_sample["st"][operation]["ios/s"]
-            if self.config["iop_limit"] != 0 and float_rate > self.config["iop_limit"] and any(operation == x for x in ("read", "delete")):
-                color=bcolors.WARNING
-                
-            h_rate = human_readable(float_rate, print_units="ops")
+    def disp_ops_sec(self, ops_sec, color=""):
+        h_rate = human_readable(ops_sec, print_units="ops")
         return("[{}{:>7} op/s{}]".format(color, h_rate,bcolors.ENDC if color != "" else ""))
 
-    def resp_avg(self, stat_sample=None, operation=None, value=None, width=None):
-        resp_t = 0
-        if not stat_sample:
-            stat_sample = self.global_sample
+    def disp_resp_avg(self, resp_avg):
+        return("[{:>9.2f} ms]".format(resp_avg*1000))
 
-        if stat_sample["walltime"] == 0:
-            resp_t = 0
-        elif value:
-            resp_t = value
-        else:
-            for r in stat_sample["st"][operation]["resp"]:
-                resp_t += r
-            try:
-                resp_t = resp_t/len(stat_sample["st"][operation]["resp"])
-            except:
-                resp_t = 0
-
-        return("[{:>9.2f} ms]".format(resp_t*1000))
+    def disp_failure_count(self, count=0):
+        return("[{:>8} ttl]".format(human_readable(count, print_units="ops")))

@@ -12,32 +12,28 @@ import stage.mixed
 import stage.workload
 import stage.cleanup
 
-def _driver_t(socket, config, id):
+def _driver_t(socket, config, w_id, id):
     """
     Wrapper function to launch workload processes from a Process() call.
     """
+    
     if config["type"] == "prepare":
-        wc = stage.prepare.Prepare(socket, config, id).ready()
+        stage.prepare.Prepare(socket, config, w_id, id).ready()
     elif config["type"] == "blowout":
-        wc = stage.overrun.Overrun(socket, config, id).ready()
+        stage.overrun.Overrun(socket, config, w_id, id).ready()
     elif config["type"] == "read":
-        wc = stage.read.Read(socket, config, id).ready()
+        stage.read.Read(socket, config, w_id, id).ready()
     elif config["type"] == "write":
-        wc = stage.write.Write(socket, config, id).ready()
+        stage.write.Write(socket, config, w_id, id).ready()
     elif config["type"] == "head":
-        wc = stage.head.Head(socket, config, id).ready()
+        stage.head.Head(socket, config, w_id, id).ready()
     elif config["type"] == "delete":
-        wc = stage.delete.Delete(socket, config, id).ready()
+        stage.delete.Delete(socket, config, w_id, id).ready()
     elif config["type"] == "mixed":
-        wc = stage.mixed.Mixed(socket, config, id).ready()
+        stage.mixed.Mixed(socket, config, w_id, id).ready()
     elif config["type"] == "cleanup":
-        wc = stage.cleanup.CleanUp(socket, config, id).ready()
+        stage.cleanup.CleanUp(socket, config, w_id, id).ready()
 
-    try:
-        del wc
-    except:
-        # whatever
-        pass
 
 class SlorDriver:
     """
@@ -56,7 +52,7 @@ class SlorDriver:
     bindaddr = None
     bindport = None
     w_name = None
-    worker_name = None
+    w_id = None
 
     def __init__(self, socket, bindaddr, bindport):
 
@@ -92,7 +88,7 @@ class SlorDriver:
         self.reset = False
         print(" done with controller")
         self.sock.close()
-        
+
 
     def init_buckets(self, config):
         """
@@ -156,7 +152,7 @@ class SlorDriver:
             return
         if type(message) is str:
             message = {"message": message}
-        message["w_id"] = self.worker_name
+        message["w_id"] = self.w_id
 
         try:
             self.sock.send(message)
@@ -175,9 +171,9 @@ class SlorDriver:
                 global_ready = False
         return global_ready
 
-    
+
     def report_procs_ready(self):
-        self.sock.send({"ready": True})    
+        self.sock.send({"ready": True})
 
         # Wait for the go signal
         mesg = self.sock.recv()
@@ -205,7 +201,7 @@ class SlorDriver:
                 config["bucket"] = bucket
                 self.pipes.append((Pipe()))
                 self.procs.append(
-                    Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
+                    Process(target=_driver_t, args=(self.pipes[-1][1], config, self.w_id, id))
                 )
                 self.procs[-1].start()
 
@@ -235,17 +231,17 @@ class SlorDriver:
                 # Create socket for talking to thread and launch
                 self.pipes.append((Pipe()))
                 self.procs.append(
-                    Process(target=_driver_t, args=(self.pipes[-1][1], config, id))
+                    Process(target=_driver_t, args=(self.pipes[-1][1], config, self.w_id, id))
                 )
                 self.procs[-1].start()
 
-        
+
             if not self.check_procs_ready():
                 return False
             if not self.report_procs_ready():
                 return False
 
-        
+
         ##
         # Monitoring and return the responses
         while True:
@@ -280,7 +276,7 @@ class SlorDriver:
 
         # Alert controller that the current workload is finished
         self.log_to_controller({"status": "done"})
-        
+
 
     def process_thread_resp(self, resp):
         # we can filter messages intended for the driver if we want
@@ -309,7 +305,7 @@ class SlorDriver:
             return
         elif cmd_buffer["command"] == "workload":
             if "config" in cmd_buffer:
-                self.worker_name = cmd_buffer["config"]["host"]
+                self.w_id = cmd_buffer["config"]["host"]
             # Init is done at the driver level, make buckets and exit
             if (
                 "type" in cmd_buffer["config"]
@@ -320,6 +316,6 @@ class SlorDriver:
                     self.log_to_controller({"status": "done"})
                     return
                 return
-                
+
             # Everything else is managed in separate processes
             self.thread_control(cmd_buffer["config"])

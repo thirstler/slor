@@ -37,7 +37,8 @@ is that the drivers and controller process all need to be on the same OS
 type (Linux, Max, Windows, *BSD). This is because it makes extensive use of
 the multiprocessing module which has handlers for simplifying for inter-process
 communication. These handlers automatically pickle data in formats that aren't
-cross-compatible.
+cross-compatible. Even different python builds on different Linux distributions
+can be incompatible. It should be possible to fix the picking problem later. 
 
 
 Installation
@@ -47,171 +48,35 @@ Slor is not currently packaged so just download it, find "slor.py" and run it
 where it is (this will likely change at some point).
 
 
+Running a Workload
+==================
 
-NOTES TO SELF
-=============
+You can easily start a workload using the "controller" command. Minimally you
+need an accessKey/secretKey and an endpoint to use. For example:
 
-Mixed workload structure:
+    ./slor controller --access-key user --secret-key password --endpoint http://127.0.0.1
 
-mixed = {
-    "reads": 0,        # %
-    "write": 0,        # %
-    "delete": 0,       # %
-    "head": 0,         # %
-    "reread": 0,       # %
-    "overwrite": 0,    # %
-    "tag_write": 0,    # %
-    "tag_read": 0,     # %
-    "tag_config": {
-        "key_len": 0,  # Range or value
-        "value_len: 0  # Range or value
-    }
-}
+A driver process will automatically launch a default benchmark workload with the 
+following settings:
 
-Complex workload structure:
+* Workload list:
+    * read
+    * write
+    * head
+    * mixed (with default profile):
+        * 60% read
+        * 25% write
+        * 5% delete
+        * 10% head
+    * delete
+    * cleanup
+* 10 worker threads will launch
+* Data will be auto-prepared to accomodate 1000 ops/s for the stage run time (5 min)
+* 1MB objects will be used in the workloads
+* Each stage will run for 5 minutes
+* A single (1) bucket will be used in the test
+* Bucket prefix will be "slor-" (resulting bucket name "slor-0")
 
-{
-    "prefix_struct": [
-        {
-            "num_prefix": INT,
-            "key_length": INT,
-            "ratio" INT,           # weight for determining probability of objects getting placed here on write
-            "prefix_struc": [
-                {
-                    "num_prefix": INT,
-                    "key_length": INT,
-                    "ratio": INT,  # sub-ratio of parent
-                    "prefix_struc": [ ... ]
-                }
-            ]
-        }
-    ],
-    "work": [
-        {
-            "stream_name": arbitrary name, streams with the same name will share object operations with other streams (overwrite).
-            "action": oneof(read, write, reread, overwrite, head, delete)
-            "object_size": bytes or range,
-            "key_length": length or range, in chars, for keys
-            "ratio": weight number to be used relative to the other operations to determine occurrence probability for this operation,
-        }
-    ]
-}
-
-Example workload file contents:
-{
-    "name": "Demo Workload File"
-    "access_key": "admin",             #
-    "secret_key": "password",          #
-    "endpoint": "http://localhost",    # 
-    "verify_tls": False,               # Theses items can be located in the "workgroup" section as well
-    "region": "us-east-1",             #
-    "bucket_prefix": "bench-bucket-",  #
-    "bucket_count": 8,                 #
-    "prefix_struct": [                 # Prefix structure can be defined in the workgroup
-        {
-            "num_prefix": 20,
-            "key_length": 20
-            "ratio": 5,
-            "prefix_struct": [
-                {
-                    "num_prefix": 25,
-                    "key_length": 18,
-                    "ratio": 1
-                    "prefix_struct": [
-                        {
-                            "num_prefix": 12,
-                            "key_length": 18,
-                            "ratio": 1
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "num_prefix": 20,
-            "key_length": 14
-            "ratio": 1,
-            "prefix_struct": [
-                "num_prefix": 12,
-                "key_length": 20,
-                "ratio": 1,
-                "prefix_struct": [
-                    {
-                        "num_prefix": 25,
-                        "key_length": 18,
-                        "ratio": 1
-                    }
-                ]
-            ]
-        },
-    ],
-    "workgroups": [
-        {
-            "time": 3600,
-            "auto_prepare": "1000G" # use the write ratios to create this amount of data ahead of time
-            "auto_overrun": "1.7T"  # Write a lot of garbage after prepare stage to overrun page/controller caches
-            "prefix_struct": {}
-            "work": [
-                {
-                    "stream_name": "indexes",
-                    "action": "write",
-                    "object_size": "1K-15K",
-                    "key_length" "4-12",
-                    "ratio": 50
-                },
-                {
-                    "stream_name": "indexes",
-                    "action": "read",
-                    "ratio": 50
-                },
-                {
-                    "stream_name": "indexes",
-                    "action": "reread",
-                    "ratio": 10
-                },
-                {
-                    "stream_name": "indexes",
-                    "action": "overwrite",
-                    "object_size": "1K-15K",
-                    "key_length" "4-12",
-                    "ratio": 10
-                },
-                {
-                    "stream_name": "indexes",
-                    "action": "delete",
-                    "ratio": 2
-                },
-                {
-                    "stream_name": "blobs",
-                    "action": "write",
-                    "object_size": "4M-22M",
-                    "key_length" "18",
-                    "ratio": 500
-                },
-                {
-                    "stream_name": "blobs",
-                    "action": "read",
-                    "ratio": 5000
-                },
-                {
-                    "stream_name": "blobs",
-                    "action": "reread",
-                    "ratio": 10000
-                },
-                {
-                    "stream_name": "blobs",
-                    "action": "head",
-                    "ratio": 5000
-                },
-                {
-                    "stream_name": "blobs",
-                    "action": "delete",
-                    "ratio": 100
-                }
-            ]
-        }
-    ]
-}
-
+This is a perfectly good way to start but you'll likely
 
 
