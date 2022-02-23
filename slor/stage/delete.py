@@ -1,15 +1,19 @@
 from shared import *
 from process import SlorProcess
+import time
+
 
 class Delete(SlorProcess):
 
     s3ops = None
 
-    def __init__(self, socket, config, id):
+    def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
+        self.w_id = w_id
         self.config = config
         self.operations = ("delete",)
+        self.benchmark_stop = time.time() + config["run_time"]
 
     def ready(self):
 
@@ -40,6 +44,6 @@ class Delete(SlorProcess):
                 self.stop_benchmark()
                 break
 
-            elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
+            elif (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()

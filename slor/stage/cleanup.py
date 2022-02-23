@@ -4,9 +4,10 @@ import boto3
 
 class CleanUp(SlorProcess):
 
-    def __init__(self, socket, config, id):
+    def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
+        self.w_id = w_id
         self.config = config
         self.operations = ("cleanup",)
 
@@ -66,7 +67,7 @@ class CleanUp(SlorProcess):
                 sys.stderr.flush()
                 self.stop_io(failed=True)
 
-            if (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
+            if (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()
 

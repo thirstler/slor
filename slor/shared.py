@@ -17,9 +17,9 @@ DEFAULT_BENCH_LEN = "300"
 DEFAULT_OBJECT_SIZE = "1MB"
 DEFAULT_DRIVER_PORT = "9256"
 DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
-DEFAULT_SESSION_COUNT = "1"
-DEFAULT_UPPER_IOP_LIMIT = "0"
-DEFAULT_TESTS = "read,write,head,mixed,delete"
+DEFAULT_SESSION_COUNT = "10"
+DEFAULT_UPPER_IOP_LIMIT = "1000"
+DEFAULT_TESTS = "read,write,head,mixed,delete,cleanup"
 DEFAULT_MIXED_PROFILE = '[{"read": 60, "write": 25, "delete": 5, "head": 10}]'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
@@ -76,10 +76,10 @@ class bcolors:
 
 
 BANNER = """
-┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
-│{0}SLOR{1} {2}▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁{1}│
-└────┴────┴────┴────┴────┴────┴────┴────┴────┴────┘
-""".format(bcolors.BOLD,bcolors.ENDC,bcolors.OKBLUE)
+┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
+│{0}SLOR{1} {2}▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁{1}│
+└─────────┴────────┴───────┴──────┴─────┴────┴───┴──┴─┴┘
+""".format(bcolors.BOLD,bcolors.ENDC,bcolors.CYAN)
 
 ###############################################################################
 ## Globally shared routines
@@ -100,7 +100,7 @@ def parse_size(stringval: str) -> float:
 
     for s in ["KB", "MB", "GB", "TB", "PB", "EB"]:
         # Deal with single-letter suffixes and two letter (e.g. "MB" and "M")
-        if stringval[-1:] == s[0]: 
+        if stringval[-1:] == s[0]:
             return float(stringval[0:-1]) * (10 ** sipwr)
         if stringval[-2:] == s:
             return float(stringval[0:-2]) * (10 ** sipwr)
@@ -110,10 +110,10 @@ def parse_size(stringval: str) -> float:
 
 
 def human_readable(value, val_format="SI", print_units="bytes", precision=2):
-    
+    if not value: return 0
     if val_format == "SI":
         sipwr = 18
-        
+
         if print_units == "ops":
             units = ["E", "P", "T", "G", "M", "K", ""]
         else:
@@ -213,9 +213,13 @@ def gen_key(key_desc=(40, 40), prefix="", inc=None, chars=string.digits + string
         inc=str(inc)
         chars = len(inc)
         key = (key[:-chars] + inc) if chars < len(key) else inc
-        
+
     return key
 
+def opclass_from_label(label):
+    return label[:label.find(":")] if ":" in label else label
+
+"""
 def sample_structure(operations):
     sample = {
         "start": 0,          # start of sample
@@ -235,6 +239,8 @@ def sample_structure(operations):
             "iotime": 0,     # time spend in io (seconds)
         }
     return sample
+"""
+
 
 
 def top_box():

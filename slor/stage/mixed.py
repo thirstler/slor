@@ -1,5 +1,6 @@
 from shared import *
 from process import SlorProcess
+import time
 
 class Mixed(SlorProcess):
 
@@ -10,13 +11,15 @@ class Mixed(SlorProcess):
     wid_str = None
     w_count = 0
 
-    def __init__(self, socket, config, id):
+    def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
+        self.w_id = w_id
         self.config = config
         for x in self.config["mixed_profile"]:
             self.operations += (x,)
         self.wid_str = str(self.config["w_id"])
+        self.benchmark_stop = time.time() + config["run_time"]
             
     def ready(self):
 
@@ -29,6 +32,8 @@ class Mixed(SlorProcess):
 
 
     def _read(self):
+        resp = None
+        
         if self.all_is_fair:
             key = self.get_key_from_existing()
         else:
@@ -185,13 +190,13 @@ class Mixed(SlorProcess):
         self.start_sample()
         while True:
 
-            self.do(self.dice[random.randint(0,99)])
+            self.do(self.dice[random.randint(0,len(self.dice)-1)])
             
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()
                 self.stop_benchmark()
                 break
 
-            elif (self.unit_start - self.sample_struct["start"]) >= DRIVER_REPORT_TIMER:
+            elif (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()

@@ -9,7 +9,7 @@ from stat_handler import *
 import copy
 
 def parse_workload(file):
-    
+
     try:
         workload_f = yaml.safe_load(open(file, "r"))
     except Exception as e:
@@ -17,7 +17,7 @@ def parse_workload(file):
         return None
     if "workgroups" not in workload_f:
         print("no workgroups in the workload file")
-        
+
     config = {"config_type": "advanced"}
 
     # Global items for use in workload definitions
@@ -62,7 +62,7 @@ def parse_workload(file):
             sys.exit(1)
 
     return workload_f
-    
+
 
 def build_prefix_placement_map(keylist):
     ratio_ttl = 0
@@ -70,7 +70,7 @@ def build_prefix_placement_map(keylist):
         ratio_ttl += key[1]
 
     prefix_pmap = []
-    
+
     ki = 0
     while ki < len(keylist):
         for m in range(0, keylist[ki][1]):
@@ -83,7 +83,7 @@ def build_prefix_placement_map(keylist):
 def build_prefix_list(struct_def):
 
     keylist = _build_prefix_list(struct_def)
-    
+
     mult = 1
     loopon = True
     while loopon:
@@ -114,11 +114,10 @@ def _build_prefix_list(struct_def, prefix_key="", ratio_mult=1, delimiter='/'):
                 keys += _build_prefix_list(prefix_s["prefix_struct"],
                         prefix_key=key,
                         ratio_mult=(prefix_s["ratio"]/prefix_s["num_prefix"]))
-    
     return keys
 
 def build_prefix_keys(struct_def):
-    
+
     for prefix in struct_def:
         keylist = []
         # Generate keys
@@ -173,16 +172,14 @@ def parse_driver_list(stringval):
 def generate_tasks(args):
 
     loads = list(args.loads.split(","))
-    #print(loads)
     mix_prof_obj = {}
     for l in loads:
-        ld_name = l.split(":")
-        if ld_name[0] not in LOAD_TYPES:
+        if l not in LOAD_TYPES:
             sys.stderr.write('"{0}" is not a load option\n'.format(l))
             sys.exit(1)
 
     if "mixed" in loads:
-        
+
         mix_prof_obj = json.loads(args.mixed_profiles)
         check_mixed_workloads(mix_prof_obj, loads)
 
@@ -200,11 +197,21 @@ def generate_tasks(args):
 
     # Create a readmap and add prep stage if needed
     if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
-        loads.insert(1, "readmap")
+        loads.insert(1, "readmap")      # Will always be after init
         if not args.use_readmap:
-            loads.insert(2, "prepare")
+            loads.insert(2, "prepare")  # Will always be after readmap
 
-    return {"loadorder": loads, "mixed_profiles": mix_prof_obj}
+    # rename repeat load classes to lables that include an instance index
+    lclass_itr = {}
+    newloads = []
+    for i, l in enumerate(loads):
+        if sum(x == l for x in loads) > 1:
+            lclass_itr[l] = 0 if l not in lclass_itr else lclass_itr[l] + 1
+            newloads.append("{}:{}".format(loads[i], lclass_itr[l]))
+        else:
+            newloads.append(l)
+
+    return {"loadorder": newloads, "mixed_profiles": mix_prof_obj}
 
 
 def basic_workload(args):
@@ -226,7 +233,7 @@ def check_mixed_workloads(mix_prof_obj, loads):
         sys.stderr.write("\nCONFIG ERROR: you have {} mixed load(s) queued, but {} mixed profile(s) defined\n\n".format(
                 loads.count("mixed"), len(mix_prof_obj)))
         sys.exit(1)
-    
+
 
 def classic_workload(args):
     # if no cmd line args, get from profile, then env (in that order)
@@ -284,5 +291,3 @@ def classic_workload(args):
         "key_prefix": args.key_prefix
     }
     return root_config
-
-

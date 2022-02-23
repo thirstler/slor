@@ -3,7 +3,6 @@ from multiprocessing.connection import Client
 import random
 import time
 from shared import *
-import os.path
 from stat_handler import statHandler
 from db_ops import SlorDB
 import json
@@ -36,18 +35,16 @@ class SlorControl:
         if not self.connect_to_driver():
             self.print_message("driver(s) failed check(s), I'm out")
             sys.exit(1)
-        
+
         print("")
         top_box()
         sys.stdout.write("\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"])))
         sys.stdout.write("processes reporting: {0}none{3}, {1}some{3}, {2}all{3}".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
         sys.stdout.write("\n\u2502\n")
-
         for stage_val in self.config["tasks"]["loadorder"]:
             stage, duration = self.parse_stage_string(stage_val)
-
-            if self.config["tasks"]["loadorder"].count(stage) > 1:
-                self.stage_itr[stage] = -1
+            if sum(opclass_from_label(stage_val) == opclass_from_label(x) for x in self.config["tasks"]["loadorder"]) > 1:
+                self.stage_itr[opclass_from_label(stage)] = -1
 
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
             stage, duration = self.parse_stage_string(stage)
@@ -60,8 +57,8 @@ class SlorControl:
             if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
                 sys.stdout.write("\u2502 {}Note:{} blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n".format(bcolors.BOLD, bcolors.ENDC))
                 continue
-            elif stage == "sleep":
 
+            elif stage == "sleep":
                 sys.stdout.write("\u2502     [     sleeping ({})...     ]   ".format(duration))
                 sys.stdout.flush()
                 time.sleep(duration)
@@ -137,23 +134,10 @@ class SlorControl:
         mixed_count = 0
 
         for i, stage in enumerate(self.config["tasks"]["loadorder"]):
+            stage = stage[:stage.find(":")] if ":" in stage else stage # Strip label information
             stagecount += 1
-            stage_sp = stage.split(":")
-            if len(stage_sp) == 1:
-                stage = stage_sp[0]
-                duration = self.config["sleeptime"] if stage == "sleep" else self.config["run_time"]
-            elif len(stage_sp) == 2:
-                try:
-                    stage = stage_sp[0]
-                    duration = int(stage_sp[1])
-                except:
-                    sys.stderr.write("bad task value: {} (\"{}\" not an int?)\n".format(stage, stage_sp[1]))
-                    sys.exit(1)
-
-            else:
-                sys.stderr.write("bad task value: {}\n".format(stage))
-                sys.exit(1)
-
+            duration = self.config["sleeptime"] if stage == "sleep" else self.config["run_time"]
+            print(stage)
             if stage == "mixed":
                 mixed_prof = self.config["tasks"]["mixed_profiles"][mixed_count]
                 mixed_count += 1
@@ -187,12 +171,12 @@ class SlorControl:
                 cft_text += "{} {}: {}\n".format(" "*19, stagecount, "sleep for {} seconds".format(duration))
 
         return cft_text
-        
+
 
     def connect_to_driver(self):
         ret_val = True
         self.config["driver_node_names"] = []
-        
+
         top_box()
         print(u"\u2502 DRIVERS ({})".format(len(self.config["driver_list"])))
         print(u"\u2502")
@@ -265,17 +249,6 @@ class SlorControl:
         return return_msg
 
 
-    def print_workload_headers(self, header_items):
-        sys.stdout.write("\r")
-        sys.stdout.write("\u2502" + " "*25)
-        items = []
-        for o in header_items:
-            items.append("{}".format(o))
-        for i in items:
-            sys.stdout.write("{:>15}".format(i))
-        sys.stdout.write("    elapsed")
-        sys.stdout.write("\n")
-
     def exec_stage(self, stage, duration):
         """
         Contains the main loop communicating with driver processes
@@ -284,8 +257,8 @@ class SlorControl:
         workloads = []
         n_wrkrs = len(self.config["driver_list"])
 
-        if stage in self.stage_itr:
-            self.stage_itr[stage] += 1
+        if opclass_from_label(stage) in self.stage_itr:
+            self.stage_itr[opclass_from_label(stage)] += 1
 
         # Create the workloads
         for wc, target in enumerate(self.config["driver_list"]):
@@ -303,29 +276,21 @@ class SlorControl:
                     "{0}{1}".format(self.config["bucket_prefix"], bc)
                 )
 
-        # Decide on workload headers
-        if stage == "mixed" and self.last_stage != "mixed":
-            #self.print_mixed_workload_headers()
-            self.print_workload_headers(self.config["mixed_profiles"][self.mixed_count])
-        elif any(stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
-             all(self.last_stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
-            #self.print_discrete_workload_headers()
-            self.print_workload_headers(("throughput", "bandwidth", "resp ms", "failures"))
-
         # Send workloads to driver
         for i, wl in enumerate(workloads):
             self.conn[i].send({"command": "workload", "config": wl})
-        
+
         self.block_until_ready()
         resp = self.poll_for_response()
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
-        
+
         stats_config = copy.deepcopy(self.config)
         stats_config["mixed_profile"] = self.config["mixed_profiles"][self.mixed_count]
-        self.stats_h = statHandler(stats_config, stage, duration)
+        self.stats_h = statHandler(stats_config, opclass_from_label(stage), duration)
         if self.get_readmap_len() > 0:
             self.stats_h.set_count_target(self.get_readmap_len())
+        self.stats_h.headers(self.mixed_count)
 
         """
         Primary Loop - monitors the drivers by polling messages from them
@@ -353,27 +318,29 @@ class SlorControl:
             self.stats_h.show()
             time.sleep(0.01)
 
-        if stage == "mixed" and self.mixed_count < len(self.config["mixed_profiles"])-1:
+        if opclass_from_label(stage) == "mixed" and self.mixed_count < len(self.config["mixed_profiles"])-1:
             self.mixed_count += 1
-        
+
         if stage != "sleep":
             self.last_stage = stage
 
+        del self.stats_h
+
     def block_until_ready(self):
 
-        sys.stdout.write("\r\u2502   [   waiting on worker processes...   ]")
+        sys.stdout.write("\r\u2502 [waiting on worker processes...]")
         sys.stdout.flush()
         global_ready = True
-        
+
         for i in range(0, len(self.config["driver_list"])):
             ready = self.conn[i].recv()
             if ready["ready"] != True:
                 global_ready = False
-        
+
         if global_ready:
             for i in range(0, len(self.config["driver_list"])):
                 self.conn[i].send({"exec": True})
-        
+
         sys.stdout.write("\r \u2502                                  ")
         sys.stdout.flush()
 
@@ -404,20 +371,22 @@ class SlorControl:
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             loc_stage_iter = None
-            if message["stage"] in self.stage_itr:
-                loc_stage_iter = str(self.stage_itr[message["stage"]])
-            self.slordb.store_stat(message, stage_itr=loc_stage_iter)
+            
+            self.slordb.store_stat(message,
+                    stage_itr=str(self.stage_itr[message["stage"]])
+                        if message["stage"] in self.stage_itr
+                        else None)
         else:
-            pass 
+            pass
 
     def check_status(self, mesg):
         if "status" in mesg and mesg["status"] == "done":
             return "done"
 
         return False
-    
-    
-    def mk_read_map(self, key_desc={"min": 40, "max": 40}):
+
+
+    def mk_read_map(self):
 
         # config items that need to be saved/restored with the readmap
         cfg_keys = ("sz_range", "bucket_prefix", "bucket_count", "key_sz", "ttl_prepare_sz", "prepare_objects")
@@ -459,18 +428,18 @@ class SlorControl:
                 if (z+1) == objcount:
                     fin = True
                 stat_h.readmap_progress(z, objcount, final=fin)
-        
+
         if self.config["save_readmap"]:
             save_contents = {"readmap": self.readmap}
             for cfg in cfg_keys:
                 save_contents[cfg] = self.config[cfg]
-                
+
             with open(self.config["save_readmap"], "w") as fh:
                 fh.write(json.dumps(save_contents))
                 fh.close()
-    
+
     def parse_stage_string(self, stage_str):
-        items = stage_str.split(":")
+        items = stage_str.split("~")
         if len(items) == 2:
             return items[0], int(items[1])
         else:
@@ -478,8 +447,9 @@ class SlorControl:
             return items[0], int(self.config["sleeptime"]) if items[0] == "sleep" else int(self.config["run_time"])
 
     def mk_stage(self, target, stage, wid, duration):
-       
         
+        stage = opclass_from_label(stage)
+
         # Base config for every stage
         config = {
             "host": target["host"],
