@@ -28,8 +28,8 @@ class SlorAnalysis:
     def export_csv(self):
         pass
 
-    def format_key_value(self, key, value, l_col=26, r_col=18):
-        return "{2:<{0}}{4}{3:<{1}}{5}".format(l_col, r_col, key, value, bcolors.BOLD, bcolors.ENDC)
+    def format_key_value(self, key, value, l_col=26, r_col=18, valcolor="\0\0\0\0\0\0\0"):
+        return "{2:<{0}}{4}{3:<{1}}{5}".format(l_col, r_col, key, value, valcolor, bcolors.ENDC)
         
     def print_basic_stats(self):
 
@@ -68,7 +68,7 @@ class SlorAnalysis:
                 b["host"], b["port"], bcolors.ENDC))
         right.append(self.format_key_value("Processes per driver:", "{} ({} ttl)".format(
             global_config["driver_proc"], global_config["driver_proc"]*len(global_config["driver_list"]))))
-        right.append(self.format_key_value("Cache overrun target:", global_config["ttl_sz_cache"]))
+        right.append(self.format_key_value("Cache overrun target:", human_readable(global_config["ttl_sz_cache"])))
         right.append(self.format_key_value("Prepared data size:", human_readable(global_config["ttl_prepare_sz"])))
         right.append("IOs/sec target (used to calculate prepared data size):")
         right.append("  {:20}".format("{}{}{} ops ({} ops x {} sec x {} = {})".format(
@@ -141,7 +141,7 @@ class SlorAnalysis:
                 text += "{:<50} {:<30}\n".format(left[z], right[z])
 
             text += "\nAggregate Stage Stats (all operations)\n"
-            text += "     Window: {0}{1:<12.2f}{2} {3}- sample window in seconds{2}\n".format(
+            text += "     Window: {0}{1:<12.2f}{2} {3}- analysed sample window in seconds{2}\n".format(
                 bcolors.BOLD, stats[stage]["global"]["window"], bcolors.ENDC, bcolors.GRAY)
             text += "   I/O time: {0}{1:<12.2f}{2} {3}- cumulative time spent during I/O (vs other processesing){2}\n".format(
                 bcolors.BOLD, stats[stage]["global"]["iotime"], bcolors.ENDC, bcolors.GRAY)
@@ -162,9 +162,9 @@ class SlorAnalysis:
                 left = []
                 left.append(self.format_key_value("  Workload sample len.:", "{} sec".format((stage_range[1]-stage_range[0])/1000)))
                 left.append(self.format_key_value("  Average object size:", human_readable(alias["ttl_bytes"]/alias["ttl_operations"])))
-                left.append(self.format_key_value("  Average bandwidth:", "{}/s".format(human_readable(alias["bytes/s"]))))
+                left.append(self.format_key_value("  Bandwidth:", "{}/s".format(human_readable(alias["bytes/s"])), valcolor=bcolors.BOLD))
+                left.append(self.format_key_value("  Average ops/s:", human_readable(alias["ios/s"], print_units="ops"), valcolor=bcolors.BOLD))
                 left.append(self.format_key_value("  Total bytes:", human_readable(alias["ttl_bytes"])))
-                left.append(self.format_key_value("  Average ops/s:", human_readable(alias["ios/s"], print_units="ops")))
                 left.append(self.format_key_value("  Total operations:", human_readable(alias["ttl_operations"], print_units="ops")))
                 left.append(self.format_key_value("  Share of stage ops:", "{:.2f}%".format((alias["ttl_operations"]/stats[stage]["global"]["ios"])*100)))
                 left.append(self.format_key_value("  Failed operations:", "{} ({:.2f}%)".format(
@@ -174,7 +174,7 @@ class SlorAnalysis:
 
 
                 right = []
-                right.append(self.format_key_value("Response time average:", "{:.2f} ms".format(alias["resp_avg"]*1000)))
+                right.append(self.format_key_value("Response time average:", "{:.2f} ms".format(alias["resp_avg"]*1000), valcolor=bcolors.BOLD))
                 right.append(self.format_key_value("Response time percentiles (% below):", ""))
                 right.append(self.format_key_value("  0.99999:", "{:.4f} ms".format(alias["resp_perc"]["0.99999"]*1000)))
                 right.append(self.format_key_value("  0.9999:", "{:.4f} ms".format(alias["resp_perc"]["0.9999"]*1000)))
@@ -199,7 +199,7 @@ class SlorAnalysis:
         self.stages = self.get_stages()
 
         for stage in self.stages:
-            if stage in self.not_workload: continue
+            if opclass_from_label(stage) in self.not_workload: continue
             stage_range = self.get_stage_range(stage)
             stats[stage] = self.get_stats(stage, stage_range[0], stage_range[1])
         return stats
@@ -208,7 +208,7 @@ class SlorAnalysis:
     def dump_csv(self):
         stages = self.get_stages()
         for stage in stages:
-            if stage in self.not_workload: continue
+            if opclass_from_label(stage) in self.not_workload: continue
             print("STAGE,"+stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
@@ -300,90 +300,54 @@ class SlorAnalysis:
         workers = self.get_workers()
         cur = self.conn.cursor()
         returnval = {}
+        master = perfSample()
+        master.start(start_time=start/1000)
+        master.stop(stop_time=stop/1000)
+        sample_count = 0
+        cumulative_wall_time = 0
 
-        class aggregate:
-            
-            def __init__(self):
-                self.ios = 0
-                self.bytes = 0
-                self.failures = 0
-                self.ios_s = 0
-                self.bytes_s = 0
-                self.failures_s = 0
-                self.resp = 0
-                self.iotime = 0
-                self.resp_all = []
-
-        aggregates = {}
-
-        globals = {
-            "window": (stop - start)/1000,
-            "walltime": 0,
-            "iotime": 0,
-            "wrkld_eff": 0,
-            "ios": 0,
-            "sample_count": 0
-        }
-    
-        window = (stop - start)/1000
         ##
         # Loop through all of the drivers
         for i, worker in enumerate(workers):
             query = "SELECT data FROM {} WHERE stage=\"{}\" AND ts >= {} AND ts <= {} ORDER BY ts".format(worker, stage, start, stop)
             data = cur.execute(query)
-
+            
             
             ##
             # Each row is a sample from a single driver
             for row in data:
                 stat = json.loads(row[0])
-
-            
                 sample = perfSample(from_json=stat["value"])
-     
-
-                globals["walltime"] += sample.walltime()
-                #globals["ios"] += sample.global_io_count
-                globals["iotime"] += sample.global_io_time
-                globals["wrkld_eff"] += globals["iotime"]/globals["walltime"]
-                globals["sample_count"] += 1
-
-                ##
-                # Process each operation in the sample
-                for op in sample.get_operations():
-                    # Create stats vars for this op
-                    if op not in aggregates:
-                        aggregates[op] = aggregate()
-
-                    globals["ios"] += sample.get_metric("ios", op)
-                    aggregates[op].ios += sample.get_metric("ios", op)
-                    aggregates[op].ios_s += sample.get_rate("ios", op)
-                    aggregates[op].bytes += sample.get_metric("bytes", op)
-                    aggregates[op].bytes_s += sample.get_rate("bytes", op)
-                    aggregates[op].failures += sample.get_metric("failures", op)
-                    aggregates[op].failures_s += sample.get_rate("failures", op)
-                    aggregates[op].iotime += sample.iotime(op)
-                    aggregates[op].resp_all += sample.get_metric("iotime", op)
-
+                master.merge(sample)
+                sample_count += 1
+                cumulative_wall_time += sample.walltime()
                 del sample
 
-        globals["wrkld_eff"] /= globals["sample_count"]
+
+        globals = {
+            "window": master.walltime(),
+            "ios": master.get_metric("ios"),
+            "walltime": cumulative_wall_time,
+            "iotime": master.iotime(),
+            "sample_count": sample_count,
+        }
+        globals["wrkld_eff"] = globals["iotime"]/globals["walltime"]
 
         returnval = {
             "global": globals,
             "operations": {}
         }
-        for op in aggregates:
+        for op in master.get_operations():
             returnval["operations"][op] = {
-                "ios/s": aggregates[op].ios_s/globals["sample_count"],
-                "bytes/s": aggregates[op].bytes_s/globals["sample_count"],
-                "failures": aggregates[op].failures,
-                "failures/s": aggregates[op].failures_s/globals["sample_count"],
-                "iotime": aggregates[op].iotime,
-                "resp_avg": sum(aggregates[op].resp_all)/len(aggregates[op].resp_all),
-                "ttl_operations": aggregates[op].ios,
-                "ttl_bytes": aggregates[op].bytes,
-                "resp_perc": self.get_precentiles(aggregates[op].resp_all)
+                "ios/s": master.get_rate("ios", op),
+                "bytes/s": master.get_rate("bytes", op),
+                "failures": master.get_metric("failures", op),
+                "failures/s": master.get_rate("failures", op),
+                "iotime": master.iotime(op),
+                "resp_avg": master.get_resp_avg(op),
+                "ttl_operations": master.get_metric("ios", op),
+                "ttl_bytes": master.get_metric("bytes", op),
+                "resp_perc": self.get_precentiles(master.get_metric("iotime", op))
             }
         cur.close()
         return returnval
