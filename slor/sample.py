@@ -198,8 +198,7 @@ class perfSample:
         if not self.window_start:
             return None
         try:
-            #print("{}".format((self.window_end - self.window_start) ))
-            return self.operations[opclass][metric]/(self.window_end - self.window_start)
+            return self.operations[opclass][metric]/self.walltime()
         except KeyError:
             return None
 
@@ -246,7 +245,7 @@ class perfSample:
             return 0
 
         for t in time_list:
-            iotime += 1
+            iotime += t
         return iotime
 
     def iotime(self, opclass:str=None):
