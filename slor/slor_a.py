@@ -113,7 +113,7 @@ class SlorAnalysis:
 
             left.append(self.format_key_value("Stage configuration:", ""))
             left.append(self.format_key_value("Run time:", s_config[0]["run_time"]))
-            left.append(self.format_key_value("Keys in readmap:", rmkeys))
+            left.append(self.format_key_value("Prepared objects:", rmkeys))
             right = []
             left.append(self.format_key_value("Object size config:",
                 ("{} - {}  (avg: {})".format(

@@ -82,9 +82,14 @@ class statHandler:
 
     # one-off routines to make things a little more readable
     def expire_standing_samples(self, ref_time=time.time()):
+        delete_us = []
         for sid in self.standing_sample:
+            if self.standing_sample[sid].ttl == 0: continue
             if self.standing_sample[sid].ttl > ref_time:
-                del self.standing_sample[sid]
+                delete_us.append(sid)
+        
+        for sid in reversed(delete_us):
+            del self.standing_sample[sid]
 
     def get_standing_window_average(self):
         window_avg = 0
@@ -99,7 +104,6 @@ class statHandler:
         else:
             target = None
         stat_sample = perfSample(count_target=target)
-        stat_sample.init_global_sample()
         for sid in self.standing_sample:
             stat_sample.merge(self.standing_sample[sid])
 
@@ -132,8 +136,7 @@ class statHandler:
             hlist.append("total")
             self.print_workload_headers(hlist)
             
-        elif any(self.stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")) and \
-             all(self.stage != x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
+        elif any(self.stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
             self.print_workload_headers(("throughput", "bandwidth", "resp ms", "failures"))
 
     def show(self, final=False):
@@ -157,7 +160,7 @@ class statHandler:
         sys.stdout.write("\r")
 
         stat_sample = self.mk_merged_sample()
-        self.expire_standing_samples(ref_time=now)
+        #self.expire_standing_samples(ref_time=now)
 
         if stat_sample.global_io_count < 1:
             sys.stdout.write("\r\u2502 [ waiting for processes... ]")
@@ -220,7 +223,6 @@ class statHandler:
 
             # Work-to-finish workloads (prepare, blowout)
             elif self.stage in PROGRESS_BY_COUNT:
-
                 self.progress(stat_sample.percent_complete(), final=final)
 
             # Unknown terminus (cleanup)

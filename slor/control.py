@@ -23,12 +23,15 @@ def input_checks(args):
     if args.force: return True
 
     if args.save_readmap and (any(args.loads.find(x) for x in ("cleanup", "delete")) or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))):
-        sys.write.stdout("It looks like you're saving the readmap but have delete operations in your\n")
-        sys.write.stdout("workload. If you try to use this readmap for subsequent loads there will be\n")
-        sys.write.stdout("objects missing. ")
+        sys.stdout.write("It looks like you're saving the readmap but have delete operations in your\n")
+        sys.stdout.write("workload. If you try to use this readmap for subsequent loads there will be\n")
+        sys.stdout.write("objects missing. ")
         yn = input("You sure you mean this? (y/n): ")
         if yn[0].upper == "N":
             keepgoing = False
+
+    if args.loads.find("blowout") and args.cachemem_size == "0":
+        sys.stdout.write("blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n")
 
     return keepgoing
             
@@ -97,11 +100,11 @@ def run():
             DEFAULT_OBJECT_SIZE
         ),
     )
-    parser.add_argument(
-        "--workload-file",
-        default=None,
-        help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
-    )
+    #parser.add_argument(
+    #    "--workload-file",
+    #    default=None,
+    #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
+    #)
     parser.add_argument(
         "--driver-list",
         default="",
@@ -168,12 +171,7 @@ def run():
         driver = start_driver()
         args.driver_list = "127.0.0.1"
 
-    if args.workload_file:
-        root_config = parse_workload(args.workload_file)
-    else:
-        root_config = classic_workload(args)
-
-    
+    root_config = classic_workload(args)
 
     handle = SlorControl(root_config)
     handle.exec()

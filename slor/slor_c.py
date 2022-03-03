@@ -9,19 +9,29 @@ import json
 import copy
 
 class SlorControl:
-
+    """
+    Single instance class containing all of the routines for creating workloads
+    from command-line input, sending them to workers and handling simple
+    console output.
+    """
     config = None
-    conn = []
-    readmap = []
-    stat_buf = []
+    conn = None
+    readmap = None
+    stat_buf = None
     last_stage = None
     slordb = None
-    mixed_count = 0
-    stage_itr = {}
+    mixed_count = None
+    stage_itr = None
 
     def __init__(self, root_config):
         self.config = root_config
         self.slordb = SlorDB(root_config)
+        self.mixed_count = 0
+        self.conn = []
+        self.readmap = []
+        self.stat_buf = []
+        self.stage_itr = {}
+
 
     def exec(self):
 
@@ -39,7 +49,6 @@ class SlorControl:
         print("")
         top_box()
         sys.stdout.write("\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"])))
-        sys.stdout.write("processes reporting: {0}none{3}, {1}some{3}, {2}all{3}".format(bcolors.FAIL, bcolors.OKGREEN, bcolors.OKBLUE, bcolors.ENDC))
         sys.stdout.write("\n\u2502\n")
         for stage_val in self.config["tasks"]["loadorder"]:
             stage, duration = self.parse_stage_string(stage_val)
@@ -53,10 +62,6 @@ class SlorControl:
                 sys.stdout.write("\r\u2502   [   shuffling readmap...   ]   ")
                 sys.stdout.flush()
                 random.shuffle(self.readmap)
-
-            if stage == "blowout" and self.config["ttl_sz_cache"] == 0:
-                sys.stdout.write("\u2502 {}Note:{} blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n".format(bcolors.BOLD, bcolors.ENDC))
-                continue
 
             elif stage == "sleep":
                 sys.stdout.write("\u2502     [     sleeping ({})...     ]   ".format(duration))
@@ -287,9 +292,15 @@ class SlorControl:
 
         stats_config = copy.deepcopy(self.config)
         stats_config["mixed_profile"] = self.config["mixed_profiles"][self.mixed_count]
+
         self.stats_h = statHandler(stats_config, opclass_from_label(stage), duration)
-        if self.get_readmap_len() > 0:
-            self.stats_h.set_count_target(self.get_readmap_len())
+        if self.get_readmap_len() > 0 or stage == "blowout":
+            if stage == "blowout":
+                self.stats_h.set_count_target(self.config["ttl_sz_cache"]/DEFAULT_CACHE_OVERRUN_OBJ)
+            else:
+                self.stats_h.set_count_target(self.get_readmap_len())
+
+        # Disply headers for stats output
         self.stats_h.headers(self.mixed_count)
 
         """

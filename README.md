@@ -1,7 +1,7 @@
 Slor
 ====
 
-SLOR ▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 
+SLOR  ▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 
 
 Slor (S3 Load Ruler) is an easy-to-use benchmarking and load generation tool
 for S3 storage systems. 
@@ -124,7 +124,7 @@ array:
     --secret-key password \
     --endpoint http://123.45.67.89 \
     --loads read,mixed,mixed,cleanup \
-    ----mixed-profiles '[
+    --mixed-profiles '[
         {"read": 50, "reread": 10, "write": 20, "overwrite": 5, "delete": 5, "head": 10},
         {"read": 10, "reread": 2, "write": 68, "overwrite": 5, "delete": 5, "head": 10}
     ]'
@@ -179,15 +179,15 @@ simply need to run with separate loads with appropriate settings.
 Distributed Jobs
 ----------------
 
-So far we've been using the built-in load-generator that's launch with 
+So far we've been using the built-in load-generator that launches with 
 slor when you don't specify drivers to attach to. On separate load generation
-hosts start the drive with the.... driver sub-command.
+hosts start the driver with the "driver" sub-command:
 
     ./slor driver
 
 This launches a driver process (does not daemonize) that attaches to the
 default port (9256). Do this on one or more hosts and then launch work
-loads from a controller specifying the hostnames of the hosts running the
+loads from a controller specifying the host names of the hosts running the
 drivers:
 
     ./slor controller --access-key user \
@@ -202,7 +202,7 @@ Now the load will launch and distribute over each host equally. The default
 process count of 10 is per-driver, so this will launch a total of 30 threads
 of IO total.
 
-If you're trying to generate serious load you'll want to increase that per-
+If you're trying to generate serious load you'll want to increase the per-
 driver process count. Use "--processes-per-driver"
 
     ./slor controller --access-key user \
@@ -261,7 +261,8 @@ ways (and both at the same time): by using a prefix that's appended to each
 key and by specify the key length itself. This can be useful if you think
 metadata length is affecting performance. Let's specify a run using a
 key-length of ~120 random character along with a static prefix appended
-to each key:
+to each key. For this I'll use a range of possible key lengths though I 
+could specify a fixed length as well:
 
 
     ./slor controller --access-key user \
@@ -352,8 +353,74 @@ Internals
 Drivers and Communication
 -------------------------
 
+The controller process (./slor controller) can run anywhere. On a separate
+host or on a host running a driver. The controller attaches to the drivers
+using the Python multiprocessing module connection functions. The controller
+takes the global view of the workload, divides the work equally among the 
+driver processes and sends the workloads to the drivers. The drivers, in turn, 
+will divide that share of the workload equally among the defined number of
+processes per driver. They then spawn those processes with the multiprocessing
+modules.
+
+
+    controller _____
+     process        \_ Driver on host1
+                    |     \_ worker process
+                    |     \_ worker process
+                    |     \_ worker process
+                    |     \_ ...
+                    \_ Driver on host2
+                    |     \_ worker process
+                    |     \_ worker process
+                    |     \_ worker process
+                    |     \_ ...
+                    \_ Driver on host3
+                    |     \_ worker process
+                    |     \_ ...
+                   ...
+
+Workload and control commands are sent from the control process to the 
+drivers and then from the drivers the workload processes and back:
+
+Communication Paths
+-------------------
+
+    |-------------|---------------------------|
+    | Control host|        Driver Node(s)     |
+    |-------------|---------------------------|
+    | Controller  |   Driver    |   Workers   |
+    |-------------|---------------------------|
+    |  handshake -->   relay    |             |
+    |             |  handshake -->  receive   |
+    |             |             |      &      |
+    |             |   relay &  <--  respond   |      
+    |   success  <--  respond   |             |
+    |      &      |             |             |
+    |   launch    |             |             |
+    |  workload   |             |             |
+    |      &      |             |             |
+    |divide config|             |             |
+    |  and send  -->  Receive   |             |
+    | to drivers  |  & further  |             |
+    |             |divide config|             |   
+    |             |  & send to -->  Execute   |
+    |             |   workers   |   Workload  |
+    |             |             |      &      |
+    |             |             |    return   |
+    |             |    relay   <-- telemetry  |
+    |    commit  <--telemetry to|  to driver  |
+    |telemetry to |  controller |             |
+    | database &  |             |             |
+    |display real-|             |             |
+    | time stats  |             |             |
+    |-------------|---------------------------|
+
+
+
 Workload Generation Methodology
 -------------------------------
+
+
 
 Sampling Methodology
 --------------------
