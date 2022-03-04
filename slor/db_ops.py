@@ -13,7 +13,10 @@ class SlorDB:
     config = None
 
     def __init__(self, config):
+
         self.config = config
+        if self.config["no_db"]: return
+
         dbroot = POSIX_DB_TMP
         if os.name == "nt":
             dbroot = WINDOWS_DB_TMP
@@ -33,11 +36,13 @@ class SlorDB:
             self.db_conn.commit()
 
     def commit_stage_config(self, stage, config):
+        if self.config["no_db"]: return
         query = "INSERT INTO config VALUES ({}, '{}', '{}')".format(time.time(), stage, json.dumps(config))
         self.db_cursor.execute(query)
         self.db_conn.commit()
 
     def mk_data_store(self, host):
+        if self.config["no_db"]: return
         host = self.host_table_hash(host)
         query =  "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data JSON)".format(host)
         self.db_cursor.execute(query)
@@ -47,6 +52,7 @@ class SlorDB:
         self.db_conn.commit()
 
     def store_stat(self, message, stage_itr=None):
+        if self.config["no_db"]: return
         host = self.host_table_hash(message["w_id"])
         if stage_itr:
             stage = "{}:{}".format(message["stage"], stage_itr)

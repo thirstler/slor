@@ -157,6 +157,11 @@ def run():
         help="use readmap - this will obviate a prepare step and assume objects in the readmap exist"
     )
     parser.add_argument(
+        "--no-db",
+        action="store_true",
+        help="do not save workload data to database - appropriate for long-running tests"
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         default=False,

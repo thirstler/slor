@@ -288,6 +288,7 @@ def classic_workload(args):
         "save_readmap": args.save_readmap,
         "use_readmap": args.use_readmap,
         "prepare_objects": args.prepare_objects,
-        "key_prefix": args.key_prefix
+        "key_prefix": args.key_prefix,
+        "no_db": args.no_db
     }
     return root_config

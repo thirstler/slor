@@ -79,7 +79,8 @@ class SlorControl:
 
         bottom_box()
         print("\ndone.\n")
-        print("run {} analysis --input {}\n".format(sys.argv[0], self.slordb.db_file))
+        if not self.config["no_db"]:
+            print("run {} analysis --input {}\n".format(sys.argv[0], self.slordb.db_file))
 
 
     def config_text(self):
@@ -142,7 +143,7 @@ class SlorControl:
             stage = stage[:stage.find(":")] if ":" in stage else stage # Strip label information
             stagecount += 1
             duration = self.config["sleeptime"] if stage == "sleep" else self.config["run_time"]
-            print(stage)
+            
             if stage == "mixed":
                 mixed_prof = self.config["tasks"]["mixed_profiles"][mixed_count]
                 mixed_count += 1
@@ -398,6 +399,9 @@ class SlorControl:
 
 
     def mk_read_map(self):
+        """
+        Generate bucket/key paths needed for prepared data
+        """
 
         # config items that need to be saved/restored with the readmap
         cfg_keys = ("sz_range", "bucket_prefix", "bucket_count", "key_sz", "ttl_prepare_sz", "prepare_objects")
@@ -458,6 +462,9 @@ class SlorControl:
             return items[0], int(self.config["sleeptime"]) if items[0] == "sleep" else int(self.config["run_time"])
 
     def mk_stage(self, target, stage, wid, duration):
+        """
+        Create a configuration specific to the target driver
+        """
         
         stage = opclass_from_label(stage)
 
