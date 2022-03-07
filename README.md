@@ -14,8 +14,8 @@ systems. It will measure throughput, bandwidth and processing times of
 several basic S3 operations (read, write, head, delete, overwrite, reread
 and tagging) in discrete and mixed workload configurations. 
 
-How does it do it?
-------------------
+How does it do?
+---------------
 It operates on the same controller/driver arrangement used by other
 load-generation systems:
 
@@ -390,6 +390,10 @@ Communication Paths
     |-------------|---------------------------|
     | Controller  |   Driver    |   Workers   |
     |-------------|---------------------------|
+    |    start    |             |             |
+    |   workload  |             |             |
+    |      |      |             |             |
+    |  initiate   |             |             |
     |  handshake -->   relay    |             |
     |             |  handshake -->  receive   |
     |             |             |      &      |
@@ -420,13 +424,43 @@ Communication Paths
 Workload Generation Methodology
 -------------------------------
 
+Load is generated in the worker processes with boto3. This was to avoid having
+to write all of the low-level S3 requests at the expense of losing the ability
+to place timers deep in the request code (measure signature calculation time,
+time to first byte, etc). Not really sure it matters, can revisit at some point
+if desired.
+
+MPUs
+
+If multi-part uploads are specified in the workload configuration then the 
+create_multipart_upload, put_part and complete_multipart_upload calls are 
+measured as a single operation with the put_part operations conducted in 
+serial (per worker process).
 
 
 Sampling Methodology
 --------------------
 
+The worker processes collect data in 5 second samples by default. Bytes and
+IOs are summed over the course of the sample and response times for individual
+requests are appended to a list. The sample is sent to the controller process
+where it is recorded in a database and real-time stats are displayed to the 
+console.
+
+
+
 Mixed Workloads
 ---------------
+
+Mixed workloads are probability based. The workload indicates percentages 
+for each operation type and each worker executes operations based on that
+probability. If the workload indicates a 70% read and 30% write workload,
+then each time an operation is executed there's a 70% chance it will be
+a read and a 30% chance it will be a write. Precise distribution of IOs
+is improved the longer the workload runs.
+
+
+
 
 
 

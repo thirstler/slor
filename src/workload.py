@@ -274,6 +274,7 @@ def classic_workload(args):
         "region": args.region,
         "key_sz": key_sz,
         "sz_range": parse_size_range(args.object_size),
+        "mpu_size": parse_size(args.mpu_size),
         "run_time": int(args.stage_time),
         "bucket_count": int(args.bucket_count),
         "bucket_prefix": args.bucket_prefix,

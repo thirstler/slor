@@ -6,6 +6,7 @@ import stage.prepare
 import stage.read
 import stage.overrun
 import stage.write
+import stage.mpu
 import stage.head
 import stage.delete
 import stage.mixed
@@ -24,7 +25,10 @@ def _driver_t(socket, config, w_id, id):
     elif config["type"] == "read":
         stage.read.Read(socket, config, w_id, id).ready()
     elif config["type"] == "write":
-        stage.write.Write(socket, config, w_id, id).ready()
+        if config["mpu_size"]:
+            stage.mpu.Mpu(socket, config, w_id, id).ready()
+        else:
+            stage.write.Write(socket, config, w_id, id).ready()
     elif config["type"] == "head":
         stage.head.Head(socket, config, w_id, id).ready()
     elif config["type"] == "delete":

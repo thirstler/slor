@@ -230,6 +230,8 @@ class SlorControl:
                 )
             )
 
+        '''
+        Worthelss check
         for iface in data["net"]:
             if (
                 data["net"][iface].errin
@@ -244,6 +246,7 @@ class SlorControl:
                         iface
                     )
                 )
+        '''
         sys.stdout.write("\n")
 
     def poll_for_response(self, all=True):
@@ -483,6 +486,7 @@ class SlorControl:
             "bucket_count": int(self.config["bucket_count"]),
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
+            "mpu_size": self.config["mpu_size"],
             "key_sz": self.config["key_sz"],
             "driver_list": self.config["driver_list"],
             "prepare_sz": int(

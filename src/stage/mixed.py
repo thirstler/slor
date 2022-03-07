@@ -60,6 +60,41 @@ class Mixed(SlorProcess):
         return resp
 
 
+    def _mpu(self):
+        """
+        perform write as an MPU of size specified in the load definition. 
+        Uses boto3 directly rather than through a wrapper.
+        """
+        blen = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
+        self.writemap.append(
+            ("{}{}".format(self.config["bucket_prefix"], random.randint(0, self.config["bucket_count"]-1)),
+             self.config["key_prefix"] + gen_key(key_desc=self.config["key_sz"], inc=self.w_count, prefix=DEFAULT_WRITE_PREFIX+self.wid_str))
+        )
+        bucket=self.writemap[-1][0]
+        key=self.writemap[-1][1]
+        try:
+            self.start_io("write")
+            mpu = self.s3ops.s3client.create_multipart_upload(Bucket=bucket, Key=key)
+            mpu_info = []
+            for part_num in range(1, int(blen/self.config["mpu_size"])+2):
+                outer = part_num * self.config["mpu_size"]
+                bytes = self.config["mpu_size"] if outer <= blen else (self.config["mpu_size"]-(outer - blen))
+                body_data = self.get_bytes_from_pool(int(bytes))
+                up_resp = self.s3ops.s3client.upload_part(Body=body_data, Bucket=bucket, Key=key, PartNumber=part_num, UploadId=mpu["UploadId"])
+                mpu_info.append({
+                    'PartNumber': part_num,
+                    'ETag': up_resp['ETag']
+                })
+                if outer == blen: break
+            self.s3ops.s3client.complete_multipart_upload(Bucket=bucket, Key=key, UploadId=mpu["UploadId"], MultipartUpload={'Parts': mpu_info})
+            self.stop_io(sz=blen)
+
+        except Exception as e:
+            sys.stderr.write(str(e))
+            sys.stderr.flush()
+            self.stop_io(failed=True)
+
+
     def _write(self):
         size = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
         body_data = self.get_bytes_from_pool(size)
@@ -77,6 +112,7 @@ class Mixed(SlorProcess):
             sys.stderr.flush()
             self.stop_io(failed=True)
 
+
     def _head(self):
         hat = self.get_key_from_existing()
 
@@ -88,6 +124,7 @@ class Mixed(SlorProcess):
             sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
+
 
     def _delete(self):
         """ Only delete from the written pool """
@@ -128,6 +165,7 @@ class Mixed(SlorProcess):
             sys.stderr.flush()
             self.stop_io(failed=True)
 
+
     def _overwrite(self):
         body_data = self.get_bytes_from_pool(
             random.randint(self.config["sz_range"][0], self.config["sz_range"][1]))
@@ -143,6 +181,7 @@ class Mixed(SlorProcess):
             sys.stderr.flush()
             self.stop_io(failed=True)
 
+
     def do(self, operation):
         
         ret = {}
@@ -150,7 +189,10 @@ class Mixed(SlorProcess):
             ret = self._read()
 
         elif operation == "write":
-            self._write()
+            if self.config["mpu_size"]:
+                self._mpu()
+            else:
+                self._write()
              
         elif operation == "head":
             self._head()

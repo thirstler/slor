@@ -33,6 +33,10 @@ def input_checks(args):
     if args.loads.find("blowout") and args.cachemem_size == "0":
         sys.stdout.write("blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n")
 
+    if args.mpu_size and parse_size(args.mpu_size) <= MINIMUM_MPU_CHUNK_SIZE:
+        sys.stdout.write("MPU part size too small, must be greather than {}\n".format(human_readable(MINIMUM_MPU_CHUNK_SIZE)))
+        keepgoing = False
+
     return keepgoing
             
 
@@ -99,6 +103,11 @@ def run():
         help="object size to use; accepts values with common suffixes (1MB, 1MiB) and ranges (1KB-12MiB) - defaults to {0}".format(
             DEFAULT_OBJECT_SIZE
         ),
+    )
+    parser.add_argument(
+        "--mpu-size",
+        default=None,
+        help="write objects as MPUs using this chunk size"
     )
     #parser.add_argument(
     #    "--workload-file",

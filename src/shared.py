@@ -58,6 +58,7 @@ TERM_WIDTH_MAX=104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
+MINIMUM_MPU_CHUNK_SIZE=5000000
 ##
 # Colors used in console output
 class bcolors:
@@ -87,7 +88,7 @@ BANNER = """
 def parse_size(stringval: str) -> float:
 
    #if float(stringval)
-
+    if stringval == None: return None
 
     """Parse human input for size values"""
     pwr = 10

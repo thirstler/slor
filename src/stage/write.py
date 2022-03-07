@@ -15,7 +15,7 @@ class Write(SlorProcess):
         
     def ready(self):
 
-        self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
+        self.mk_byte_pool(int(self.config["sz_range"][1])*2)
         if self.hand_shake():
             self.delay()
             self.exec()
