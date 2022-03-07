@@ -1,10 +1,9 @@
 import sys
 import time
 import random
-from shared import *
-from s3primitives import S3primitives
-from sample import perfSample
-import pickle
+from slor.shared import *
+from slor.s3primitives import S3primitives
+from slor.sample import perfSample
 import json
 
 class SlorProcess:

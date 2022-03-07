@@ -1,17 +1,17 @@
-from shared import *
+from slor.shared import *
 import boto3
 import time
 from multiprocessing import Process, Pipe
-import stage.prepare
-import stage.read
-import stage.overrun
-import stage.write
-import stage.mpu
-import stage.head
-import stage.delete
-import stage.mixed
-import stage.workload
-import stage.cleanup
+import slor.stage.prepare
+import slor.stage.read
+import slor.stage.overrun
+import slor.stage.write
+import slor.stage.mpu
+import slor.stage.head
+import slor.stage.delete
+import slor.stage.mixed
+import slor.stage.workload
+import slor.stage.cleanup
 
 def _driver_t(socket, config, w_id, id):
     """
@@ -19,24 +19,24 @@ def _driver_t(socket, config, w_id, id):
     """
     
     if config["type"] == "prepare":
-        stage.prepare.Prepare(socket, config, w_id, id).ready()
+        slor.stage.prepare.Prepare(socket, config, w_id, id).ready()
     elif config["type"] == "blowout":
-        stage.overrun.Overrun(socket, config, w_id, id).ready()
+        slor.stage.overrun.Overrun(socket, config, w_id, id).ready()
     elif config["type"] == "read":
-        stage.read.Read(socket, config, w_id, id).ready()
+        slor.stage.read.Read(socket, config, w_id, id).ready()
     elif config["type"] == "write":
         if config["mpu_size"]:
-            stage.mpu.Mpu(socket, config, w_id, id).ready()
+            slor.stage.mpu.Mpu(socket, config, w_id, id).ready()
         else:
-            stage.write.Write(socket, config, w_id, id).ready()
+            slor.stage.write.Write(socket, config, w_id, id).ready()
     elif config["type"] == "head":
-        stage.head.Head(socket, config, w_id, id).ready()
+        slor.stage.head.Head(socket, config, w_id, id).ready()
     elif config["type"] == "delete":
-        stage.delete.Delete(socket, config, w_id, id).ready()
+        slor.stage.delete.Delete(socket, config, w_id, id).ready()
     elif config["type"] == "mixed":
-        stage.mixed.Mixed(socket, config, w_id, id).ready()
+        slor.stage.mixed.Mixed(socket, config, w_id, id).ready()
     elif config["type"] == "cleanup":
-        stage.cleanup.CleanUp(socket, config, w_id, id).ready()
+        slor.stage.cleanup.CleanUp(socket, config, w_id, id).ready()
 
 
 class SlorDriver:

@@ -1,9 +1,8 @@
-from re import I
 import sqlite3
 import json
-from  shared import *
+from slor.shared import *
 import datetime
-from sample import *
+from slor.sample import *
 
 class SlorAnalysis:
     conn = None

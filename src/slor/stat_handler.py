@@ -1,10 +1,7 @@
-from re import S
-import stat
 import time
-from shared import *
+from slor.shared import *
 import math
-from sample import perfSample
-import json
+from slor.sample import perfSample
 
 class statHandler:
 

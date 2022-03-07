@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import sys
-from shared import *
+from slor.shared import *
 
 if __name__ == "__main__":
 
@@ -9,19 +9,19 @@ if __name__ == "__main__":
         sys.stderr.write(ROOT_HELP)
 
     elif sys.argv[1] == "controller":
-        import control
+        import slor.control
 
-        control.run()
+        slor.control.run()
 
     elif sys.argv[1] == "driver":
-        import driver
+        import slor.driver
 
-        driver.run()
+        slor.driver.run()
 
     elif sys.argv[1] == "analysis":
-        import analysis
+        import slor.analysis
 
-        analysis.run()
+        slor.analysis.run()
 
     else:
         sys.stderr.write(ROOT_HELP)

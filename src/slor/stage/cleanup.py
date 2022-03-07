@@ -1,5 +1,5 @@
-from shared import *
-from process import SlorProcess
+from slor.shared import *
+from slor.process import SlorProcess
 import boto3
 
 class CleanUp(SlorProcess):

@@ -1,9 +1,11 @@
-from shared import *
-from process import SlorProcess
-import time
+from slor.shared import *
+from slor.process import SlorProcess
 import random
 
-class Overrun(SlorProcess):
+class Prepare(SlorProcess):
+
+    r1 = None
+    r2 = None
 
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
@@ -14,7 +16,10 @@ class Overrun(SlorProcess):
 
     def ready(self):
 
-        self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ*2)
+        sz_range = self.config["sz_range"]
+        self.r1 = int(sz_range[0])
+        self.r2 = int(sz_range[1])
+        self.mk_byte_pool(int(sz_range[1]) * 2)
 
         if self.hand_shake():
             self.delay()
@@ -22,34 +27,29 @@ class Overrun(SlorProcess):
 
     def exec(self):
 
-        count = int(self.config["cache_overrun_sz"]/self.config["threads"]/DEFAULT_CACHE_OVERRUN_OBJ)+1
-       
-        self.start_benchmark(("write",), target=count)
+        self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
-
-        for o in range(0, count):
-
+        count = 0
+        for skey in self.config["mapslice"]:
             if self.check_for_messages() == "stop":
                 break
             
-            body_data = self.get_bytes_from_pool(DEFAULT_CACHE_OVERRUN_OBJ)
-            key = "w{}t{}o{}".format(self.config["w_id"], self.id, o)
+            c_len = random.randint(self.r1, self.r2)
+            body_data = self.get_bytes_from_pool(c_len)
 
             for i in range(0, PREPARE_RETRIES):
+
                 try:
                     self.start_io("write")
-                    self.s3ops.put_object(
-                        "{0}{1}".format(self.config["bucket_prefix"], (o % self.config["bucket_count"])),
-                        "{0}{1}".format(DEFAULT_CACHE_OVERRUN_PREFIX, key),
-                        body_data)
-                    self.stop_io(sz=DEFAULT_CACHE_OVERRUN_OBJ)
+                    self.s3ops.put_object(skey[0], skey[1], body_data)
+                    self.stop_io(sz=len(body_data))
+                    count += 1
                     break # worked, no need to retry
 
                 except Exception as e:
                     self.stop_io(failed=True)
                     sys.stderr.write("retry[{0}]: {1}\n".format(self.id, str(e)))
                     sys.stderr.flush()
-                    self.fail_count += 1
                     continue # Keep trying, you can do it
 
             # Report-in every now and then

@@ -1,11 +1,10 @@
 """
 Workload generation tasks
 """
-import yaml, json, time
-from shared import *
-from driver import _slor_driver
-from multiprocessing import Process
-from stat_handler import *
+import yaml, json
+from slor.shared import *
+from slor.driver import _slor_driver
+from slor.stat_handler import *
 import copy
 
 def parse_workload(file):

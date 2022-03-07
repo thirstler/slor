@@ -2,9 +2,9 @@ import sys
 from multiprocessing.connection import Client
 import random
 import time
-from shared import *
-from stat_handler import statHandler
-from db_ops import SlorDB
+from slor.shared import *
+from slor.stat_handler import statHandler
+from slor.db_ops import SlorDB
 import json
 import copy
 
@@ -231,7 +231,7 @@ class SlorControl:
             )
 
         '''
-        Worthelss check
+        Worthless check
         for iface in data["net"]:
             if (
                 data["net"][iface].errin

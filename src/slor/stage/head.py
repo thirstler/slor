@@ -1,15 +1,17 @@
-from shared import *
-from process import SlorProcess
+from slor.shared import *
+from slor.process import SlorProcess
 import time
 
-class Read(SlorProcess):
+class Head(SlorProcess):
+
+    s3ops = None
 
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
         self.w_id = w_id
         self.config = config
-        self.operations = ("read",)
+        self.operations = ("head",)
         self.benchmark_stop = time.time() + config["run_time"]
 
     def ready(self):
@@ -17,6 +19,7 @@ class Read(SlorProcess):
         if self.hand_shake():
             self.delay()
             self.exec()
+        
 
     def exec(self):
 
@@ -31,23 +34,19 @@ class Read(SlorProcess):
             if stop: break
 
             if rerun > 0:
-                sys.stderr.write(
-                    "WARNING: rereading objects (x{0}), consider preparing more objects\n".format(
-                        rerun
-                    )
-                )
+                # Just a note that we probably don't care about heads getting re-read
+                pass
 
             for i, pkey in enumerate(self.config["mapslice"]):
 
                 try:
-                    self.start_io("read")
-                    resp = self.s3ops.get_object(pkey[0], pkey[1])
-                    data = resp["Body"].read()
-                    self.stop_io(sz=int(resp["ContentLength"]))
-                    del data
+                    self.start_io("head")
+                    resp = self.s3ops.head_object(pkey[0], pkey[1])
+                    self.stop_io()
 
                 except Exception as e:
-                    print(str(e))
+                    sys.stderr.write("fail[{0}] {1}/{2}: {3}\n".format(self.id, pkey[0], pkey[1], str(e)))
+                    sys.stderr.flush()
                     self.stop_io(failed=True)
                 
                 if self.unit_start >= self.benchmark_stop:

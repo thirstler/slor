@@ -1,7 +1,7 @@
 import argparse
-from shared import *
+from slor.shared import *
 import sys
-from slor_d import SlorDriver
+from slor.slor_d import SlorDriver
 from multiprocessing.connection import Listener
 
 def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):

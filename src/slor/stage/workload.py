@@ -1,6 +1,5 @@
-from shared import *
-from process import SlorProcess
-import boto3
+from slor.shared import *
+from slor.process import SlorProcess
 
 class Workload(SlorProcess):
 

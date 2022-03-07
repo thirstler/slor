@@ -1,7 +1,7 @@
 import time
 from typing import List
 from xmlrpc.client import Boolean
-from shared import *
+from slor.shared import *
 import json
 
 
