@@ -1,5 +1,5 @@
-import argparse
 from slor.slor_a import *
+import argparse
 
 def run():
     parser = argparse.ArgumentParser(

@@ -1,10 +1,11 @@
-import sys
-import time
-import random
 from slor.shared import *
 from slor.s3primitives import S3primitives
 from slor.sample import perfSample
+import sys
+import time
+import random
 import json
+
 
 class SlorProcess:
 
@@ -74,10 +75,12 @@ class SlorProcess:
         if failed:
             self.sample_struct.add_failures(self.current_op, 1)
         else:
-            self.sample_struct.add_resp_time(self.current_op, unit_time)
-            self.sample_struct.add_ios(self.current_op)
-            self.sample_struct.add_bytes(self.current_op, sz)
-        
+            self.sample_struct.update(
+                opclass=self.current_op,
+                ios=1,
+                bytes=sz,
+                resp_t=unit_time
+            )
         self.sample_struct.final = final
 
 

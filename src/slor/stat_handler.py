@@ -1,7 +1,7 @@
-import time
 from slor.shared import *
-import math
 from slor.sample import perfSample
+import time
+import math
 
 class statHandler:
 

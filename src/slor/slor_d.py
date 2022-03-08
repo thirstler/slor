@@ -1,7 +1,4 @@
 from slor.shared import *
-import boto3
-import time
-from multiprocessing import Process, Pipe
 import slor.stage.prepare
 import slor.stage.read
 import slor.stage.overrun
@@ -12,6 +9,9 @@ import slor.stage.delete
 import slor.stage.mixed
 import slor.stage.workload
 import slor.stage.cleanup
+import boto3
+import time
+from multiprocessing import Process, Pipe
 
 def _driver_t(socket, config, w_id, id):
     """

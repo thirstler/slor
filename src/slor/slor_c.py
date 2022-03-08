@@ -1,10 +1,11 @@
+
+from slor.shared import *
+from slor.stat_handler import statHandler
+from slor.db_ops import SlorDB
 import sys
 from multiprocessing.connection import Client
 import random
 import time
-from slor.shared import *
-from slor.stat_handler import statHandler
-from slor.db_ops import SlorDB
 import json
 import copy
 

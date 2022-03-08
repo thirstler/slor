@@ -2,7 +2,6 @@ import platform
 import psutil
 import configparser
 import os, sys
-import math
 import random
 import string
 

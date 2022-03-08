@@ -1,7 +1,5 @@
-import time
-from typing import List
-from xmlrpc.client import Boolean
 from slor.shared import *
+import time
 import json
 
 
@@ -16,7 +14,7 @@ class perfSample:
     - A time target, if applicable
     - A sample sequence number if you want
     - A starting counter, used to continue counting objects from the start of
-      the workload
+      a workload
 
     For special purposes
     - from_json will create a populated sample object from a JSON dump of
@@ -104,18 +102,21 @@ class perfSample:
     def __del__(self):
         pass
 
-    def percent_complete(self):
-        if self.count_target:
-            return self.global_io_count / self.count_target
-        return None
-
-    def get_operations(self):
+    def get_operations(self) -> list:
+        """
+        Fetch list of operations represented in this sample. Will list more
+        than one for mixed workloads.
+        """
         operation_labels = []
         for op in self.operations:
             operation_labels.append(op)
         return operation_labels
 
     def merge(self, sample):
+        """
+        Take another slor.perfSample object as an argument and merge its
+        values into this sample.
+        """
         # driver_id:       not merged
         # process_id:      not merged
         # window_start:    not merged
@@ -130,9 +131,13 @@ class perfSample:
             self.add_resp_time(op, sample.get_metric(metric="iotime", opclass=op))
 
         # Overwrite global_io_count to benchmark counter
-        self.global_io_count += sample.global_io_count
+        #self.global_io_count += sample.global_io_count
 
     def from_json(self, from_json):
+        """
+        Build a sample object from JSON (as formatted in dump_json())
+        """
+
         self.driver_id = from_json["driver_id"]
         self.process_id = from_json["process_id"]
         self.global_io_count = from_json["global_io_count"]
@@ -150,6 +155,9 @@ class perfSample:
             self.final = from_json["final"]
 
     def dump_json(self):
+        """
+        Jump sample data in JSON format.
+        """
         serialized_sample = {
             "driver_id": self.driver_id,
             "process_id": self.process_id,
@@ -194,23 +202,44 @@ class perfSample:
                 "iotime": [],
             }
 
+    ##########################################################################
+    # Sample update Interfaces 
+    def update(self, opclass=None, ios:int=0, bytes:int=0, resp_t:float=0):
+        """
+        One-shot for use during workload updates
+        """
+        self.add_ios(opclass=opclass, value=ios)
+        self.add_bytes(opclass=opclass, value=bytes)
+        self.add_resp_time(opclass=opclass, value=resp_t)
+
     def add_ios(self, opclass: str, value: int = 1) -> None:
+        """Interface for adding operations to this sample"""
+
         if opclass not in self.operations:
             self.add_operation_class(opclass)
         self.operations[opclass]["ios"] += value
         self.global_io_count += value
 
     def add_bytes(self, opclass: str, value: int = 0) -> None:
+        """
+        Interface for adding bytes to this sample.
+        """
         if opclass not in self.operations:
             self.add_operation_class(opclass)
         self.operations[opclass]["bytes"] += value
 
     def add_failures(self, opclass: str, value: int = 0) -> None:
+        """
+        Interface for adding failed operations to the sample
+        """
         if opclass not in self.operations:
             self.add_operation_class(opclass)
         self.operations[opclass]["failures"] += value
 
     def add_resp_time(self, opclass: str, value) -> None:
+        """
+        Interface for adding response times to this sample
+        """
         if opclass not in self.operations:
             self.add_operation_class(opclass)
         if type(value) == float:
@@ -220,6 +249,8 @@ class perfSample:
             self.operations[opclass]["iotime"] += value
             self.global_io_time += sum(value)
 
+    ##########################################################################
+    # Sample fetch metrics interfaces 
     def _get_metric(self, metric: str, opclass: str):
         try:
             return self.operations[opclass][metric]
@@ -299,3 +330,8 @@ class perfSample:
             iotime = self._iotime(opclass)
 
         return iotime
+
+    def percent_complete(self) -> float:
+        if self.count_target:
+            return self.global_io_count / self.count_target
+        return None

@@ -1,7 +1,10 @@
 import boto3
 
 class S3primitives:
-
+    """
+    Lame wrapper around boto3 calls just in case one day these should be
+    replaced with more manual methods (for better timer placement)
+    """
     def __init__(self, config=None):
         if config:
             self.set_s3_client(config)

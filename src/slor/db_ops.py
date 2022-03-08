@@ -1,5 +1,5 @@
-import sqlite3
 from slor.shared import *
+import sqlite3
 import os
 from pathlib import Path
 import json

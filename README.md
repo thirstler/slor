@@ -26,28 +26,29 @@ load-generation systems:
 
 You start workload servers, or drivers, on the systems you want to use for
 load generation. Then, you will references these servers when starting
-workloads with slor via a "controller" process, which is simply responsible
-for sending workloads to driver processes and then collecting performance
-data returned by the driver processes.
+workloads with slor via a "controller" process. The controller is responsible
+for sending workloads to driver processes and then collecting the returned
+performance data.
 
 Where does it run?
 ------------------
 
-It should run anywhere Python3 runs, though it is more tested on POSIX type
-systems. That said, Windows should work as well. The only limiting factor
-is that the drivers and controller process all need to be on the same OS
-type (Linux, Max, Windows, *BSD). This is because it makes extensive use of
-the multiprocessing module which has handlers for simplifying for inter-process
-communication. These handlers automatically pickle data in formats that aren't
-cross-compatible. Even different python builds on different Linux distributions
-can be incompatible. It should be possible to fix the picking problem later. 
-
+It should run anywhere Python3 runs (though it is more tested on POSIX type
+systems). The only limiting factor is the use of the "pickle" module which is
+used in the Python multiprocessing modules. Inter-process communication data
+is pickled with routines that are not guaranteed to be compatible between 
+Python versions. In other words, don't try to run with disparate Python
+versions between the drivers and controller.
 
 Installation
 ------------
 
-Slor is not currently packaged so just download it, find "slor" and run it
-where it is (this will likely change at some point).
+Slor can be installed by doing a:
+
+    python -m build
+    pip install --upgrade ./dist/slor-[version].tgz
+
+It should be available in a proper pip repository in the near future as well.
 
 
 Running a Workload
@@ -91,7 +92,7 @@ whatever. You can specify the stages in the workload with the --loads flag.
 This will run only a read and write workload with a clean-up stage at the end
 that will remove all objects and then delete the bucket.
 
-Let's add a mixed workload (that isn't the default). Mixed workload accepts
+Let's add a mixed workload (that isn't the default). Mixed workloads accept
 the following operation classes along with a percentage for how often that
 operation will appear in the stage (percentages must add-up to 100):
 
@@ -199,7 +200,7 @@ drivers:
     --driver-list loadgen1,loadgen2,loadgen3
 
 Now the load will launch and distribute over each host equally. The default
-process count of 10 is per-driver, so this will launch a total of 30 threads
+process count is 10 per-driver, so this will launch a total of 30 threads
 of IO total.
 
 If you're trying to generate serious load you'll want to increase the per-
@@ -220,15 +221,21 @@ Preparing Data
 --------------
 
 When doing read workloads you need data in the system to read back. If you're 
-trying to realistically assess platform performance you don't want to re-read
-the same data over and over again. This means you need to have _enough_ data
-to sustain the IO rate for the length of time the benchmark takes to run. 
-Honestly, you can't really know that until you benchmark the system, can you?
-This is a hard fact of life. You can probably make a pretty good guess though.
-What are the network limitations? What are the IO limitations of the metadata
-layer? What do you already know? I know this system couldn't possibly take 
-more than 10,000 IO/s of reads at 256KB so let's assume a ceiling of 
-12,000 IO/s and call it a day. That would be 3.07 GB/s of bandwidth.
+trying to realistically assess platform performance then you don't want to re-
+read the same data over and over again. This means you need to have _enough_
+data to sustain the IO rate for the length of time the benchmark takes to run. 
+
+If this sounds like you need to already have some knowledge of how the
+targeted platform can be expected to perform, then you're right. You may not
+really know but changes are you can  make a pretty good guess.
+* What are the network limitations?
+* What are the IO limitations of the metadata
+layer?
+* What do you already know from previous workloads or use?
+
+I know this system couldn't possibly take more than 10,000 IO/s of reads at
+256KB so let's assume a ceiling of 12,000 IO/s and call it a day. That would
+be 3.07 GB/s of bandwidth (256KB * 12,000)
 
 You can tell SLOR the amount of data to auto-prepare with the "--iop-limit"
 flag. It will use this in conjunction with the "--stage-time" flag which 
@@ -258,10 +265,10 @@ Other Options
 
 An other thing you can specify is key length. This can be done one of two
 ways (and both at the same time): by using a prefix that's appended to each
-key and by specify the key length itself. This can be useful if you think
-metadata length is affecting performance. Let's specify a run using a
-key-length of ~120 random character along with a static prefix appended
-to each key. For this I'll use a range of possible key lengths though I 
+key and by specifying the key length itself. This can be useful if you think
+metadata length is affecting performance. Let's configure a run using a
+key-length of ~120 random characters along with a static prefix appended
+to each key. For this I'll use a range of possible key lengths, though I 
 could specify a fixed length as well:
 
 
@@ -299,7 +306,7 @@ stages. The timing of the sleeps is set (in seconds) with "--sleep-time" flag:
 Saving Data
 -----------
 
-It's painful to see data go to waste. If you're doing a lot of read-testing
+It's painful to see good data go to waste. If you're doing a lot of read-testing
 and _not_ deleting data as part for the workloads, you can reuse data with 
 the "--save-readmap" flag.
 
@@ -458,6 +465,117 @@ probability. If the workload indicates a 70% read and 30% write workload,
 then each time an operation is executed there's a 70% chance it will be
 a read and a 30% chance it will be a write. Precise distribution of IOs
 is improved the longer the workload runs.
+
+
+Command Line Arguments
+======================
+
+--verbose
+
+    Dumps more output to the console, might be overwhelming
+
+--name
+
+    Name of the workload.
+
+--profile
+
+    It you have a boto3 profile in your home dir (~/.aws/credentails), this will credentials from the indicated profile name for creating and accesssing S3 buckets.
+
+--endpoint
+
+    Name of the S3 endpoint to use. Slor will generally use path-style access to get to buckets.
+
+--verify
+
+    Verify HTTPS certs, defaults to "true". Set to "false" or supply a path to a CA bundle (bundle needs to be present on all driver hosts).
+
+--region
+
+    Specify region to use in the request. Used to construct the endpoint if you're running workloads on AWS S3 for some reason.
+
+--access-key
+
+    Specify the the access key credential.
+
+--secret-key
+
+    Specify the secret key credential.
+
+--loads
+
+    Specify the workloads you would like to run and in what order. Correct choices are: read, write, head, delete, mixed, sleep, blowout, cleanup
+
+--mixed-profiles
+
+    When specifying "mixed" as a workload, you'll need to define what that means. Mixed workload profiles are supplied as a JSON array. Since you can specify multiple workloads of the same type under "--loads" (e.g.: read,write,mixed,write,mixed,cleanup), you may need more than one profile in the array. Here's an example profile:
+
+    '[{"read": 50, "reread": 10, "write": 20, "overwrite": 5, "delete": 5, "head": 10}]'
+
+    Total values for each workload need to equal 100 (this will change to share ratios in the near future and thus will not require a percentage total)
+
+    For a "--loads" list with two "mixed" instances in it:
+
+    '[{"read": 70, "reread": 30}, {"read": 30, "reread": 70}]'
+
+--stage-time
+
+    Time in seconds to run each stage. If you would like different lengths of time for each stage you may want to just issue two load generation commands with different lengths.
+
+--iop-limit
+
+    Used in tandem with "--stage-time" to determin the amount of data needed to be prepared for any read loads. Let's say you think there's no way your system will be able to sustain 5000 operations a second and that you want to run your stages for 300 seconds. Indicate "--stage-time 300 --iop-limit 5000" and slor will prepare 1.5 million objects ahead of any read workloads (pure read or mixed) to ensure you do not reread any data.
+
+--prepare-objects
+
+    If you prefer to directly specify the number of objects to prepare you can just indicate that here. Accepts suffixes (10M, 542K, etc).
+
+--cachemem-size
+
+    Indicate the expected page-cache + controller-cache capacity of the target storage cluster. This value is used by the "blowout" stage to write N bytes of data to the cluster (in 8MB objects). This is to overrun the system's page and controller caches with garbage, forcing cold reads from disk during a subsequent read workload.
+
+--sleep
+
+    Used by the "sleep" workload. Indicate the number of seconds you want each "sleep" stage to last.
+
+--bucket-count
+
+    Indicate the number of buckets you would like to use in this test. Reads and writes will distribute evenly across buckets.
+
+--bucket-prefix
+
+    Bucket prefix name to use when creating buckets. For instance, if your bucket prefix is "slor-" and you indicate 4 for "--bucket-count" you'll get these 4 buckets: slor-0, slor-1, slor-2 and slor-3.
+
+--object-size
+
+    The object size you would like to use in benchmarking. Accepts suffixes (KB, MB, GB, TB, EB). Also accepts ranges like "64KB-4MB." Indicating ranges will will results in random object sizes within the range (inclusive).
+
+--mpu-size
+
+    Writes are always performed in a single PUT operation regardless of size. If, however, you indicate an multi-part upload (MPU) size, writes will always be executed as multi-part uploads. Timing data will cover the MPU creation, PUT operations and MPU completion as a single time-to-complete value.
+
+--driver-list
+
+    Comma-delimited list of host/port numbers of drivers to attach to (can be IP/ports).
+
+--processes-per-driver
+
+    Indicate how many processes will spawn per driver. Defaults to 10.
+
+
+--save-readmap
+
+    Each workload requiring a "prepare" stage includes a "readmap" stage - during which a list of bucket/key values are computed before any data is written. If you pass "--save-readmap" a file name, it will save this key list in JSON format. This is useful if the workload you're executing does not have an DELETEs in it and you do not include a "clean" stage. You can then use "--use-readmap" in subsequent workloads to reuse data.
+
+--use-readmap
+
+    Load bucket/key list from a saved readmap for use in a read workload. For reusing data written during a previous load.
+
+--no-db
+
+    Do not save workload timing data to a database on the controller host. This is useful if your workload is long-running and/or you have no intention of running an analysis on the database to extract detailed load statistics. The stats database can get very large and shouldn't be generated when running multi-hour loads.
+ 
+
 
 
 

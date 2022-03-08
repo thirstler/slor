@@ -1,10 +1,11 @@
-import argparse
-from multiprocessing.connection import Client
-from multiprocessing import Process
 from slor.slor_c import *
 from slor.shared import *
 from slor.driver import _slor_driver
 from slor.workload import *
+import argparse
+from multiprocessing.connection import Client
+from multiprocessing import Process
+
 
 def start_driver():
 

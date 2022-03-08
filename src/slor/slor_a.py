@@ -1,8 +1,8 @@
+from slor.shared import *
+from slor.sample import *
 import sqlite3
 import json
-from slor.shared import *
 import datetime
-from slor.sample import *
 
 class SlorAnalysis:
     conn = None
