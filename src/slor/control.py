@@ -9,7 +9,7 @@ from multiprocessing import Process
 
 def start_driver():
 
-    driver_list = '127.0.0.1'
+    driver_list = "127.0.0.1"
     print("no driver address specified, starting one here")
     driver = Process(target=_slor_driver, args=(driver_list, DEFAULT_DRIVER_PORT, True))
     driver.start()
@@ -17,29 +17,41 @@ def start_driver():
 
     return driver
 
+
 def input_checks(args):
 
     keepgoing = True
-    
-    if args.force: return True
 
-    if args.save_readmap and (any(args.loads.find(x) for x in ("cleanup", "delete")) or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))):
-        sys.stdout.write("It looks like you're saving the readmap but have delete operations in your\n")
-        sys.stdout.write("workload. If you try to use this readmap for subsequent loads there will be\n")
-        sys.stdout.write("objects missing. ")
+    if args.force:
+        return True
+
+    if args.save_readmap and (
+        any(args.loads.find(x) for x in ("cleanup", "delete"))
+        or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))
+    ):
+        sys.stdout.write(
+            "It looks like you're saving the readmap but have delete operations in your\n" +
+            "workload. If you try to use this readmap for subsequent loads there will be\n" +
+            "objects missing. ")
         yn = input("You sure you mean this? (y/n): ")
         if yn[0].upper == "N":
             keepgoing = False
 
     if args.loads.find("blowout") and args.cachemem_size == "0":
-        sys.stdout.write("blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n")
+        sys.stdout.write(
+            "blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n"
+        )
 
     if args.mpu_size and parse_size(args.mpu_size) <= MINIMUM_MPU_CHUNK_SIZE:
-        sys.stdout.write("MPU part size too small, must be greather than {}\n".format(human_readable(MINIMUM_MPU_CHUNK_SIZE)))
+        sys.stdout.write(
+            "MPU part size too small, must be greather than {}\n".format(
+                human_readable(MINIMUM_MPU_CHUNK_SIZE)
+            )
+        )
         keepgoing = False
 
     return keepgoing
-            
+
 
 def run():
     parser = argparse.ArgumentParser(
@@ -106,19 +118,17 @@ def run():
         ),
     )
     parser.add_argument(
-        "--mpu-size",
-        default=None,
-        help="write objects as MPUs using this chunk size"
+        "--mpu-size", default=None, help="write objects as MPUs using this chunk size"
     )
-    #parser.add_argument(
+    # parser.add_argument(
     #    "--workload-file",
     #    default=None,
     #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
-    #)
+    # )
     parser.add_argument(
         "--driver-list",
         default="",
-        help="comma-delimited list of driver hosts running \"slor driver\" processes (in host:port format); 9256 is assumed if port is excluded",
+        help='comma-delimited list of driver hosts running "slor driver" processes (in host:port format); 9256 is assumed if port is excluded',
     )
     parser.add_argument(
         "--processes-per-driver",
@@ -159,26 +169,26 @@ def run():
     parser.add_argument(
         "--save-readmap",
         default=False,
-        help="save readmap (location of prepared objects) for use in later runs"
+        help="save readmap (location of prepared objects) for use in later runs",
     )
     parser.add_argument(
         "--use-readmap",
         default=False,
-        help="use readmap - this will obviate a prepare step and assume objects in the readmap exist"
+        help="use readmap - this will obviate a prepare step and assume objects in the readmap exist",
     )
     parser.add_argument(
         "--no-db",
         action="store_true",
-        help="do not save workload data to database - appropriate for long-running tests"
+        help="do not save workload data to database - appropriate for long-running tests",
     )
     parser.add_argument(
         "--force",
         action="store_true",
         default=False,
-        help="force 'yes' answer to any requests for input (e.g. 'are you sure?')"
+        help="force 'yes' answer to any requests for input (e.g. 'are you sure?')",
     )
     args = parser.parse_args()
-    
+
     if not input_checks(args):
         sys.exit(1)
 
@@ -190,6 +200,8 @@ def run():
 
     handle = SlorControl(root_config)
     handle.exec()
-    
-    try: driver.join()
-    except: pass
+
+    try:
+        driver.join()
+    except:
+        pass

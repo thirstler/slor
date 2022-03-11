@@ -4,6 +4,7 @@ from slor.stat_handler import *
 import yaml, json
 import copy
 
+
 def parse_workload(file):
 
     try:
@@ -37,12 +38,17 @@ def parse_workload(file):
             work["clean"] = False
 
         if not "name" in work:
-            work["name"] =  global_config_template["name"] + "_{}".format(i) if "name" in global_config_template else str(i)
+            work["name"] = (
+                global_config_template["name"] + "_{}".format(i)
+                if "name" in global_config_template
+                else str(i)
+            )
 
         if "prefix_struct" in work:
             work["prefix_list"] = tuple(build_prefix_list(work["prefix_struct"]))
-            work["prefix_placement_map"] = tuple(build_prefix_placement_map(work["prefix_list"]))
-
+            work["prefix_placement_map"] = tuple(
+                build_prefix_placement_map(work["prefix_list"])
+            )
 
         for item in work["work"]:
 
@@ -52,7 +58,17 @@ def parse_workload(file):
                 item["key_length"] = parse_size_range(item["key_length"])
 
         # Check workgroup:
-        if not all(x in work for x in ("name", "access_key", "secret_key", "endpoint", "bucket_prefix", "bucket_count")):
+        if not all(
+            x in work
+            for x in (
+                "name",
+                "access_key",
+                "secret_key",
+                "endpoint",
+                "bucket_prefix",
+                "bucket_count",
+            )
+        ):
             work["prefix_list"].clear()
             sys.stderr.write("missing minimal config item(s)\n")
             sys.exit(1)
@@ -83,7 +99,7 @@ def build_prefix_list(struct_def):
     mult = 1
     loopon = True
     while loopon:
-        if any((x[1]*mult) < 100 for x in keylist):
+        if any((x[1] * mult) < 100 for x in keylist):
             mult += 1
         else:
             break
@@ -93,24 +109,27 @@ def build_prefix_list(struct_def):
 
     # Finally, tuple-fy
     for k in range(0, len(keylist)):
-        keylist[k] = (keylist[k][0],  keylist[k][1])
+        keylist[k] = (keylist[k][0], keylist[k][1])
 
     return keylist
 
 
-def _build_prefix_list(struct_def, prefix_key="", ratio_mult=1, delimiter='/'):
+def _build_prefix_list(struct_def, prefix_key="", ratio_mult=1, delimiter="/"):
 
     keys = []
     for prefix_s in struct_def:
         prefix_s["key_length"] = parse_size_range(prefix_s["key_length"])
         for k in range(0, prefix_s["num_prefix"]):
             key = prefix_key + gen_key(key_desc=prefix_s["key_length"]) + delimiter
-            keys.append([key, (prefix_s["ratio"]*ratio_mult)])
+            keys.append([key, (prefix_s["ratio"] * ratio_mult)])
             if "prefix_struct" in prefix_s:
-                keys += _build_prefix_list(prefix_s["prefix_struct"],
-                        prefix_key=key,
-                        ratio_mult=(prefix_s["ratio"]/prefix_s["num_prefix"]))
+                keys += _build_prefix_list(
+                    prefix_s["prefix_struct"],
+                    prefix_key=key,
+                    ratio_mult=(prefix_s["ratio"] / prefix_s["num_prefix"]),
+                )
     return keys
+
 
 def build_prefix_keys(struct_def):
 
@@ -138,9 +157,9 @@ def calc_prepare_size(sizerange, runtime, iops):
 
 def parse_size_range(stringval):
     if type(stringval) == list or type(stringval) == tuple:
-        return stringval # this has already been processed
+        return stringval  # this has already been processed
     if type(stringval) == int or type(stringval) == float:
-        return (int(stringval),  int(stringval),  int(stringval))
+        return (int(stringval), int(stringval), int(stringval))
     if not "-" in stringval:
         sz = parse_size(stringval)
         return (sz, sz, sz)
@@ -192,8 +211,8 @@ def generate_tasks(args):
     loads.insert(0, "init")
 
     # Create a readmap and add prep stage if needed
-    if any(x in loads for x in  ['read', 'mixed', 'head', 'delete', 'tag']):
-        loads.insert(1, "readmap")      # Will always be after init
+    if any(x in loads for x in ["read", "mixed", "head", "delete", "tag"]):
+        loads.insert(1, "readmap")  # Will always be after init
         if not args.use_readmap:
             loads.insert(2, "prepare")  # Will always be after readmap
 
@@ -213,21 +232,27 @@ def generate_tasks(args):
 def basic_workload(args):
     pass
 
+
 def verify_endpoint(endpoint):
     if endpoint[:7] == "http://" or endpoint[:8] == "https://":
         return endpoint
     else:
-        return ("http://" + endpoint)
+        return "http://" + endpoint
+
 
 def check_mixed_workloads(mix_prof_obj, loads):
-    #if loads.count("mixed") != len(mix_prof_obj):
+    # if loads.count("mixed") != len(mix_prof_obj):
     mcount = 0
     for w in loads:
-        if w[:5] == "mixed": mcount += 1
+        if w[:5] == "mixed":
+            mcount += 1
 
     if mcount != len(mix_prof_obj):
-        sys.stderr.write("\nCONFIG ERROR: you have {} mixed load(s) queued, but {} mixed profile(s) defined\n\n".format(
-                loads.count("mixed"), len(mix_prof_obj)))
+        sys.stderr.write(
+            "\nCONFIG ERROR: you have {} mixed load(s) queued, but {} mixed profile(s) defined\n\n".format(
+                loads.count("mixed"), len(mix_prof_obj)
+            )
+        )
         sys.exit(1)
 
 
@@ -245,14 +270,18 @@ def classic_workload(args):
     if len(key_sz) == 1:
         key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
     else:
-        key_sz = (int(key_sz[0]),
-                int(key_sz[1]),
-                int( ( int(key_sz[0]) + int(key_sz[1]) )/2 ))
+        key_sz = (
+            int(key_sz[0]),
+            int(key_sz[1]),
+            int((int(key_sz[0]) + int(key_sz[1])) / 2),
+        )
 
     tasks = generate_tasks(args)
 
     if args.prepare_objects != None:
-        ttl_prepare_sz = parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
+        ttl_prepare_sz = (
+            parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
+        )
     else:
         ttl_prepare_sz = calc_prepare_size(
             parse_size_range(args.object_size),
@@ -286,6 +315,6 @@ def classic_workload(args):
         "use_readmap": args.use_readmap,
         "prepare_objects": args.prepare_objects,
         "key_prefix": args.key_prefix,
-        "no_db": args.no_db
+        "no_db": args.no_db,
     }
     return root_config

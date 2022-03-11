@@ -5,7 +5,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.1
+SLOR_VERSION = 0.21
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -43,51 +43,88 @@ LOG_TO_CONSOLE = True
 DRIVER_SOCKET_TIMEOUT = 300  # seconds
 FORCE_VERSION_MATCH = True
 DRIVER_REPORT_TIMER = 5  # seconds
-STATS_QUANTA = 5         # seconds (should probably be the same as DRIVER_REPORT_TIMER)
-LOAD_TYPES = ("prepare", "init", "read", "write", "delete", "head", "mixed", "blowout", "cleanup", "tag_read", "tag_write", "sleep")
+STATS_QUANTA = 5  # seconds (should probably be the same as DRIVER_REPORT_TIMER)
+LOAD_TYPES = (
+    "prepare",
+    "init",
+    "read",
+    "write",
+    "delete",
+    "head",
+    "mixed",
+    "blowout",
+    "cleanup",
+    "tag_read",
+    "tag_write",
+    "sleep",
+)
 PROGRESS_BY_COUNT = ("init", "prepare", "blowout")
-PROGRESS_BY_TIME = ("read", "write", "mixed", "tag_read", "tag_write", "head", "delete", "tag_read", "tag_write", "sleep")
+PROGRESS_BY_TIME = (
+    "read",
+    "write",
+    "mixed",
+    "tag_read",
+    "tag_write",
+    "head",
+    "delete",
+    "tag_read",
+    "tag_write",
+    "sleep",
+)
 UNKNOWN_PROGRESS = ("cleanup",)
-MIXED_LOAD_TYPES = ("read", "write", "head", "delete", "tag_read", "tag_write", "reread", "overwrite")
+MIXED_LOAD_TYPES = (
+    "read",
+    "write",
+    "head",
+    "delete",
+    "tag_read",
+    "tag_write",
+    "reread",
+    "overwrite",
+)
 OBJECT_PREFIX_LOC = "keys"
 PREPARE_RETRIES = 5
 SHOW_STATS_RATE = 1
 STATS_DB_DIR = "/dev/shm"
-TERM_WIDTH_MAX=104
+TERM_WIDTH_MAX = 104
 WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
-MINIMUM_MPU_CHUNK_SIZE=5000000
+MINIMUM_MPU_CHUNK_SIZE = 5000000
+
 ##
-# Colors used in console output
+# Soem color short-hand
 class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    MAGENTA = '\033[35m'
-    CYAN = '\033[36m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    GRAY = '\033[38;5;243m'
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    GRAY = "\033[38;5;243m"
 
 
 BANNER = """
-┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
-│{0}SLOR{1} {2}▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁{1}│
-└─────────┴────────┴───────┴──────┴─────┴────┴───┴──┴─┴┘
-""".format(bcolors.BOLD,bcolors.ENDC,bcolors.CYAN)
-
+┌┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┬┐
+│{0}SLOR{1} {2}▏▎▍▌▊▉█▇▇▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁{1}│
+└────────────────────┴────────────┴───────┴────┴──┴─┴┘
+""".format(
+    bcolors.BOLD, bcolors.ENDC, bcolors.CYAN
+)
+# └─────────┴────────┴───────┴──────┴─────┴────┴───┴──┴─┴┘
 ###############################################################################
 ## Globally shared routines
 ##
 def parse_size(stringval: str) -> float:
 
-   #if float(stringval)
-    if stringval == None: return None
+    # if float(stringval)
+    if stringval == None:
+        return None
 
     """Parse human input for size values"""
     pwr = 10
@@ -95,22 +132,23 @@ def parse_size(stringval: str) -> float:
 
     for s in ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"]:
         if stringval[-3:] == s:
-            return float(stringval[0:-3]) * (2 ** pwr)
+            return float(stringval[0:-3]) * (2**pwr)
         pwr += 10
 
     for s in ["KB", "MB", "GB", "TB", "PB", "EB"]:
         # Deal with single-letter suffixes and two letter (e.g. "MB" and "M")
         if stringval[-1:] == s[0]:
-            return float(stringval[0:-1]) * (10 ** sipwr)
+            return float(stringval[0:-1]) * (10**sipwr)
         if stringval[-2:] == s:
-            return float(stringval[0:-2]) * (10 ** sipwr)
+            return float(stringval[0:-2]) * (10**sipwr)
         sipwr += 3
 
     return float(stringval)
 
 
 def human_readable(value, val_format="SI", print_units="bytes", precision=2):
-    if not value: return 0
+    if not value:
+        return 0
     if val_format == "SI":
         sipwr = 18
 
@@ -120,8 +158,8 @@ def human_readable(value, val_format="SI", print_units="bytes", precision=2):
             units = [" EB", " PB", " TB", " GB", " MB", " KB", " B"]
 
         for s in units:
-            if value > 10 ** sipwr or (10 ** sipwr) == 1:
-                return "{0:.{2}f}{1}".format(value / (10 ** sipwr), s, precision)
+            if value > 10 ** sipwr or (10**sipwr) == 1:
+                return "{0:.{2}f}{1}".format(value / (10**sipwr), s, precision)
             sipwr -= 3
     else:
         # Or else what? WHAT?
@@ -130,7 +168,7 @@ def human_readable(value, val_format="SI", print_units="bytes", precision=2):
 
 def basic_sysinfo():
     """
-    Never would have used psutil to start with if I knew is sucked this hard
+    Never would have used psutil to start with if I knew it sucked this hard
     """
 
     # Older versions of psutil don't have getloadavg(), pft.
@@ -139,9 +177,10 @@ def basic_sysinfo():
         sysload = psutil.getloadavg()
     except AttributeError:
         if os.name == "posix":
-            with open('/proc/loadavg') as f:
-                for i, item in  enumerate(f.readlines()[0].split(" ")):
-                    if i > 2: break
+            with open("/proc/loadavg") as f:
+                for i, item in enumerate(f.readlines()[0].split(" ")):
+                    if i > 2:
+                        break
                     sysload.append(float(item))
         else:
             sysload = [0.0, 0.0, 0.0]
@@ -157,10 +196,9 @@ def basic_sysinfo():
 
     # Not every platform has this either
     try:
-        sensors = psutil.sensors_temperatures(),
+        sensors = (psutil.sensors_temperatures(),)
     except AttributeError:
         sensors = None
-
 
     return {
         "slor_version": SLOR_VERSION,
@@ -199,59 +237,47 @@ def get_keys(profile):
 
     return (access_key, secret_key)
 
-def gen_key(key_desc=(40, 40), prefix="", inc=None, chars=string.digits + string.ascii_uppercase) -> str:
+
+def gen_key(
+    key_desc=(40, 40), prefix="", inc=None, chars=string.digits + string.ascii_uppercase
+) -> str:
     if type(key_desc) == int:
         key_desc = (key_desc, key_desc)
-    key =  "{0}{1}".format(
+    key = "{0}{1}".format(
         prefix,
         "".join(
             random.choice(chars)
-            for _ in range(0, key_desc[0] if key_desc[0] == key_desc[1] else random.randrange(key_desc[0], key_desc[1]) )
+            for _ in range(
+                0,
+                key_desc[0]
+                if key_desc[0] == key_desc[1]
+                else random.randrange(key_desc[0], key_desc[1]),
+            )
         ),
     )
     if inc:
-        inc=str(inc)
+        inc = str(inc)
         chars = len(inc)
         key = (key[:-chars] + inc) if chars < len(key) else inc
 
     return key
 
+
 def opclass_from_label(label):
-    return label[:label.find(":")] if ":" in label else label
-
-"""
-def sample_structure(operations):
-    sample = {
-        "start": 0,          # start of sample
-        "end": 0,            # end of sample
-        "st": {},            # dict of operation types
-        "perc": 0,           # precent complete (for iterable benchmarks - blowout, prepare)
-        "ios": 0             # I/Os global to load
-    }
-    for t in operations:
-        sample["st"][t] = {
-            "resp": [],      # list of response times (seconds)
-            "bytes": 0,      # total bytes present in sample
-            "bytes/s": 0,
-            "ios": 0,        # total io operations present in sample
-            "ios/s": 0,
-            "failures": 0,   # total number of failures present in the sample
-            "iotime": 0,     # time spend in io (seconds)
-        }
-    return sample
-"""
-
+    return label[: label.find(":")] if ":" in label else label
 
 
 def top_box():
-    print(u"\u250C{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+    print("\u250C{0}".format("\u2500" * (os.get_terminal_size().columns - 1)))
+
 
 def bottom_box():
-    print(u"\u2514{0}".format(u"\u2500"*(os.get_terminal_size().columns-1)))
+    print("\u2514{0}".format("\u2500" * (os.get_terminal_size().columns - 1)))
+
 
 def box_text(text):
     text_lines = text.split("\n")
     top_box()
     for line in text_lines:
-        print(u"\u2502 "+line)
+        print("\u2502 " + line)
     bottom_box()

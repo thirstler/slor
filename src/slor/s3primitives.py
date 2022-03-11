@@ -1,10 +1,12 @@
 import boto3
 
+
 class S3primitives:
     """
     Lame wrapper around boto3 calls just in case one day these should be
     replaced with more manual methods (for better timer placement)
     """
+
     def __init__(self, config=None):
         if config:
             self.set_s3_client(config)
@@ -26,7 +28,6 @@ class S3primitives:
             aws_secret_access_key=config["secret_key"],
             region_name=config["region"],
         ).client("s3", verify=verify_tls, endpoint_url=config["endpoint"])
-        
 
     def put_object(self, bucket, key, data):
         resp = self.s3client.put_object(
@@ -52,9 +53,7 @@ class S3primitives:
                 Bucket=bucket, Key=key, VersionId=version_id
             )
         else:
-            resp = self.s3client.head_object(
-                Bucket=bucket, Key=key
-            )
+            resp = self.s3client.head_object(Bucket=bucket, Key=key)
         return resp
 
     def delete_object(self, bucket, key, version_id=None):
@@ -63,21 +62,16 @@ class S3primitives:
                 Bucket=bucket, Key=key, VersionId=version_id
             )
         else:
-            resp = self.s3client.delete_object(
-                Bucket=bucket, Key=key
-            )
+            resp = self.s3client.delete_object(Bucket=bucket, Key=key)
         return resp
 
     def list_bucket(self, bucket, paged=True):
         lspgntr = None
         if paged:
             lspgntr = self.s3client.get_paginator("list_object_versions")
-            self.page_iterator = lspgntr.paginate(
-                Bucket=bucket,
-                MaxKeys=1000
-            )
+            self.page_iterator = lspgntr.paginate(Bucket=bucket, MaxKeys=1000)
         else:
-            pass # fuck off
+            pass  # fuck off
 
         return self.page_iterator
 
@@ -94,10 +88,7 @@ class S3primitives:
     def delete_recursive(self, bucket, batch_delete=True):
         if batch_delete:
             lspgntr = self.s3client("list_object_versions")
-            page_iterator = lspgntr.paginate(
-                Bucket=bucket,
-                MaxKeys=1000
-            )
+            page_iterator = lspgntr.paginate(Bucket=bucket, MaxKeys=1000)
             for listing in page_iterator:
                 versions = listing["Versions"]
                 markers = listing["DeleteMarkers"]
@@ -105,6 +96,4 @@ class S3primitives:
                 deleted = self.s3client.delete_objects(Bucket=bucket, Delete=allthings)
                 print(deleted)
         else:
-            pass # fuck it        
-
-
+            pass  # fuck it

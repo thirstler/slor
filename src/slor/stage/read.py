@@ -2,8 +2,8 @@ from slor.shared import *
 from slor.process import SlorProcess
 import time
 
-class Read(SlorProcess):
 
+class Read(SlorProcess):
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
@@ -28,7 +28,8 @@ class Read(SlorProcess):
         # Wrap-around when out of keys to read
         while True:
 
-            if stop: break
+            if stop:
+                break
 
             if rerun > 0:
                 sys.stderr.write(
@@ -49,14 +50,16 @@ class Read(SlorProcess):
                 except Exception as e:
                     print(str(e))
                     self.stop_io(failed=True)
-                
+
                 if self.unit_start >= self.benchmark_stop:
                     self.stop_sample()
                     self.stop_benchmark()
-                    stop = True # break outer loop
+                    stop = True  # break outer loop
                     break
 
-                elif (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
+                elif (
+                    self.unit_start - self.sample_struct.window_start
+                ) >= DRIVER_REPORT_TIMER:
                     self.stop_sample()
                     self.start_sample()
 

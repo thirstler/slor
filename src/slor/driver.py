@@ -4,6 +4,7 @@ import argparse
 import sys
 from multiprocessing.connection import Listener
 
+
 def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):
     """Non-cli entry point"""
     try:
@@ -11,19 +12,21 @@ def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):
     except Exception as e:
         print(e)
         sys.exit(1)
-        
-    if not quiet: print("ready on  {}:{}".format(bindaddr, bindport))
+
+    if not quiet:
+        print("ready on  {}:{}".format(bindaddr, bindport))
     while True:
         # There will only ever be one connection, no connection handling
         sock = server_sock.accept()
-        if not quiet: print(" new connection")
+        if not quiet:
+            print(" new connection")
         handle = SlorDriver(sock, bindaddr, bindport)
         handle.exec()
         sock.close()
         del handle
         if exit_on_disconnect:
             return
-            
+
 
 def run():
     """CLI entry point"""
@@ -34,7 +37,7 @@ def run():
     parser.add_argument(
         "--bindaddr",
         default="0.0.0.0",
-        help="bind to specific address (defaults to 0.0.0.0)"
+        help="bind to specific address (defaults to 0.0.0.0)",
     )
     parser.add_argument(
         "--listen",
@@ -44,5 +47,5 @@ def run():
     args = parser.parse_args()
 
     _slor_driver(args.bindaddr, args.listen, False)
-    
+
     sys.exit(0)

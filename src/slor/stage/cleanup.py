@@ -2,8 +2,8 @@ from slor.shared import *
 from slor.process import SlorProcess
 import boto3
 
-class CleanUp(SlorProcess):
 
+class CleanUp(SlorProcess):
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
@@ -29,7 +29,7 @@ class CleanUp(SlorProcess):
         s3client = boto3.Session(
             aws_access_key_id=self.config["access_key"],
             aws_secret_access_key=self.config["secret_key"],
-            region_name=self.config["region"]
+            region_name=self.config["region"],
         ).client("s3", verify=verify_tls, endpoint_url=self.config["endpoint"])
 
         self.start_benchmark()
@@ -39,23 +39,24 @@ class CleanUp(SlorProcess):
             ls_pg = s3client.get_paginator("list_objects_versions")
         except:
             ls_pg = s3client.get_paginator("list_objects_v2")
-        
-        page_iterator = ls_pg.paginate(
-            Bucket=self.config["bucket"],
-            MaxKeys=1000
-        )
+
+        page_iterator = ls_pg.paginate(Bucket=self.config["bucket"], MaxKeys=1000)
         for page in page_iterator:
-            #print(page)
-            all = {'Objects': []}
+            # print(page)
+            all = {"Objects": []}
             if "Contents" in page:
                 for x in page["Contents"]:
                     all["Objects"].append({"Key": x["Key"]})
             if "Versions" in page:
                 for x in page["Versions"]:
-                    all["Objects"].append({"Key": x["Key"], "VersionId": x["VersionId"]})
+                    all["Objects"].append(
+                        {"Key": x["Key"], "VersionId": x["VersionId"]}
+                    )
             if "DeleteMarkers" in page:
                 for x in page["DeleteMarkers"]:
-                    all["Objects"].append({"Key": x["Key"], "VersionId": x["VersionId"]})
+                    all["Objects"].append(
+                        {"Key": x["Key"], "VersionId": x["VersionId"]}
+                    )
 
             try:
                 self.start_io("cleanup")
@@ -67,7 +68,9 @@ class CleanUp(SlorProcess):
                 sys.stderr.flush()
                 self.stop_io(failed=True)
 
-            if (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
+            if (
+                self.unit_start - self.sample_struct.window_start
+            ) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()
 

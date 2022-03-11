@@ -11,19 +11,19 @@ class SlorProcess:
 
     sock = None
     config = None
-    id = None                # Process ID (unique to the driver, not the whole distributed job)
-    w_id = None              # hostname used to identify the driver
+    id = None  # Process ID (unique to the driver, not the whole distributed job)
+    w_id = None  # hostname used to identify the driver
     s3client = None
     stop = False
     byte_pool = 0
     s3ops = None
 
-    benchmark_stop = 0       # when this benchmark is _supposed_ to stop
-    unit_start = 0           # start of individual I/O
+    benchmark_stop = 0  # when this benchmark is _supposed_ to stop
+    unit_start = 0  # start of individual I/O
     sample_struct = None
     default_op = None
     current_op = None
-    operations = ()          # Operation types in this workload
+    operations = ()  # Operation types in this workload
     sample_count = 0
     benchark_io_count = 0
 
@@ -32,9 +32,10 @@ class SlorProcess:
 
     def delay(self):
         """calculate and execute the start-up delay for this process"""
-        process_delay = (self.config["startup_delay"] * self.config["w_id"]) + ((self.config["startup_delay"]/self.config["threads"]) * self.id)
+        process_delay = (self.config["startup_delay"] * self.config["w_id"]) + (
+            (self.config["startup_delay"] / self.config["threads"]) * self.id
+        )
         time.sleep(process_delay)
-     
 
     # Benchmark timing functions
     def start_benchmark(self, ops=None, target=None) -> None:
@@ -46,11 +47,11 @@ class SlorProcess:
 
     def start_sample(self) -> None:
         self.sample_struct = perfSample(
-            driver_id=self.w_id, 
+            driver_id=self.w_id,
             process_id=self.id,
             count_target=self.count_target,
             start_io_count=self.benchark_io_count,
-            sample_seq=self.sample_count
+            sample_seq=self.sample_count,
         )
         for o in self.operations:
             self.sample_struct.add_operation_class(o)
@@ -59,7 +60,9 @@ class SlorProcess:
 
     def stop_sample(self) -> None:
         self.sample_struct.stop()
-        self.sample_struct.ttl = self.sample_struct.window_end + (DRIVER_REPORT_TIMER + 1)
+        self.sample_struct.ttl = self.sample_struct.window_end + (
+            DRIVER_REPORT_TIMER + 1
+        )
         self.send_sample(json.loads(self.sample_struct.dump_json()))
         self.benchark_io_count = self.sample_struct.global_io_count
         del self.sample_struct
@@ -68,21 +71,16 @@ class SlorProcess:
         self.current_op = type
         self.unit_start = time.time()
 
-
     def stop_io(self, failed=False, sz=0, final=False) -> None:
- 
+
         unit_time = time.time() - self.unit_start
         if failed:
             self.sample_struct.add_failures(self.current_op, 1)
         else:
             self.sample_struct.update(
-                opclass=self.current_op,
-                ios=1,
-                bytes=sz,
-                resp_t=unit_time
+                opclass=self.current_op, ios=1, bytes=sz, resp_t=unit_time
             )
         self.sample_struct.final = final
-
 
     ##
     # Random-data handlers
@@ -90,15 +88,18 @@ class SlorProcess:
         start = random.randrange(0, self.pool_sz)
         ext = start + num_bytes
         if ext > self.pool_sz:
-            return self.byte_pool[:(ext-self.pool_sz)] + self.byte_pool[start:self.pool_sz]
+            return (
+                self.byte_pool[: (ext - self.pool_sz)]
+                + self.byte_pool[start : self.pool_sz]
+            )
         else:
             return self.byte_pool[start:ext]
 
-
     def mk_byte_pool(self, num_bytes) -> None:
-        self.byte_pool = (lambda n:bytearray(map(random.getrandbits,(8,)*n)))(num_bytes)
+        self.byte_pool = (lambda n: bytearray(map(random.getrandbits, (8,) * n)))(
+            num_bytes
+        )
         self.pool_sz = num_bytes
-
 
     ##
     # IPC
@@ -107,7 +108,7 @@ class SlorProcess:
             type="stat",
             stage=self.config["type"],
             value=message,
-            time_ms=int(time.time() * 1000)
+            time_ms=int(time.time() * 1000),
         )
 
     def hand_shake(self):

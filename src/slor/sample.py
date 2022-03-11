@@ -88,7 +88,7 @@ class perfSample:
             self.global_io_time = 0
             self.operations = {}
             self.final = False
-            self.ttl = DRIVER_REPORT_TIMER + (DRIVER_REPORT_TIMER/2)
+            self.ttl = DRIVER_REPORT_TIMER + (DRIVER_REPORT_TIMER / 2)
             self.driver_id = driver_id
             self.process_id = process_id
             self.count_target = count_target
@@ -131,13 +131,12 @@ class perfSample:
             self.add_resp_time(op, sample.get_metric(metric="iotime", opclass=op))
 
         # Overwrite global_io_count to benchmark counter
-        #self.global_io_count += sample.global_io_count
+        # self.global_io_count += sample.global_io_count
 
     def from_json(self, from_json):
         """
         Build a sample object from JSON (as formatted in dump_json())
         """
-
         self.driver_id = from_json["driver_id"]
         self.process_id = from_json["process_id"]
         self.global_io_count = from_json["global_io_count"]
@@ -203,8 +202,8 @@ class perfSample:
             }
 
     ##########################################################################
-    # Sample update Interfaces 
-    def update(self, opclass=None, ios:int=0, bytes:int=0, resp_t:float=0):
+    # Sample update Interfaces
+    def update(self, opclass=None, ios: int = 0, bytes: int = 0, resp_t: float = 0):
         """
         One-shot for use during workload updates
         """
@@ -250,7 +249,7 @@ class perfSample:
             self.global_io_time += sum(value)
 
     ##########################################################################
-    # Sample fetch metrics interfaces 
+    # Sample fetch metrics interfaces
     def _get_metric(self, metric: str, opclass: str):
         try:
             return self.operations[opclass][metric]

@@ -2,6 +2,7 @@ from slor.shared import *
 from slor.process import SlorProcess
 import time
 
+
 class Head(SlorProcess):
 
     s3ops = None
@@ -19,7 +20,6 @@ class Head(SlorProcess):
         if self.hand_shake():
             self.delay()
             self.exec()
-        
 
     def exec(self):
 
@@ -31,7 +31,8 @@ class Head(SlorProcess):
         # Wrap-around when out of keys to read
         while True:
 
-            if stop: break
+            if stop:
+                break
 
             if rerun > 0:
                 # Just a note that we probably don't care about heads getting re-read
@@ -45,17 +46,23 @@ class Head(SlorProcess):
                     self.stop_io()
 
                 except Exception as e:
-                    sys.stderr.write("fail[{0}] {1}/{2}: {3}\n".format(self.id, pkey[0], pkey[1], str(e)))
+                    sys.stderr.write(
+                        "fail[{0}] {1}/{2}: {3}\n".format(
+                            self.id, pkey[0], pkey[1], str(e)
+                        )
+                    )
                     sys.stderr.flush()
                     self.stop_io(failed=True)
-                
+
                 if self.unit_start >= self.benchmark_stop:
                     self.stop_sample()
                     self.stop_benchmark()
-                    stop = True # break outer loop
+                    stop = True  # break outer loop
                     break
 
-                elif (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
+                elif (
+                    self.unit_start - self.sample_struct.window_start
+                ) >= DRIVER_REPORT_TIMER:
                     self.stop_sample()
                     self.start_sample()
 

@@ -13,11 +13,12 @@ import boto3
 import time
 from multiprocessing import Process, Pipe
 
+
 def _driver_t(socket, config, w_id, id):
     """
     Wrapper function to launch workload processes from a Process() call.
     """
-    
+
     if config["type"] == "prepare":
         slor.stage.prepare.Prepare(socket, config, w_id, id).ready()
     elif config["type"] == "blowout":
@@ -93,7 +94,6 @@ class SlorDriver:
         print(" done with controller")
         self.sock.close()
 
-
     def init_buckets(self, config):
         """
         Create bucket in our list
@@ -135,9 +135,9 @@ class SlorDriver:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn)
-                    #self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    # self.log_to_controller("Warning: bucket present ({0})".format(bn))
                 except:
-                    #self.log_to_controller("creating {0}".format(bn))
+                    # self.log_to_controller("creating {0}".format(bn))
                     try:
                         client.create_bucket(
                             Bucket=bn,
@@ -161,9 +161,8 @@ class SlorDriver:
         try:
             self.sock.send(message)
         except Exception as e:
-            #print(message)
+            # print(message)
             self.reset = True  # lost contact with controller need to close-up
-
 
     def check_procs_ready(self):
         ##
@@ -175,7 +174,6 @@ class SlorDriver:
                 global_ready = False
         return global_ready
 
-
     def report_procs_ready(self):
         self.sock.send({"ready": True})
 
@@ -185,7 +183,6 @@ class SlorDriver:
             for t in self.pipes:
                 status = t[0].send({"exec": True})
         return True
-
 
     def thread_control(self, config):
 
@@ -205,10 +202,12 @@ class SlorDriver:
                 config["bucket"] = bucket
                 self.pipes.append((Pipe()))
                 self.procs.append(
-                    Process(target=_driver_t, args=(self.pipes[-1][1], config, self.w_id, id))
+                    Process(
+                        target=_driver_t,
+                        args=(self.pipes[-1][1], config, self.w_id, id),
+                    )
                 )
                 self.procs[-1].start()
-
 
             if not self.check_procs_ready():
                 return False
@@ -224,7 +223,7 @@ class SlorDriver:
 
                 if "readmap" in config:
 
-                    chunk = int(len(config["readmap"])/config["threads"])
+                    chunk = int(len(config["readmap"]) / config["threads"])
 
                     # Divide the readmap here if we're using one
                     offset = id * chunk
@@ -235,16 +234,17 @@ class SlorDriver:
                 # Create socket for talking to thread and launch
                 self.pipes.append((Pipe()))
                 self.procs.append(
-                    Process(target=_driver_t, args=(self.pipes[-1][1], config, self.w_id, id))
+                    Process(
+                        target=_driver_t,
+                        args=(self.pipes[-1][1], config, self.w_id, id),
+                    )
                 )
                 self.procs[-1].start()
-
 
             if not self.check_procs_ready():
                 return False
             if not self.report_procs_ready():
                 return False
-
 
         ##
         # Monitoring and return the responses
@@ -281,7 +281,6 @@ class SlorDriver:
         # Alert controller that the current workload is finished
         self.log_to_controller({"status": "done"})
 
-
     def process_thread_resp(self, resp):
         # we can filter messages intended for the driver if we want
         if "status" in resp and resp["status"] == "done":
@@ -289,14 +288,12 @@ class SlorDriver:
             return False
         return resp
 
-
     def workload_handshake(self):
         self.sock.send({"ready": True})
         mesg = self.sock.recv()
         if mesg["exec"]:
             return True
         return False
-
 
     def decider(self, cmd_buffer):
         """I'm the decider"""

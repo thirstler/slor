@@ -3,6 +3,7 @@ from slor.sample import perfSample
 import time
 import math
 
+
 class statHandler:
 
     config = None
@@ -48,50 +49,52 @@ class statHandler:
         # How many processes in this job are we expecting?
         self.ttl_procs = len(self.config["driver_list"]) * self.config["driver_proc"]
 
-
-    def set_count_target(self,count):
+    def set_count_target(self, count):
         self.count_target = count
 
     def update_standing_sample(self, data):
-        #print(data)
+        # print(data)
 
         sample_addr = "{}:{}".format(data["w_id"], data["t_id"])
-        #try:
+        # try:
         if sample_addr not in self.standing_sample:
             self.standing_sample[sample_addr] = perfSample(from_json=data["value"])
         else:
             self.standing_sample[sample_addr].from_json(data["value"])
 
-
     def rotate_mixed_stat_func(self, final):
-        if final: self.stat_rotation = 0
+        if final:
+            self.stat_rotation = 0
         if self.stat_types[int(self.stat_rotation)] == "throughput":
-            disp_func=self.disp_ops_sec
+            disp_func = self.disp_ops_sec
         elif self.stat_types[int(self.stat_rotation)] == "bandwidth":
-            disp_func=self.disp_bytes_sec
+            disp_func = self.disp_bytes_sec
         elif self.stat_types[int(self.stat_rotation)] == "response":
-            disp_func=self.disp_resp_avg
+            disp_func = self.disp_resp_avg
         self.stat_rotation += 0.20
         if self.stat_rotation >= 3:
             self.stat_rotation = 0
         return disp_func
 
-
     # one-off routines to make things a little more readable
     def expire_standing_samples(self, ref_time=time.time()):
         delete_us = []
         for sid in self.standing_sample:
-            if self.standing_sample[sid].ttl == 0: continue
+            if self.standing_sample[sid].ttl == 0:
+                continue
             if self.standing_sample[sid].ttl > ref_time:
                 delete_us.append(sid)
-        
+
         for sid in reversed(delete_us):
             del self.standing_sample[sid]
 
     def get_standing_window_average(self):
         window_avg = 0
         for sid in self.standing_sample:
-            window_avg += (self.standing_sample[sid].window_end - self.standing_sample[sid].window_start)
+            window_avg += (
+                self.standing_sample[sid].window_end
+                - self.standing_sample[sid].window_start
+            )
         return window_avg
 
     def mk_merged_sample(self):
@@ -108,14 +111,14 @@ class statHandler:
 
         if len(self.standing_sample) > 0:
             window_avg /= len(self.standing_sample)
-            stat_sample.start(start_time=(now-window_avg))
+            stat_sample.start(start_time=(now - window_avg))
             stat_sample.stop(stop_time=now)
 
         return stat_sample
 
     def print_workload_headers(self, header_items):
         sys.stdout.write("\r")
-        sys.stdout.write("\u2502" + " "*25)
+        sys.stdout.write("\u2502" + " " * 25)
         items = []
         for o in header_items:
             items.append("{}".format(o))
@@ -125,16 +128,21 @@ class statHandler:
         sys.stdout.write("\n")
 
     def headers(self, mixed_count):
-        """ Show headers for the stage we're about to display stats for """
+        """Show headers for the stage we're about to display stats for"""
         if self.stage == "mixed":
             hlist = []
-            for x in  self.config["mixed_profiles"][mixed_count]:
+            for x in self.config["mixed_profiles"][mixed_count]:
                 hlist.append(x)
             hlist.append("total")
             self.print_workload_headers(hlist)
-            
-        elif any(self.stage == x for x in MIXED_LOAD_TYPES + ("prepare","blowout", "cleanup")):
-            self.print_workload_headers(("throughput", "bandwidth", "resp ms", "failures"))
+
+        elif any(
+            self.stage == x
+            for x in MIXED_LOAD_TYPES + ("prepare", "blowout", "cleanup")
+        ):
+            self.print_workload_headers(
+                ("throughput", "bandwidth", "resp ms", "failures")
+            )
 
     def show(self, final=False):
 
@@ -145,19 +153,21 @@ class statHandler:
 
         if self.stage == "init" and final:
             sys.stdout.write("\r\u2502 init:    done")
-            if final: sys.stdout.write("\n")
+            if final:
+                sys.stdout.write("\n")
             sys.stdout.flush()
             return
         elif self.stage == "init":
             sys.stdout.write("\r\u2502 init:")
-            if final: sys.stdout.write("\n")
+            if final:
+                sys.stdout.write("\n")
             sys.stdout.flush()
             return
 
         sys.stdout.write("\r")
 
         stat_sample = self.mk_merged_sample()
-        #self.expire_standing_samples(ref_time=now)
+        # self.expire_standing_samples(ref_time=now)
 
         if stat_sample.global_io_count < 1:
             sys.stdout.write("\r\u2502 [ waiting for processes... ]")
@@ -173,10 +183,12 @@ class statHandler:
             color = bcolors.OKGREEN
         elif self.ttl_procs == len(self.standing_sample):
             color = bcolors.OKBLUE
-        else: # should never happen
+        else:  # should never happen
             color = bcolors.FAIL
 
-        sys.stdout.write("\u2502 {}{:<9}{}".format(color, self.stage + ":", bcolors.ENDC))
+        sys.stdout.write(
+            "\u2502 {}{:<9}{}".format(color, self.stage + ":", bcolors.ENDC)
+        )
 
         # Multipal operations in the sample, output rotating information
         if len(stat_sample.operations) > 1:
@@ -188,9 +200,10 @@ class statHandler:
                 if stat_sample.sample_seq == 0:
                     self.progress_start_time = time.time()
                 else:
-                    perc = (time.time()-self.progress_start_time)/self.duration
+                    perc = (time.time() - self.progress_start_time) / self.duration
 
-                if perc > 1: perc = 1 # Just in case
+                if perc > 1:
+                    perc = 1  # Just in case
 
                 self.progress(perc, final=final)
 
@@ -200,8 +213,12 @@ class statHandler:
                 self.progress(stat_sample.percent_complete(), final=final)
 
             for o in self.operations:
-                sys.stdout.write(" {}".format(self.disp_ops_sec(stat_sample.get_rate("ios", o))))
-            sys.stdout.write(" {}".format(self.disp_ops_sec(stat_sample.get_workload_io_rate())))
+                sys.stdout.write(
+                    " {}".format(self.disp_ops_sec(stat_sample.get_rate("ios", o)))
+                )
+            sys.stdout.write(
+                " {}".format(self.disp_ops_sec(stat_sample.get_workload_io_rate()))
+            )
 
             sys.stdout.write(" {}".format(self.elapsed_time()))
 
@@ -214,8 +231,11 @@ class statHandler:
                 if stat_sample.global_io_count == 0:
                     self.progress_start_time = time.time()
                 else:
-                    perc = (time.time()-self.progress_start_time )/(self.duration + (DRIVER_REPORT_TIMER*2))
-                if perc > 1: perc = 1
+                    perc = (time.time() - self.progress_start_time) / (
+                        self.duration + (DRIVER_REPORT_TIMER * 2)
+                    )
+                if perc > 1:
+                    perc = 1
                 self.progress(perc, final=final)
 
             # Work-to-finish workloads (prepare, blowout)
@@ -227,41 +247,43 @@ class statHandler:
                 self.dunno(final=final)
 
             for op in stat_sample.operations:
-                sys.stdout.write(" {} {} {} {} {}".format(
-                    self.disp_ops_sec(stat_sample.get_rate("ios", op)),
-                    self.disp_bytes_sec(stat_sample.get_rate("bytes", op)),
-                    self.disp_resp_avg(stat_sample.get_resp_avg(op)),
-                    self.disp_failure_count(stat_sample.get_metric("failures", op)),
-                    self.elapsed_time()
-                ))
+                sys.stdout.write(
+                    " {} {} {} {} {}".format(
+                        self.disp_ops_sec(stat_sample.get_rate("ios", op)),
+                        self.disp_bytes_sec(stat_sample.get_rate("bytes", op)),
+                        self.disp_resp_avg(stat_sample.get_resp_avg(op)),
+                        self.disp_failure_count(stat_sample.get_metric("failures", op)),
+                        self.elapsed_time(),
+                    )
+                )
 
-        if final: sys.stdout.write("\n")
+        if final:
+            sys.stdout.write("\n")
         sys.stdout.flush()
 
-        
         del stat_sample
-        
-        #print(self.stat_rotation)
-        self.last_show = now
 
+        # print(self.stat_rotation)
+        self.last_show = now
 
     def readmap_progress(self, x, outof, final=False):
 
         if (x % 1000) == 0 or final:
             nownow = time.time()
-        else: return
+        else:
+            return
 
-        perc = 1 if final else (x/outof)
+        perc = 1 if final else (x / outof)
         try:
-            rate = (x - self.last_rm_count)/(nownow-self.last_rm_time)
+            rate = (x - self.last_rm_count) / (nownow - self.last_rm_time)
         except ZeroDivisionError:
             rate = 0
 
         sys.stdout.write("\r\u2502 readmap: ")
         self.progress(perc, final=final)
-        sys.stdout.write(" {}".format(
-            "[{:>7} op/s]".format(human_readable(rate, print_units="ops"))
-        ))
+        sys.stdout.write(
+            " {}".format("[{:>7} op/s]".format(human_readable(rate, print_units="ops")))
+        )
 
         if final:
             sys.stdout.write("\n")
@@ -271,44 +293,77 @@ class statHandler:
         self.last_rm_count = x
 
     def dunno(self, width=10, final=False, color=""):
-        #blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
-        blocks = ("\u2588", "\u2589", "\u258A", "\u258B", "\u258C", "\u258D", "\u258E", "\u258F", "\u2590")
-        
+        # blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
+        blocks = (
+            "\u2588",
+            "\u2589",
+            "\u258A",
+            "\u258B",
+            "\u258C",
+            "\u258D",
+            "\u258E",
+            "\u258F",
+            "\u2590",
+        )
+
         if final:
-            sys.stdout.write("{}{} 100%{}".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC))
+            sys.stdout.write(
+                "{}{} 100%{}".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC)
+            )
         else:
             for b in range(0, width):
-                sys.stdout.write(blocks[random.randint(0,len(blocks)-1)])
+                sys.stdout.write(blocks[random.randint(0, len(blocks) - 1)])
             sys.stdout.write(" ???%")
 
-
     def progress(self, perc, width=10, final=False, color=""):
-        if final or perc > 1: perc = 1
-        blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588") # eighth blocks
-        fillchar = u"\u2588"
+        if final or perc > 1:
+            perc = 1
+        blocks = (
+            "\u258F",
+            "\u258E",
+            "\u258D",
+            "\u258C",
+            "\u258B",
+            "\u258A",
+            "\u2589",
+            "\u2588",
+        )  # eighth blocks
+        fillchar = "\u2588"
         char_w = perc * width
-        leading_char = blocks[math.floor((char_w*8) % 8)]
+        leading_char = blocks[math.floor((char_w * 8) % 8)]
         if final:
             color = bcolors.GRAY
             leading_char = " "
-        sys.stdout.write(u"{}{}{}{}{:>3}%{}".format(color, fillchar*(math.floor(char_w)), leading_char, " "*(width-math.floor(char_w)), math.ceil(perc*100), bcolors.ENDC))
-
+        sys.stdout.write(
+            "{}{}{}{}{:>3}%{}".format(
+                color,
+                fillchar * (math.floor(char_w)),
+                leading_char,
+                " " * (width - math.floor(char_w)),
+                math.ceil(perc * 100),
+                bcolors.ENDC,
+            )
+        )
 
     def elapsed_time(self):
         elapsed = time.time() - self.stage_start_time
         hours, remainder = divmod(elapsed, 3600)
         minutes, seconds = divmod(remainder, 60)
-        return("[{:>8}]".format('{:02}:{:02}:{:02}'.format(int(hours), int(minutes), int(seconds))))
+        return "[{:>8}]".format(
+            "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
+        )
 
     def disp_bytes_sec(self, bytes_sec):
-        return("[{:>10}/s]".format(human_readable(bytes_sec)))
+        return "[{:>10}/s]".format(human_readable(bytes_sec))
 
     def disp_ops_sec(self, ops_sec, color=""):
         h_rate = human_readable(ops_sec, print_units="ops")
-        return("[{}{:>7} op/s{}]".format(color, h_rate,bcolors.ENDC if color != "" else ""))
+        return "[{}{:>7} op/s{}]".format(
+            color, h_rate, bcolors.ENDC if color != "" else ""
+        )
 
     def disp_resp_avg(self, resp_avg):
-        return("[{:>9.2f} ms]".format(resp_avg*1000))
+        return "[{:>9.2f} ms]".format(resp_avg * 1000)
 
     def disp_failure_count(self, count=0):
-        return("[{:>8} ttl]".format(human_readable(count, print_units="ops")))
+        return "[{:>8} ttl]".format(human_readable(count, print_units="ops"))

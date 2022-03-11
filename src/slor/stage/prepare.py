@@ -2,6 +2,7 @@ from slor.shared import *
 from slor.process import SlorProcess
 import random
 
+
 class Prepare(SlorProcess):
 
     r1 = None
@@ -33,7 +34,7 @@ class Prepare(SlorProcess):
         for skey in self.config["mapslice"]:
             if self.check_for_messages() == "stop":
                 break
-            
+
             c_len = random.randint(self.r1, self.r2)
             body_data = self.get_bytes_from_pool(c_len)
 
@@ -44,16 +45,18 @@ class Prepare(SlorProcess):
                     self.s3ops.put_object(skey[0], skey[1], body_data)
                     self.stop_io(sz=len(body_data))
                     count += 1
-                    break # worked, no need to retry
+                    break  # worked, no need to retry
 
                 except Exception as e:
                     self.stop_io(failed=True)
                     sys.stderr.write("retry[{0}]: {1}\n".format(self.id, str(e)))
                     sys.stderr.flush()
-                    continue # Keep trying, you can do it
+                    continue  # Keep trying, you can do it
 
             # Report-in every now and then
-            if (self.unit_start - self.sample_struct.window_start) >= DRIVER_REPORT_TIMER:
+            if (
+                self.unit_start - self.sample_struct.window_start
+            ) >= DRIVER_REPORT_TIMER:
                 self.stop_sample()
                 self.start_sample()
 
