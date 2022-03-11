@@ -64,7 +64,7 @@ class SlorProcess:
             DRIVER_REPORT_TIMER + 1
         )
         self.send_sample(json.loads(self.sample_struct.dump_json()))
-        self.benchark_io_count = self.sample_struct.global_io_count
+        self.benchark_io_count += self.sample_struct.get_workload_ios()
         del self.sample_struct
 
     def start_io(self, type) -> None:

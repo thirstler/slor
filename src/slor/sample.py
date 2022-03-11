@@ -96,8 +96,9 @@ class perfSample:
             self.sample_seq = sample_seq
             if start:
                 self.window_start = time.time()
-            if start_io_count:
-                self.global_io_count = start_io_count
+
+        if start_io_count:
+            self.global_io_count = start_io_count
 
     def __del__(self):
         pass
@@ -130,8 +131,9 @@ class perfSample:
             self.add_failures(op, sample.get_metric(metric="failures", opclass=op))
             self.add_resp_time(op, sample.get_metric(metric="iotime", opclass=op))
 
-        # Overwrite global_io_count to benchmark counter
-        # self.global_io_count += sample.global_io_count
+        # Overwrite global_io_count to benchmark counter.
+        # This makes percent-finished by count work
+        self.global_io_count += sample.global_io_count
 
     def from_json(self, from_json):
         """

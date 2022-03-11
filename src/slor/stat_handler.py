@@ -8,7 +8,6 @@ class statHandler:
 
     config = None
     standing_sample = {}
-    global_sample = {}
     operations = None
     last_show = 0
     stage = None
@@ -27,7 +26,6 @@ class statHandler:
 
     def __del__(self):
         self.standing_sample.clear()
-        self.global_sample.clear()
 
     def __init__(self, config, stage, duration):
         self.config = config
@@ -61,6 +59,7 @@ class statHandler:
             self.standing_sample[sample_addr] = perfSample(from_json=data["value"])
         else:
             self.standing_sample[sample_addr].from_json(data["value"])
+            
 
     def rotate_mixed_stat_func(self, final):
         if final:
@@ -106,7 +105,7 @@ class statHandler:
         stat_sample = perfSample(count_target=target)
         for sid in self.standing_sample:
             stat_sample.merge(self.standing_sample[sid])
-
+            
         window_avg = self.get_standing_window_average()
 
         if len(self.standing_sample) > 0:
