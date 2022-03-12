@@ -85,6 +85,7 @@ class SlorProcess:
     ##
     # Random-data handlers
     def get_bytes_from_pool(self, num_bytes) -> bytearray:
+        if num_bytes == 0: return b''
         start = random.randrange(0, self.pool_sz)
         ext = start + num_bytes
         if ext > self.pool_sz:

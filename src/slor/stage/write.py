@@ -39,17 +39,17 @@ class Write(SlorProcess):
                 self.config["sz_range"][0], self.config["sz_range"][1]
             )
             body_data = self.get_bytes_from_pool(blen)
-            try:
-                self.start_io("write")
-                self.s3ops.put_object(bucket, key, body_data)
-                self.stop_io(sz=len(body_data))
-                ocount += 1
-            except Exception as e:
-                sys.stderr.write(
-                    "fail[{0}] {0}/{1}: {2}\n".format(self.id, bucket, key, str(e))
-                )
-                sys.stderr.flush()
-                self.stop_io(failed=True)
+            #try:
+            self.start_io("write")
+            self.s3ops.put_object(bucket, key, body_data)
+            self.stop_io(sz=len(body_data))
+            ocount += 1
+            #except Exception as e:
+            #    sys.stderr.write(
+            #        "fail[{0}] {0}/{1}: {2}\n".format(self.id, bucket, key, str(e))
+            #    )
+            #    sys.stderr.flush()
+            #    self.stop_io(failed=True)
 
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()
