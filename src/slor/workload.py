@@ -316,5 +316,6 @@ def classic_workload(args):
         "prepare_objects": args.prepare_objects,
         "key_prefix": args.key_prefix,
         "no_db": args.no_db,
+        "versioning": args.versioning
     }
     return root_config

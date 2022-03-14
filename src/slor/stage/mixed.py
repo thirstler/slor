@@ -5,12 +5,10 @@ import time
 
 class Mixed(SlorProcess):
 
-    writemap = []  # tracker for all things written and deleted
+    writemap = []  # tracker for all things written (and deleted)
     readmap_index = 0
-    all_is_fair = False
     dice = None
     wid_str = None
-    w_count = 0
 
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
@@ -33,15 +31,21 @@ class Mixed(SlorProcess):
 
     def _read(self):
         resp = None
+        version_id = None
 
-        if self.all_is_fair:
+        # If we run out of prepared data (we're trying not to reread anything),
+        # then just read from any pool of written data. 
+        if self.readmap_index >= len(self.config["mapslice"]):
             key = self.get_key_from_existing()
         else:
             key = self.config["readmap"][self.readmap_index]
 
+        if self.config["versioning"] and len(key) == 3:
+            version_id = key[2][random.choice(key[2])] # grab any version
+
         try:
             self.start_io("read")
-            resp = self.s3ops.get_object(key[0], key[1])
+            resp = self.s3ops.get_object(key[0], key[1], version_id=version_id)
             data = resp["Body"].read()
             self.stop_io(sz=resp["ContentLength"])
             del data
@@ -50,11 +54,8 @@ class Mixed(SlorProcess):
             sys.stderr.flush()
             self.stop_io(failed=True)
 
+        # Increment to then next prepared data key
         self.readmap_index += 1
-
-        if self.readmap_index >= len(self.config["mapslice"]):
-            self.all_is_fair = True
-            self.readmap_index = 0
 
         return resp
 
@@ -73,7 +74,7 @@ class Mixed(SlorProcess):
                 self.config["key_prefix"]
                 + gen_key(
                     key_desc=self.config["key_sz"],
-                    inc=self.w_count,
+                    inc=len(self.writemap),
                     prefix=DEFAULT_WRITE_PREFIX + self.wid_str,
                 ),
             )
@@ -81,6 +82,7 @@ class Mixed(SlorProcess):
         bucket = self.writemap[-1][0]
         key = self.writemap[-1][1]
         try:
+
             self.start_io("write")
             mpu = self.s3ops.s3client.create_multipart_upload(Bucket=bucket, Key=key)
             mpu_info = []
@@ -100,15 +102,20 @@ class Mixed(SlorProcess):
                     UploadId=mpu["UploadId"],
                 )
                 mpu_info.append({"PartNumber": part_num, "ETag": up_resp["ETag"]})
-                if outer == blen:
+                if outer == blen: # size was precisely on MPU boundary
                     break
-            self.s3ops.s3client.complete_multipart_upload(
+
+            resp = self.s3ops.s3client.complete_multipart_upload(
                 Bucket=bucket,
                 Key=key,
                 UploadId=mpu["UploadId"],
                 MultipartUpload={"Parts": mpu_info},
             )
             self.stop_io(sz=blen)
+
+            if len(self.writemap[-1]) == 2 and "VersionId" in resp:
+                self.writemap[-1].append([])
+            self.writemap[-1][2].append(resp["VersionId"])
 
         except Exception as e:
             sys.stderr.write(str(e))
@@ -118,8 +125,10 @@ class Mixed(SlorProcess):
     def _write(self):
         size = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
         body_data = self.get_bytes_from_pool(size)
+
+        # Create new key and add to list of written objects
         self.writemap.append(
-            (
+            [
                 "{}{}".format(
                     self.config["bucket_prefix"],
                     random.randint(0, self.config["bucket_count"] - 1),
@@ -127,27 +136,38 @@ class Mixed(SlorProcess):
                 self.config["key_prefix"]
                 + gen_key(
                     key_desc=self.config["key_sz"],
-                    inc=self.w_count,
+                    inc=len(self.writemap),
                     prefix=DEFAULT_WRITE_PREFIX + self.wid_str,
-                ),
-            )
+                )
+            ]
         )
         try:
             self.start_io("write")
-            self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
-            self.w_count += 1
+            resp = self.s3ops.put_object(self.writemap[-1][0], self.writemap[-1][1], body_data)
             self.stop_io(sz=size)
+
+            # If --versioning is specified, add version information to writemap
+            if self.config["versioning"] and "VersionId" in resp:
+                if len(self.writemap[-1]) == 2:
+                    self.writemap[-1][2] = []
+                self.writemap[-1][2].append(resp["VersionId"])
+
         except Exception as e:
+            self.writemap.pop(-1)
             sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
     def _head(self):
         hat = self.get_key_from_existing()
+        version_id = None
+
+        if self.config["versioning"] and len(hat) == 3:
+            version_id = hat[2][random.choice(hat[2])] # grab any version
 
         try:
             self.start_io("head")
-            self.s3ops.head_object(hat[0], hat[1])
+            self.s3ops.head_object(hat[0], hat[1], version_id=version_id)
             self.stop_io()
         except Exception as e:
             sys.stderr.write(str(e))
@@ -157,36 +177,45 @@ class Mixed(SlorProcess):
     def _delete(self):
         """Only delete from the written pool"""
         if len(self.writemap) == 0:
+            # Nothing to delete yet, skip it
             return
 
-        indx = random.randint(0, len(self.writemap))
-        try:
+        version_id = None
+        kindx = random.randint(0, len(self.writemap)-1)
+        key = self.writemap[kindx]
+        
 
-            key = self.writemap.pop(indx)
-        except Exception as e:
-            sys.stderr.write("{}:{} - {}".format(len(self.writemap), indx, e))
-            return
+        if self.config["versioning"] and len(key) == 3:
+            version_id = key[2].pop(-1) # just grab the last one
+            if len(key[2]) == 0:
+                del self.writemap[kindx]
 
         try:
             self.start_io("delete")
-            self.s3ops.delete_object(key[0], key[1])
+            self.s3ops.delete_object(key[0], key[1], version_id=version_id)
             self.stop_io()
         except Exception as e:
             sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
+
     def _reread(self):
         """Only reread from the written pool"""
         if len(self.writemap) == 0:
+            # Nothing to reread yet, skip it
             return
 
+        version_id = None
         indx = random.randint(0, len(self.writemap) - 1)
         key = self.writemap[indx]
 
+        if self.config["versioning"] and len(key) == 3:
+            version_id = key[2][random.choice(key[2])] # grab any version
+
         try:
             self.start_io("reread")
-            resp = self.s3ops.get_object(key[0], key[1])
+            resp = self.s3ops.get_object(key[0], key[1], version_id=version_id)
             self.stop_io(sz=resp["ContentLength"])
         except Exception as e:
             sys.stderr.write(str(e))
@@ -199,7 +228,7 @@ class Mixed(SlorProcess):
         )
         key = self.get_key_from_existing()
         size = len(body_data)
-
+        
         try:
             self.start_io("overwrite")
             self.s3ops.put_object(key[0], key[1], body_data)
@@ -247,7 +276,7 @@ class Mixed(SlorProcess):
         )
 
     def mk_dice(self):
-        """Just build a dumb map"""
+
         dice = []
         for m in self.config["mixed_profile"]:
             for x in range(0, self.config["mixed_profile"][m]):
@@ -260,7 +289,7 @@ class Mixed(SlorProcess):
         self.start_sample()
         while True:
 
-            self.do(self.dice[random.randint(0, len(self.dice) - 1)])
+            self.do(random.choice(self.dice))
 
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()

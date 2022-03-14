@@ -43,7 +43,7 @@ class Read(SlorProcess):
                 try:
                     self.start_io("read")
                     resp = self.s3ops.get_object(pkey[0], pkey[1])
-                    data = resp["Body"].read()
+                    data = resp["Body"].read() # read streamed data
                     self.stop_io(sz=int(resp["ContentLength"]))
                     del data
 

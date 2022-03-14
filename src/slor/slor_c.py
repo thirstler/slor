@@ -577,6 +577,7 @@ class SlorControl:
             "mixed_profile": self.config["mixed_profiles"][self.mixed_count],
             "startup_delay": (DRIVER_REPORT_TIMER / len(self.config["driver_list"])),
             "key_prefix": self.config["key_prefix"],
+            "versioning": self.config["versioning"]
         }
 
         # Work out the readmap slices

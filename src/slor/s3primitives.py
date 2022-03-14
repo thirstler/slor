@@ -38,7 +38,7 @@ class S3primitives:
         return resp
 
     def get_object(self, bucket, key, version_id=None):
-        if version_id != None:
+        if version_id:
             resp = self.s3client.get_object(
                 Bucket=bucket, Key=key, VersionId=version_id
             )

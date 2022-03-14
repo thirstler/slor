@@ -126,6 +126,9 @@ def run():
     #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
     # )
     parser.add_argument(
+        "--versioning", action="store_true", help="use versioned buckets and include versioned re-read and delete requests when possible"
+    )
+    parser.add_argument(
         "--driver-list",
         default="",
         help='comma-delimited list of driver hosts running "slor driver" processes (in host:port format); 9256 is assumed if port is excluded',
