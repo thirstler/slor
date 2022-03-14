@@ -170,7 +170,7 @@ class Mixed(SlorProcess):
             self.s3ops.head_object(hat[0], hat[1], version_id=version_id)
             self.stop_io()
         except Exception as e:
-            sys.stderr.write(str(e))
+            sys.stderr.write("{} - {} - {} - {}".format(hat[0], hat[1], version_id, str(e)))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -185,10 +185,16 @@ class Mixed(SlorProcess):
         key = self.writemap[kindx]
         
 
+        # Remove from writelist before successful delete. Since we don't try
+        # to understand what failures is, we have to.
         if self.config["versioning"] and len(key) == 3:
-            version_id = key[2].pop(-1) # just grab the last one
+            # Grab version ID and remove from list of versions
+            version_id = key[2].pop(-1)
             if len(key[2]) == 0:
+                # Or delete whole entry if that was the only version
                 del self.writemap[kindx]
+        else:
+            del self.writemap[kindx]
 
         try:
             self.start_io("delete")
@@ -198,7 +204,6 @@ class Mixed(SlorProcess):
             sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
-
 
     def _reread(self):
         """Only reread from the written pool"""

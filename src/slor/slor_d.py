@@ -119,7 +119,10 @@ class SlorDriver:
                     try:
                         client.create_bucket(Bucket=bn)
                         if config["versioning"]:
-                            client.put_bucket_versioning(Bucket=bn, VersioningConfiguration={'Status': 'Enabled'})
+                            client.put_bucket_versioning(
+                                Bucket=bn,
+                                VersioningConfiguration={'Status': 'Enabled'}
+                            )
                     except:
                         self.log_to_controller(
                             "Problem creating bucket: {0}".format(bn)
@@ -147,7 +150,13 @@ class SlorDriver:
                             },
                         )
                         if config["versioning"]:
-                            client.put_bucket_versioning(Bucket=bn, VersioningConfiguration={'Status': 'Enabled'})
+                            client.put_bucket_versioning(
+                                Bucket=bn,
+                                CreateBucketConfiguration={
+                                    "LocationConstraint": config["region"]
+                                },
+                                VersioningConfiguration={'Status': 'Enabled'}
+                            )
                     except:
                         self.log_to_controller(
                             "Problem creating bucket: {0}".format(bn)
