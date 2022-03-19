@@ -36,13 +36,12 @@ class CleanUp(SlorProcess):
         self.start_sample()
 
         try:
-            ls_pg = s3client.get_paginator("list_objects_versions")
+            ls_pg = s3client.get_paginator("list_object_versions")
         except:
             ls_pg = s3client.get_paginator("list_objects_v2")
 
         page_iterator = ls_pg.paginate(Bucket=self.config["bucket"], MaxKeys=1000)
         for page in page_iterator:
-            # print(page)
             all = {"Objects": []}
             if "Contents" in page:
                 for x in page["Contents"]:
@@ -75,5 +74,6 @@ class CleanUp(SlorProcess):
                 self.start_sample()
 
         self.stop_sample()
-        s3client.delete_bucket(Bucket=self.config["bucket"])
+        if self.config["remove_buckets"]:
+            s3client.delete_bucket(Bucket=self.config["bucket"])
         self.stop_benchmark()

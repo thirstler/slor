@@ -26,12 +26,15 @@ class Prepare(SlorProcess):
             self.delay()
             self.exec()
 
+    def get_mapslice(self):
+        return(self.mapslice)
+
     def exec(self):
 
         self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
         count = 0
-        for skey in self.config["mapslice"]:
+        for i, skey in enumerate(self.config["mapslice"]):
             if self.check_for_messages() == "stop":
                 break
 
@@ -42,8 +45,13 @@ class Prepare(SlorProcess):
 
                 try:
                     self.start_io("write")
-                    self.s3ops.put_object(skey[0], skey[1], body_data)
+                    resp = self.s3ops.put_object(skey[0], skey[1], body_data)
                     self.stop_io(sz=len(body_data))
+                    if self.config["versioning"]:
+                        if len(skey) == 2:
+                            self.config["mapslice"][i] += ([],)
+                        self.config["mapslice"][i][2].append(resp["VersionId"])
+                        
                     count += 1
                     break  # worked, no need to retry
 

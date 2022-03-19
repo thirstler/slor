@@ -5,7 +5,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.21
+SLOR_VERSION = 0.22
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""

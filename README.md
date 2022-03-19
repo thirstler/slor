@@ -7,15 +7,15 @@ for S3 storage systems.
 What does it do?
 ----------------
 
-Slor can be used to benchmark the performance capabilities of S3 storage 
-systems. It will measure throughput, bandwidth and processing times of
-several basic S3 operations (read, write, head, delete, overwrite, reread
+Slor can be used to generate load and measure the performance capabilities of
+S3 storage systems. It will measure throughput, bandwidth and processing times
+of several basic S3 operations (read, write, head, delete, overwrite, reread
 and tagging) in discrete and mixed workload configurations. 
 
 How does it do?
 ---------------
-It operates on the same controller/driver arrangement used by other
-load-generation systems:
+It operates in a distributed mode similar controller/driver arrangement used by
+other load-generation systems (cosbench, warp, etc):
 
     Controller ___ Driver1
                 \_ Driver2
@@ -551,6 +551,10 @@ Command Line Arguments
 --mpu-size
 
     Writes are always performed in a single PUT operation regardless of size. If, however, you indicate an multi-part upload (MPU) size, writes will always be executed as multi-part uploads. Timing data will cover the MPU creation, PUT operations and MPU completion as a single time-to-complete value.
+
+--versioning
+
+    Creates versioned buckets at the start of workloads (or fails to start if bucket already exists and is not version-enabled). It will also cause reread and delete requests to be versioned during mixed workloads *when possible*. The "prepare" stage does not record version IDs at this time so pure "read" and "delete" workloads will not request object version IDs on operation. However, mixed workloads keep track of written version IDs so re-read, head and delete requests will target specific version IDs.
 
 --driver-list
 

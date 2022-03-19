@@ -126,7 +126,7 @@ def run():
     #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
     # )
     parser.add_argument(
-        "--versioning", action="store_true", help="use versioned buckets and include versioned re-read and delete requests when possible"
+        "--versioning", action="store_true", help="use versioned buckets, include versioned read, re-read and delete requests when possible during mixed workloads (see README)"
     )
     parser.add_argument(
         "--driver-list",
@@ -149,6 +149,18 @@ def run():
         "--loads",
         default=DEFAULT_TESTS,
         help="specify the loads you want to run; any (or all) of read, write, delete, head, mixed",
+    )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        default=False,
+        help="remove objects when finished with workload",
+    )
+    parser.add_argument(
+        "--remove-buckets",
+        action="store_true",
+        default=False,
+        help="delete buckets when finished with workload (enables --cleanup option)",
     )
     parser.add_argument(
         "--sleep",

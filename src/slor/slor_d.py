@@ -97,6 +97,7 @@ class SlorDriver:
     def init_buckets(self, config):
         """
         Create bucket in our list
+        Note to self: FIX REDUNDANT SHIT HERE
         """
         if config["verify"] == True:
             verify_tls = True
@@ -105,7 +106,7 @@ class SlorDriver:
         else:
             verify_tls = config["verify"]
 
-        # AWS is entirely dependent on the endpoint to determin region and
+        # AWS is dependent on the endpoint to determin region and
         # location constraint.
         if config["endpoint"][-13:] == "amazonaws.com":
             client = boto3.Session(
@@ -115,6 +116,16 @@ class SlorDriver:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn)
+                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+
+                    if config["versioning"]:
+                        resp = client.get_bucket_versioning(
+                            Bucket=bn
+                        )
+                        if not "Status" in resp or resp["Status"] != "Enabled":
+                            self.log_to_controller("Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed")
+                            self.reset = True
                 except:
                     try:
                         client.create_bucket(Bucket=bn)
@@ -127,7 +138,8 @@ class SlorDriver:
                         self.log_to_controller(
                             "Problem creating bucket: {0}".format(bn)
                         )
-
+                        self.reset = True
+                
         # Generic S3 compatible
         else:
             client = boto3.Session(
@@ -139,9 +151,18 @@ class SlorDriver:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn)
-                    # self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+
+                    if config["versioning"]:
+                        resp = client.get_bucket_versioning(
+                            Bucket=bn
+                        )
+                        if not "Status" in resp or resp["Status"] != "Enabled":
+                            self.log_to_controller("Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed")
+                            self.reset = True
+                   
                 except:
-                    # self.log_to_controller("creating {0}".format(bn))
                     try:
                         client.create_bucket(
                             Bucket=bn,
@@ -152,15 +173,13 @@ class SlorDriver:
                         if config["versioning"]:
                             client.put_bucket_versioning(
                                 Bucket=bn,
-                                CreateBucketConfiguration={
-                                    "LocationConstraint": config["region"]
-                                },
                                 VersioningConfiguration={'Status': 'Enabled'}
                             )
-                    except:
+                    except Exception as e:
                         self.log_to_controller(
-                            "Problem creating bucket: {0}".format(bn)
+                            "Problem creating bucket: {0}".format(e)
                         )
+                        self.reset = True
 
     def log_to_controller(self, message):
         """If the message is a string then it will be echoed to the console on the controller"""

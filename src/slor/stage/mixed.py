@@ -41,7 +41,7 @@ class Mixed(SlorProcess):
             key = self.config["readmap"][self.readmap_index]
 
         if self.config["versioning"] and len(key) == 3:
-            version_id = key[2][random.choice(key[2])] # grab any version
+            version_id = random.choice(key[2]) # grab any version
 
         try:
             self.start_io("read")
@@ -50,7 +50,7 @@ class Mixed(SlorProcess):
             self.stop_io(sz=resp["ContentLength"])
             del data
         except Exception as e:
-            sys.stderr.write(str(e))
+            sys.stderr.write("err: {}, {} {} {}\n".format(str(e), key[0], key[1], version_id))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -149,12 +149,12 @@ class Mixed(SlorProcess):
             # If --versioning is specified, add version information to writemap
             if self.config["versioning"] and "VersionId" in resp:
                 if len(self.writemap[-1]) == 2:
-                    self.writemap[-1][2] = []
+                    self.writemap[-1].append([])
                 self.writemap[-1][2].append(resp["VersionId"])
 
         except Exception as e:
+            sys.stderr.write("err: {}, {} {}\n".format(str(e), self.writemap[-1][0], self.writemap[-1][1]))
             self.writemap.pop(-1)
-            sys.stderr.write(str(e))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -163,7 +163,7 @@ class Mixed(SlorProcess):
         version_id = None
 
         if self.config["versioning"] and len(hat) == 3:
-            version_id = hat[2][random.choice(hat[2])] # grab any version
+            version_id = random.choice(hat[2]) # grab any version
 
         try:
             self.start_io("head")
@@ -183,7 +183,6 @@ class Mixed(SlorProcess):
         version_id = None
         kindx = random.randint(0, len(self.writemap)-1)
         key = self.writemap[kindx]
-        
 
         # Remove from writelist before successful delete. Since we don't try
         # to understand what failures is, we have to.
@@ -216,14 +215,14 @@ class Mixed(SlorProcess):
         key = self.writemap[indx]
 
         if self.config["versioning"] and len(key) == 3:
-            version_id = key[2][random.choice(key[2])] # grab any version
+            version_id = random.choice(key[2]) # grab any version
 
         try:
             self.start_io("reread")
             resp = self.s3ops.get_object(key[0], key[1], version_id=version_id)
             self.stop_io(sz=resp["ContentLength"])
         except Exception as e:
-            sys.stderr.write(str(e))
+            sys.stderr.write("err: {}, {} {} {}\n".format(str(e), key[0], key[1], version_id))
             sys.stderr.flush()
             self.stop_io(failed=True)
 
@@ -244,7 +243,6 @@ class Mixed(SlorProcess):
             self.stop_io(failed=True)
 
     def do(self, operation):
-
         ret = {}
         if operation == "read":
             ret = self._read()
