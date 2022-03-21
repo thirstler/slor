@@ -202,7 +202,17 @@ def run():
         default=False,
         help="force 'yes' answer to any requests for input (e.g. 'are you sure?')",
     )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        default=False,
+        help="display version and exit",
+    )
     args = parser.parse_args()
+
+    if args.version:
+        print("SLoR version: {}".format(SLOR_VERSION))
+        sys.exit(0)
 
     if not input_checks(args):
         sys.exit(1)

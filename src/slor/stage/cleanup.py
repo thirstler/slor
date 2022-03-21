@@ -4,6 +4,7 @@ import boto3
 
 
 class CleanUp(SlorProcess):
+    
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id

@@ -125,6 +125,7 @@ class SlorDriver:
                         if not "Status" in resp or resp["Status"] != "Enabled":
                             self.log_to_controller("Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
                                 "Please delete the bucket or enable versioning on it to proceed")
+                            
                             self.reset = True
                 except:
                     try:
@@ -158,9 +159,10 @@ class SlorDriver:
                             Bucket=bn
                         )
                         if not "Status" in resp or resp["Status"] != "Enabled":
-                            self.log_to_controller("Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
-                                "Please delete the bucket or enable versioning on it to proceed")
-                            self.reset = True
+                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed (exiting)"
+                            self.log_to_controller({"command": "abort", "message": msg})
+                            sys.exit(0)
                    
                 except:
                     try:
@@ -187,8 +189,8 @@ class SlorDriver:
             return
         if type(message) is str:
             message = {"message": message}
-        message["w_id"] = self.w_id
 
+        message["w_id"] = self.w_id
         try:
             self.sock.send(message)
         except Exception as e:
@@ -218,7 +220,7 @@ class SlorDriver:
     def thread_control(self, config):
 
         ##
-        # Clean-up is handled at little differently
+        # Clean-up is handled a little differently
         if config["type"] == "cleanup":
 
             drivers = len(config["driver_list"])
@@ -291,7 +293,9 @@ class SlorDriver:
                 while t[0].poll(0.01):
 
                     # Basically everything is sent back to the controller
-                    self.log_to_controller(self.process_thread_resp(t[0].recv()))
+                    self.log_to_controller(
+                        self.process_thread_resp(t[0].recv())
+                    )
 
             # Mark active if any threads are active
             for t in self.procs:

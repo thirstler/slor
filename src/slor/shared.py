@@ -5,7 +5,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.22
+SLOR_VERSION = 0.3
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -31,11 +31,12 @@ DEFAULT_SLEEP_TIME = 30
 
 # Root help message
 ROOT_HELP = """
-Usage slor.py [controller|driver|analysis] [options]
-
 Slor is a distributed load generation and benchmarking tool. Please see
 README.md for more information.
 
+Usage slor.py [controller|driver|analysis] [options]
+
+  --version             display version and exit
 """
 
 # Low-level config (changing may or may not break things)
@@ -109,8 +110,8 @@ class bcolors:
     GRAY = "\033[38;5;243m"
 
 
-BANNER = "\n<<{0}SLoR{1}>>\n".format(
-    bcolors.BOLD, bcolors.ENDC
+BANNER = "\n<<{0}SLoR{1}>> (ver. {2})\n".format(
+    bcolors.BOLD, bcolors.ENDC, SLOR_VERSION
 )
 ###############################################################################
 ## Globally shared routines

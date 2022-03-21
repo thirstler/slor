@@ -40,9 +40,15 @@ class Head(SlorProcess):
 
             for i, pkey in enumerate(self.config["mapslice"]):
 
+                version_id = None
+
+                # Pick a version if specificed
+                if self.config["versioning"] and len(pkey) == 3:
+                    version_id = random.choice(pkey[2]) # grab any version
+                    
                 try:
                     self.start_io("head")
-                    resp = self.s3ops.head_object(pkey[0], pkey[1])
+                    resp = self.s3ops.head_object(pkey[0], pkey[1], version_id=version_id)
                     self.stop_io()
 
                 except Exception as e:

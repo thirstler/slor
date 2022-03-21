@@ -554,7 +554,7 @@ Command Line Arguments
 
 --versioning
 
-    Creates versioned buckets at the start of workloads (or fails to start if bucket already exists and is not version-enabled). It will also cause reread and delete requests to be versioned during mixed workloads *when possible*. The "prepare" stage does not record version IDs at this time so pure "read" and "delete" workloads will not request object version IDs on operation. However, mixed workloads keep track of written version IDs so re-read, head and delete requests will target specific version IDs.
+    Creates versioned buckets at the start of workloads (or fails to start if bucket already exists and is not version-enabled). It will also cause read, reread, delete and head requests to be versioned during discrete and mixed workloads. The "prepare" stage does not record version IDs at this time so pure "read" and "delete" workloads will not request object version IDs on operation. However, mixed workloads keep track of written version IDs so re-read, head and delete requests will target specific version IDs.
 
 --driver-list
 

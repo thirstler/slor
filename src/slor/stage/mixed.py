@@ -40,6 +40,7 @@ class Mixed(SlorProcess):
         else:
             key = self.config["readmap"][self.readmap_index]
 
+        # Pick a version if specificed
         if self.config["versioning"] and len(key) == 3:
             version_id = random.choice(key[2]) # grab any version
 
@@ -159,6 +160,7 @@ class Mixed(SlorProcess):
             self.stop_io(failed=True)
 
     def _head(self):
+
         hat = self.get_key_from_existing()
         version_id = None
 

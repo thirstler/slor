@@ -368,6 +368,10 @@ class SlorControl:
             else:
                 self.stats_h.set_count_target(self.get_readmap_len())
 
+        # If this is a prepare stage we need t be set to replace the readmap
+        if stage == "prepare":
+            self.new_readmap = []
+
         # Disply headers for stats output
         self.stats_h.headers(self.mixed_count)
 
@@ -396,6 +400,11 @@ class SlorControl:
                 break
             self.stats_h.show()
             time.sleep(0.01)
+
+        # Replace with readmap with a versioned one and shuffle
+        if stage == "prepare":
+            self.readmap = self.new_readmap
+            random.shuffle(self.readmap)
 
         if (
             opclass_from_label(stage) == "mixed"
@@ -454,6 +463,13 @@ class SlorControl:
         """
         if type(message) == str:
             print(message)
+        elif "command" in message:
+            if message["command"] == "abort":
+                if "message" in message:
+                    print(message["message"])
+                sys.exit(0)
+        elif "type" in message and message["type"] == "readmap":
+            self.new_readmap += message["value"]
         elif "message" in message:
             print("{0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":

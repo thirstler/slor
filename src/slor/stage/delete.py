@@ -29,9 +29,15 @@ class Delete(SlorProcess):
         # Once done processing the prepared list, you're done.
         for pkey in self.config["mapslice"]:
 
+            version_id = None
+
+            # Pick a version if specificed
+            if self.config["versioning"] and len(pkey) == 3:
+                version_id = random.choice(pkey[2]) # grab any version
+
             try:
                 self.start_io("delete")
-                self.s3ops.delete_object(pkey[0], pkey[1])
+                self.s3ops.delete_object(pkey[0], pkey[1], version_id=version_id)
                 self.stop_io()
 
             except Exception as e:
