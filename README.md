@@ -522,7 +522,7 @@ Command Line Arguments
 
 --iop-limit
 
-    Used in tandem with "--stage-time" to determin the amount of data needed to be prepared for any read loads. Let's say you think there's no way your system will be able to sustain 5000 operations a second and that you want to run your stages for 300 seconds. Indicate "--stage-time 300 --iop-limit 5000" and slor will prepare 1.5 million objects ahead of any read workloads (pure read or mixed) to ensure you do not reread any data.
+    Used in tandem with "--stage-time" to determine the amount of data needed to be prepared for any read loads. Let's say you think there's no way your system will be able to sustain 5000 operations a second and that you want to run your stages for 300 seconds. Indicate "--stage-time 300 --iop-limit 5000" and slor will prepare 1.5 million objects ahead of any read workloads (pure read or mixed) to ensure you do not reread any data.
 
 --prepare-objects
 
@@ -544,6 +544,10 @@ Command Line Arguments
 
     Bucket prefix name to use when creating buckets. For instance, if your bucket prefix is "slor-" and you indicate 4 for "--bucket-count" you'll get these 4 buckets: slor-0, slor-1, slor-2 and slor-3.
 
+--use-existing-buckets
+
+    SLoR will fail to start if a target benchmark bucket already exists. This is to prevent the accidental used of an existing operational bucket that might get polluted with benchmark garbage, or worse, cleaned-up removing all data. Since this tool will operation on versioned buckets it will also annihilate all old versions of anything in the bucket if --cleanup is specified. Very dangerous. Use this to override that protection. I'll be necessary if you want to operation on pre-created buckets (like if you want to test object locked buckets or something).
+
 --object-size
 
     The object size you would like to use in benchmarking. Accepts suffixes (KB, MB, GB, TB, EB). Also accepts ranges like "64KB-4MB." Indicating ranges will will results in random object sizes within the range (inclusive).
@@ -554,7 +558,7 @@ Command Line Arguments
 
 --versioning
 
-    Creates versioned buckets at the start of workloads (or fails to start if bucket already exists and is not version-enabled). It will also cause read, reread, delete and head requests to be versioned during discrete and mixed workloads. The "prepare" stage does not record version IDs at this time so pure "read" and "delete" workloads will not request object version IDs on operation. However, mixed workloads keep track of written version IDs so re-read, head and delete requests will target specific version IDs.
+    Creates versioned buckets at the start of workloads (or fails to start if bucket already exists), and stores version IDs for prepared data. It will cause read, reread, delete and head operations to be directed at object versions.
 
 --driver-list
 
@@ -576,25 +580,3 @@ Command Line Arguments
 --no-db
 
     Do not save workload timing data to a database on the controller host. This is useful if your workload is long-running and/or you have no intention of running an analysis on the database to extract detailed load statistics. The stats database can get very large and shouldn't be generated when running multi-hour loads.
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

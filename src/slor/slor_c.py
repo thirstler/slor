@@ -455,7 +455,7 @@ class SlorControl:
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
             return
-        print(str(message))
+        print("\u2502 " + str(message))
 
     def process_message(self, message):
         """
@@ -464,14 +464,16 @@ class SlorControl:
         if type(message) == str:
             print(message)
         elif "command" in message:
+            # what a mess
             if message["command"] == "abort":
                 if "message" in message:
                     print(message["message"])
                 sys.exit(0)
+
         elif "type" in message and message["type"] == "readmap":
             self.new_readmap += message["value"]
         elif "message" in message:
-            print("{0}: {1}".format(message["w_id"], message["message"]))
+            print("\u2502 message from {0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             loc_stage_iter = None
