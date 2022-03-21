@@ -133,6 +133,7 @@ class SlorControl:
             cft_text += "Upper IO limit:     {0}\n".format(self.config["iop_limit"])
             cft_text += "Bucket prefix:      {0}\n".format(self.config["bucket_prefix"])
             cft_text += "Num buckets:        {0}\n".format(self.config["bucket_count"])
+            cft_text += "Versioning enabled: {0}\n".format(str(self.config["versioning"]))
             cft_text += "Prepared data size: {0}\n".format(
                 human_readable(self.config["ttl_prepare_sz"]),
                 ((int(self.config["ttl_prepare_sz"]) / DEFAULT_CACHE_OVERRUN_OBJ) + 1),
@@ -228,7 +229,7 @@ class SlorControl:
                 )
             elif stage == "cleanup":
                 cft_text += "{} {}: {}\n".format(
-                    " " * 19, stagecount, "cleanup - remove all objects and buckets"
+                    " " * 19, stagecount, "cleanup - remove all objects{}".format(" (and buckets)" if self.config["remove_buckets"] else "")
                 )
             elif stage[:5] == "sleep":
                 cft_text += "{} {}: {}\n".format(
@@ -343,8 +344,12 @@ class SlorControl:
                 )
 
         # Send workloads to driver
-        for i, wl in enumerate(workloads):
-            self.conn[i].send({"command": "workload", "config": wl})
+        try:
+            for i, wl in enumerate(workloads):
+                self.conn[i].send({"command": "workload", "config": wl})
+        except BrokenPipeError:
+            sys.stderr.write("driver(s) gone, exiting.\n")
+            sys.exit(1)
 
         self.block_until_ready()
         resp = self.poll_for_response()
@@ -362,6 +367,10 @@ class SlorControl:
                 )
             else:
                 self.stats_h.set_count_target(self.get_readmap_len())
+
+        # If this is a prepare stage we need t be set to replace the readmap
+        if stage == "prepare":
+            self.new_readmap = []
 
         # Disply headers for stats output
         self.stats_h.headers(self.mixed_count)
@@ -392,6 +401,11 @@ class SlorControl:
             self.stats_h.show()
             time.sleep(0.01)
 
+        # Replace with readmap with a versioned one and shuffle
+        if stage == "prepare":
+            self.readmap = self.new_readmap
+            random.shuffle(self.readmap)
+
         if (
             opclass_from_label(stage) == "mixed"
             and self.mixed_count < len(self.config["mixed_profiles"]) - 1
@@ -408,12 +422,18 @@ class SlorControl:
         sys.stdout.write("\r\u2502 [waiting on worker processes...]")
         sys.stdout.flush()
         global_ready = True
+        failure = False
 
         for i in range(0, len(self.config["driver_list"])):
             ready = self.conn[i].recv()
-            if ready["ready"] != True:
+            if "ready" in ready and ready["ready"] != True:
                 global_ready = False
+            if "status" in ready and ready["status"] == "done":
+                failure == True
 
+        if failure:
+            for i in range(0, len(self.config["driver_list"])):
+                self.conn[i].send({"exec": True})
         if global_ready:
             for i in range(0, len(self.config["driver_list"])):
                 self.conn[i].send({"exec": True})
@@ -435,7 +455,7 @@ class SlorControl:
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
             return
-        print(str(message))
+        print("\u2502 " + str(message))
 
     def process_message(self, message):
         """
@@ -443,8 +463,17 @@ class SlorControl:
         """
         if type(message) == str:
             print(message)
+        elif "command" in message:
+            # what a mess
+            if message["command"] == "abort":
+                if "message" in message:
+                    print(message["message"])
+                sys.exit(0)
+
+        elif "type" in message and message["type"] == "readmap":
+            self.new_readmap += message["value"]
         elif "message" in message:
-            print("{0}: {1}".format(message["w_id"], message["message"]))
+            print("\u2502 message from {0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             loc_stage_iter = None
@@ -518,6 +547,7 @@ class SlorControl:
                             inc=z,
                             prefix=DEFAULT_READMAP_PREFIX,
                         ),
+                        []
                     )
                 )
                 if (z + 1) == objcount:
@@ -577,6 +607,9 @@ class SlorControl:
             "mixed_profile": self.config["mixed_profiles"][self.mixed_count],
             "startup_delay": (DRIVER_REPORT_TIMER / len(self.config["driver_list"])),
             "key_prefix": self.config["key_prefix"],
+            "versioning": self.config["versioning"],
+            "remove_buckets": self.config["remove_buckets"],
+            "use_existing_buckets": self.config["use_existing_buckets"]
         }
 
         # Work out the readmap slices

@@ -40,10 +40,16 @@ class Read(SlorProcess):
 
             for i, pkey in enumerate(self.config["mapslice"]):
 
+                version_id = None
+
+                # Pick a version if specificed
+                if self.config["versioning"] and len(pkey) == 3:
+                    version_id = random.choice(pkey[2]) # grab any version
+
                 try:
                     self.start_io("read")
-                    resp = self.s3ops.get_object(pkey[0], pkey[1])
-                    data = resp["Body"].read()
+                    resp = self.s3ops.get_object(pkey[0], pkey[1], version_id=version_id)
+                    data = resp["Body"].read() # read streamed data
                     self.stop_io(sz=int(resp["ContentLength"]))
                     del data
 

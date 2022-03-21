@@ -5,6 +5,10 @@ import sys
 
 if __name__ == "__main__":
 
+    if sys.argv[1] == "--version":
+        print("SLoR version: {}".format(SLOR_VERSION))
+        sys.exit(0)
+
     if len(sys.argv) < 2:
         sys.stderr.write(ROOT_HELP)
 

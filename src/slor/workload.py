@@ -226,6 +226,13 @@ def generate_tasks(args):
         else:
             newloads.append(l)
 
+    # Add cleanup if specified
+    if args.cleanup:
+        newloads.append("cleanup")
+
+    if args.remove_buckets and "cleanup" not in newloads:
+        newloads.append("cleanup")
+
     return {"loadorder": newloads, "mixed_profiles": mix_prof_obj}
 
 
@@ -288,6 +295,8 @@ def classic_workload(args):
             int(args.stage_time),
             int(args.iop_limit),
         )
+
+    # Create a working config form command line arguments
     root_config = {
         "name": args.name,
         "config_type": "basic",
@@ -316,5 +325,8 @@ def classic_workload(args):
         "prepare_objects": args.prepare_objects,
         "key_prefix": args.key_prefix,
         "no_db": args.no_db,
+        "versioning": args.versioning,
+        "remove_buckets": args.remove_buckets,
+        "use_existing_buckets": args.use_existing_buckets
     }
     return root_config

@@ -23,6 +23,7 @@ class statHandler:
     reported_in = ()
     ttl_procs = 0
     duration = 0
+    progress_indx = 0
 
     def __del__(self):
         self.standing_sample.clear()
@@ -293,25 +294,16 @@ class statHandler:
 
     def dunno(self, width=10, final=False, color=""):
         # blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
-        blocks = (
-            "\u2588",
-            "\u2589",
-            "\u258A",
-            "\u258B",
-            "\u258C",
-            "\u258D",
-            "\u258E",
-            "\u258F",
-            "\u2590",
-        )
-
+        blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588", "\u2589", "\u258A", "\u258B", "\u258C", "\u258D", "\u258E", "\u258F")
+        
         if final:
             sys.stdout.write(
                 "{}{} 100%{}".format(bcolors.GRAY, "\u2588" * width, bcolors.ENDC)
             )
         else:
             for b in range(0, width):
-                sys.stdout.write(blocks[random.randint(0, len(blocks) - 1)])
+                sys.stdout.write(blocks[self.progress_indx % len(blocks)])
+                self.progress_indx += 1
             sys.stdout.write(" ???%")
 
     def progress(self, perc, width=10, final=False, color=""):

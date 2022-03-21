@@ -37,6 +37,7 @@ class SlorProcess:
         )
         time.sleep(process_delay)
 
+    ##
     # Benchmark timing functions
     def start_benchmark(self, ops=None, target=None) -> None:
         self.s3ops = S3primitives(self.config)

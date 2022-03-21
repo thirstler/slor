@@ -126,6 +126,9 @@ def run():
     #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
     # )
     parser.add_argument(
+        "--versioning", action="store_true", help="use versioned buckets, include versioned read, re-read and delete requests when possible during mixed workloads (see README)"
+    )
+    parser.add_argument(
         "--driver-list",
         default="",
         help='comma-delimited list of driver hosts running "slor driver" processes (in host:port format); 9256 is assumed if port is excluded',
@@ -148,22 +151,40 @@ def run():
         help="specify the loads you want to run; any (or all) of read, write, delete, head, mixed",
     )
     parser.add_argument(
-        "--sleep",
-        default=DEFAULT_SLEEP_TIME,
-        help="sleeptime between workloads",
+        "--cleanup",
+        action="store_true",
+        default=False,
+        help="remove objects when finished with workload",
     )
     parser.add_argument(
-        "--mixed-profiles",
-        default=DEFAULT_MIXED_PROFILE,
-        help="list of profiles of mixed loads in JSON format, eg: '{0}'".format(
-            DEFAULT_MIXED_PROFILE
-        ),
+        "--remove-buckets",
+        action="store_true",
+        default=False,
+        help="delete buckets when finished with workload (enables --cleanup option)",
     )
     parser.add_argument(
         "--bucket-count",
         default=DEFAULT_BUCKET_COUNT,
         help="number of buckets to distribute over, defaults to '{0}'".format(
             DEFAULT_BUCKET_COUNT
+        ),
+    )
+    parser.add_argument(
+        "--use-existing-buckets",
+        action="store_true",
+        default=False,
+        help="force the use of existing buckets; WARNING: destruction of ALL DATA IN THE BUCKET(S) WILL HAPPEN if you specify this with --cleanup or --remove-buckets"
+    )
+    parser.add_argument(
+        "--sleep",
+        default=DEFAULT_SLEEP_TIME,
+        help="sleeptime between workloads"
+    )
+    parser.add_argument(
+        "--mixed-profiles",
+        default=DEFAULT_MIXED_PROFILE,
+        help="list of profiles of mixed loads in JSON format, eg: '{0}'".format(
+            DEFAULT_MIXED_PROFILE
         ),
     )
     parser.add_argument(
@@ -187,7 +208,17 @@ def run():
         default=False,
         help="force 'yes' answer to any requests for input (e.g. 'are you sure?')",
     )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        default=False,
+        help="display version and exit",
+    )
     args = parser.parse_args()
+
+    if args.version:
+        print("SLoR version: {}".format(SLOR_VERSION))
+        sys.exit(0)
 
     if not input_checks(args):
         sys.exit(1)

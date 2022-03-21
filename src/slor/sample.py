@@ -288,7 +288,7 @@ class perfSample:
         iottl = 0
         for r in self.operations[opclass]["iotime"]:
             iottl += r
-        return iottl / len(self.operations[opclass]["iotime"])
+        return (iottl / len(self.operations[opclass]["iotime"])) if len(self.operations[opclass]["iotime"]) > 0 else 0
 
     def get_workload_ios(self):
         io_ttl = 0

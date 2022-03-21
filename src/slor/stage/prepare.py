@@ -26,12 +26,15 @@ class Prepare(SlorProcess):
             self.delay()
             self.exec()
 
+    def get_mapslice(self):
+        return(self.mapslice)
+
     def exec(self):
 
         self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
         count = 0
-        for skey in self.config["mapslice"]:
+        for o, skey in enumerate(self.config["mapslice"]):
             if self.check_for_messages() == "stop":
                 break
 
@@ -42,8 +45,11 @@ class Prepare(SlorProcess):
 
                 try:
                     self.start_io("write")
-                    self.s3ops.put_object(skey[0], skey[1], body_data)
+                    resp = self.s3ops.put_object(skey[0], skey[1], body_data)
                     self.stop_io(sz=len(body_data))
+                    if self.config["versioning"]:
+                        self.config["mapslice"][o][2].append(resp["VersionId"])
+                        
                     count += 1
                     break  # worked, no need to retry
 
@@ -63,3 +69,6 @@ class Prepare(SlorProcess):
         # wrap it up
         self.stop_sample()
         self.stop_benchmark()
+        
+        # Relay new readmap w/versions back to the controller
+        self.msg_to_driver(value=self.config["mapslice"], type="readmap")

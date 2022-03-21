@@ -97,6 +97,7 @@ class SlorDriver:
     def init_buckets(self, config):
         """
         Create bucket in our list
+        Note to self: FIX REDUNDANT SHIT HERE
         """
         if config["verify"] == True:
             verify_tls = True
@@ -105,7 +106,7 @@ class SlorDriver:
         else:
             verify_tls = config["verify"]
 
-        # AWS is entirely dependent on the endpoint to determin region and
+        # AWS is dependent on the endpoint to determin region and
         # location constraint.
         if config["endpoint"][-13:] == "amazonaws.com":
             client = boto3.Session(
@@ -114,16 +115,38 @@ class SlorDriver:
             ).client("s3", verify=verify_tls)
             for bn in config["bucket_list"]:
                 try:
-                    client.head_bucket(Bucket=bn)
+                    client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    if not config["use_existing_buckets"]:
+                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        self.log_to_controller({"command": "abort", "message": msg})
+                        self.reset = True
+                        return
+
+                    if config["versioning"]:
+                        resp = client.get_bucket_versioning(
+                            Bucket=bn
+                        )
+                        if not "Status" in resp or resp["Status"] != "Enabled":
+                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed (exiting)"
+                            self.log_to_controller({"command": "abort", "message": msg})
+                            self.reset = True
+                            return
                 except:
                     try:
                         client.create_bucket(Bucket=bn)
+                        if config["versioning"]:
+                            client.put_bucket_versioning(
+                                Bucket=bn,
+                                VersioningConfiguration={'Status': 'Enabled'}
+                            )
                     except:
                         self.log_to_controller(
                             "Problem creating bucket: {0}".format(bn)
                         )
-
+                        self.reset = True
+                
         # Generic S3 compatible
         else:
             client = boto3.Session(
@@ -134,10 +157,26 @@ class SlorDriver:
 
             for bn in config["bucket_list"]:
                 try:
-                    client.head_bucket(Bucket=bn)
-                    # self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
+                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    print(str(config))
+                    if not config["use_existing_buckets"]:
+                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        self.log_to_controller({"command": "abort", "message": msg})
+                        self.reset = True
+                        return
+
+                    if config["versioning"]:
+                        resp = client.get_bucket_versioning(
+                            Bucket=bn
+                        )
+                        if not "Status" in resp or resp["Status"] != "Enabled":
+                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed (exiting)"
+                            self.log_to_controller({"command": "abort", "message": msg})
+                            self.reset = True
+                            return
                 except:
-                    # self.log_to_controller("creating {0}".format(bn))
                     try:
                         client.create_bucket(
                             Bucket=bn,
@@ -145,10 +184,16 @@ class SlorDriver:
                                 "LocationConstraint": config["region"]
                             },
                         )
-                    except:
+                        if config["versioning"]:
+                            client.put_bucket_versioning(
+                                Bucket=bn,
+                                VersioningConfiguration={'Status': 'Enabled'}
+                            )
+                    except Exception as e:
                         self.log_to_controller(
-                            "Problem creating bucket: {0}".format(bn)
+                            "Problem creating bucket: {0}".format(e)
                         )
+                        self.reset = True
 
     def log_to_controller(self, message):
         """If the message is a string then it will be echoed to the console on the controller"""
@@ -156,8 +201,8 @@ class SlorDriver:
             return
         if type(message) is str:
             message = {"message": message}
-        message["w_id"] = self.w_id
 
+        message["w_id"] = self.w_id
         try:
             self.sock.send(message)
         except Exception as e:
@@ -187,7 +232,7 @@ class SlorDriver:
     def thread_control(self, config):
 
         ##
-        # Clean-up is handled at little differently
+        # Clean-up is handled a little differently
         if config["type"] == "cleanup":
 
             drivers = len(config["driver_list"])
@@ -260,7 +305,9 @@ class SlorDriver:
                 while t[0].poll(0.01):
 
                     # Basically everything is sent back to the controller
-                    self.log_to_controller(self.process_thread_resp(t[0].recv()))
+                    self.log_to_controller(
+                        self.process_thread_resp(t[0].recv())
+                    )
 
             # Mark active if any threads are active
             for t in self.procs:
