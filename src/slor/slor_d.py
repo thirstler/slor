@@ -115,18 +115,24 @@ class SlorDriver:
             ).client("s3", verify=verify_tls)
             for bn in config["bucket_list"]:
                 try:
-                    client.head_bucket(Bucket=bn)
+                    client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    if not config["use_existing_buckets"]:
+                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        self.log_to_controller({"command": "abort", "message": msg})
+                        self.reset = True
+                        return
 
                     if config["versioning"]:
                         resp = client.get_bucket_versioning(
                             Bucket=bn
                         )
                         if not "Status" in resp or resp["Status"] != "Enabled":
-                            self.log_to_controller("Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
-                                "Please delete the bucket or enable versioning on it to proceed")
-                            
+                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed (exiting)"
+                            self.log_to_controller({"command": "abort", "message": msg})
                             self.reset = True
+                            return
                 except:
                     try:
                         client.create_bucket(Bucket=bn)
@@ -151,8 +157,14 @@ class SlorDriver:
 
             for bn in config["bucket_list"]:
                 try:
-                    client.head_bucket(Bucket=bn)
+                    client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    print(str(config))
+                    if not config["use_existing_buckets"]:
+                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        self.log_to_controller({"command": "abort", "message": msg})
+                        self.reset = True
+                        return
 
                     if config["versioning"]:
                         resp = client.get_bucket_versioning(
@@ -162,8 +174,8 @@ class SlorDriver:
                             msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
                                 "Please delete the bucket or enable versioning on it to proceed (exiting)"
                             self.log_to_controller({"command": "abort", "message": msg})
-                            sys.exit(0)
-                   
+                            self.reset = True
+                            return
                 except:
                     try:
                         client.create_bucket(

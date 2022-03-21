@@ -163,22 +163,28 @@ def run():
         help="delete buckets when finished with workload (enables --cleanup option)",
     )
     parser.add_argument(
+        "--bucket-count",
+        default=DEFAULT_BUCKET_COUNT,
+        help="number of buckets to distribute over, defaults to '{0}'".format(
+            DEFAULT_BUCKET_COUNT
+        ),
+    )
+    parser.add_argument(
+        "--use-existing-buckets",
+        action="store_true",
+        default=False,
+        help="force the use of existing buckets; WARNING: destruction of ALL DATA IN THE BUCKET(S) WILL HAPPEN if you specify this with --cleanup or --remove-buckets"
+    )
+    parser.add_argument(
         "--sleep",
         default=DEFAULT_SLEEP_TIME,
-        help="sleeptime between workloads",
+        help="sleeptime between workloads"
     )
     parser.add_argument(
         "--mixed-profiles",
         default=DEFAULT_MIXED_PROFILE,
         help="list of profiles of mixed loads in JSON format, eg: '{0}'".format(
             DEFAULT_MIXED_PROFILE
-        ),
-    )
-    parser.add_argument(
-        "--bucket-count",
-        default=DEFAULT_BUCKET_COUNT,
-        help="number of buckets to distribute over, defaults to '{0}'".format(
-            DEFAULT_BUCKET_COUNT
         ),
     )
     parser.add_argument(

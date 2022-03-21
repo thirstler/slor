@@ -606,7 +606,8 @@ class SlorControl:
             "startup_delay": (DRIVER_REPORT_TIMER / len(self.config["driver_list"])),
             "key_prefix": self.config["key_prefix"],
             "versioning": self.config["versioning"],
-            "remove_buckets": self.config["remove_buckets"]
+            "remove_buckets": self.config["remove_buckets"],
+            "use_existing_buckets": self.config["use_existing_buckets"]
         }
 
         # Work out the readmap slices
