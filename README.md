@@ -1,4 +1,4 @@
-Slor
+SLoR
 ====
 
 S3 Load Ruler is a (relatively) easy-to-use benchmarking and load generation tool
@@ -28,7 +28,7 @@ workloads with slor via a "controller" process. The controller is responsible
 for sending workloads to driver processes and then collecting the returned
 performance data.
 
-Where does it run?
+Where does it do?
 ------------------
 
 It should run anywhere Python3 runs (though it is more tested on POSIX type
