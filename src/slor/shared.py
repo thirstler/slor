@@ -1,5 +1,4 @@
 import platform
-import psutil
 import configparser
 import os, sys
 import random
@@ -164,48 +163,23 @@ def human_readable(value, val_format="SI", print_units="bytes", precision=2):
 
 def basic_sysinfo():
     """
-    Never would have used psutil to start with if I knew it sucked this hard
+    This is pretty much useless. Was using psutil for all kinds of nifty info
+    but it wasn't worth it. Module is a pain to install with pip (requires
+    gcc), it's not installed by default and not worth the effort.
     """
 
     # Older versions of psutil don't have getloadavg(), pft.
-    sysload = []
-    try:
-        sysload = psutil.getloadavg()
-    except AttributeError:
-        if os.name == "posix":
-            with open("/proc/loadavg") as f:
-                for i, item in enumerate(f.readlines()[0].split(" ")):
-                    if i > 2:
-                        break
-                    sysload.append(float(item))
-        else:
-            sysload = [0.0, 0.0, 0.0]
-    except:
-        # Fuck it
+    if os.name == "posix":
+        load1, load5, load15 = os.getloadavg()
+        sysload = [load1, load5, load15]
+    else:
+        # Not checked on windows and I don't want the psutil module 
         sysload = [0.0, 0.0, 0.0]
-
-    # Not every platform has this either
-    try:
-        cpu_freq = psutil.cpu_freq()
-    except AttributeError:
-        cpu_freq = None
-
-    # Not every platform has this either
-    try:
-        sensors = (psutil.sensors_temperatures(),)
-    except AttributeError:
-        sensors = None
 
     return {
         "slor_version": SLOR_VERSION,
         "uname": platform.uname(),
-        "sysload": sysload,
-        "cpu_perc": psutil.cpu_percent(1),
-        "vm": psutil.virtual_memory(),
-        "cpus": psutil.cpu_count(),
-        "cpu_freq": cpu_freq,
-        "net": psutil.net_io_counters(pernic=True),
-        "sensors": sensors,
+        "sysload": sysload
     }
 
 

@@ -288,24 +288,6 @@ class SlorControl:
                     bcolors.WARNING, bcolors.ENDC, data["sysload"][0]
                 )
             )
-
-        """
-        Worthless check
-        for iface in data["net"]:
-            if (
-                data["net"][iface].errin
-                + data["net"][iface].errout
-                + data["net"][iface].dropin
-                + data["net"][iface].dropout
-            ) > 0:
-                sys.stdout.write("\n")
-                sys.stdout.write(
-                    u"\u2502    {}warning{} iface {} has dropped packets or errors".format(
-                        bcolors.WARNING, bcolors.ENDC,
-                        iface
-                    )
-                )
-        """
         sys.stdout.write("\n")
 
     def poll_for_response(self, all=True):
