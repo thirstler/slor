@@ -118,6 +118,16 @@ class SlorControl:
                     human_readable(self.config["sz_range"][2], precision=0),
                 )
             )
+            if self.config["get_range"]:
+                cfg = ""
+                avg = 0
+                for x in self.config["get_range"]:
+                    avg += x
+                    cfg += human_readable(x) + " - "
+                if int(avg/len(self.config["get_range"])) != self.config["get_range"][0]:
+                    cfg += human_readable(avg/len(self.config["get_range"])) + " (avg),  "
+                cft_text += "Get-range config:   {0}\n".format(cfg[:-3])
+
             cft_text += "Key length(s):      {0}\n".format(
                 self.config["key_sz"][0]
                 if self.config["key_sz"][0] == self.config["key_sz"][1]
@@ -591,7 +601,8 @@ class SlorControl:
             "key_prefix": self.config["key_prefix"],
             "versioning": self.config["versioning"],
             "remove_buckets": self.config["remove_buckets"],
-            "use_existing_buckets": self.config["use_existing_buckets"]
+            "use_existing_buckets": self.config["use_existing_buckets"],
+            "get_range": self.config["get_range"]
         }
 
         # Work out the readmap slices

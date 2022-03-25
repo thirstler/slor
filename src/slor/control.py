@@ -118,6 +118,11 @@ def run():
         ),
     )
     parser.add_argument(
+        "--get-range",
+        default=None,
+        help="specify a size or size range (e.g.: 1024-9172, or 712 or 15K) to get from prepared objects, noting that it cannot be larger than the prepared objects"
+    )
+    parser.add_argument(
         "--mpu-size", default=None, help="write objects as MPUs using this chunk size"
     )
     # parser.add_argument(

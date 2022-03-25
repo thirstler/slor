@@ -60,9 +60,7 @@ class SlorAnalysis:
                 "Default bucket count:", global_config["bucket_count"]
             )
         )
-
-        right = []
-        right.append(
+        left.append(
             self.format_key_value(
                 "Object size config:",
                 (
@@ -76,7 +74,7 @@ class SlorAnalysis:
                 ),
             )
         )
-        right.append(
+        left.append(
             self.format_key_value(
                 "Key length config:",
                 "{} - {}  avg: {}".format(
@@ -88,6 +86,12 @@ class SlorAnalysis:
                 else global_config["key_sz"][0],
             )
         )
+        if global_config["get_range"]:
+            left.append(self.format_key_value(
+                "Get-range raw config", str(global_config["get_range"])
+            ))
+
+        right = []
         right.append("Drivers:")
         for b in global_config["driver_list"]:
             right.append(
@@ -180,6 +184,18 @@ class SlorAnalysis:
                     ),
                 )
             )
+            if global_config["get_range"]:
+                cfg = ""
+                avg = 0
+                for x in global_config["get_range"]:
+                    avg += x
+                    cfg += human_readable(x) + " - "
+                if int(avg/len(global_config["get_range"])) != global_config["get_range"][0]:
+                    cfg += human_readable(avg/len(global_config["get_range"])) + " (avg),  "
+
+                left.append(self.format_key_value(
+                    "Get-range config", cfg[:-3]
+                ))
             left.append(
                 self.format_key_value(
                     "Key length config:",
@@ -262,7 +278,7 @@ class SlorAnalysis:
                 )
                 left.append(
                     self.format_key_value(
-                        "  Average object size:",
+                        "  Average GET size:",
                         human_readable(alias["ttl_bytes"] / alias["ttl_operations"]),
                     )
                 )

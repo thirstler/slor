@@ -37,14 +37,16 @@ class S3primitives:
         )
         return resp
 
-    def get_object(self, bucket, key, version_id=None):
+    def get_object(self, bucket, key, version_id=None, range=None):
+        # None for Range is OK but not VersionId *sigh*
         if version_id:
             resp = self.s3client.get_object(
-                Bucket=bucket, Key=key, VersionId=version_id
+                Bucket=bucket, Key=key, VersionId=version_id, Range=range
             )
         else:
-            resp = self.s3client.get_object(Bucket=bucket, Key=key)
-
+            resp = self.s3client.get_object(
+                Bucket=bucket, Key=key, Range=range
+            )
         return resp
 
     def head_object(self, bucket, key, version_id=None):
