@@ -24,10 +24,10 @@ class Read(SlorProcess):
         self.start_sample()
         stop = False
         rerun = 0
+        rangeref = self.config["get_range"]
 
         # Wrap-around when out of keys to read
         while True:
-
             if stop:
                 break
 
@@ -41,14 +41,23 @@ class Read(SlorProcess):
             for i, pkey in enumerate(self.config["mapslice"]):
 
                 version_id = None
+                range_specifier = None
 
-                # Pick a version if specificed
+                # Pick a version if specified
                 if self.config["versioning"] and len(pkey) == 3:
                     version_id = random.choice(pkey[2]) # grab any version
 
+                if rangeref:
+                    if len(rangeref) == 2:
+                        sz = random.randint(rangeref[0], rangeref[1])
+                    else:
+                        sz = rangeref[0]
+                    offset = random.randint(0, (self.config["sz_range"][0]-sz) )
+                    end = offset+sz
+                    range_specifier = "bytes={}-{}".format(offset, end)
                 try:
                     self.start_io("read")
-                    resp = self.s3ops.get_object(pkey[0], pkey[1], version_id=version_id)
+                    resp = self.s3ops.get_object(pkey[0], pkey[1], version_id=version_id, range=range_specifier)
                     data = resp["Body"].read() # read streamed data
                     self.stop_io(sz=int(resp["ContentLength"]))
                     del data

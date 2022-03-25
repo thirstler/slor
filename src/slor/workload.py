@@ -183,6 +183,15 @@ def parse_driver_list(stringval):
         hostlist.append({"host": host, "port": port})
     return hostlist
 
+def parse_get_range(stringVal):
+    if stringVal == None: return None
+
+    items = stringVal.split("-")
+    items[0] = int(parse_size(items[0]))
+    if len(items) == 2:
+        items[1] = int(parse_size(items[1]))
+
+    return items
 
 def generate_tasks(args):
 
@@ -327,6 +336,7 @@ def classic_workload(args):
         "no_db": args.no_db,
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
-        "use_existing_buckets": args.use_existing_buckets
+        "use_existing_buckets": args.use_existing_buckets,
+        "get_range": parse_get_range(args.get_range)
     }
     return root_config
