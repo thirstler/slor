@@ -41,12 +41,23 @@ versions between the drivers and controller.
 Installation
 ------------
 
-Slor can be installed by doing a:
+Slor can be installed by building the pip package and installing it. I like to
+create virtual environments so I can get recent versions of dependencies
+without messing up the system. Requires the venv and setuptools packages:
 
+    pip3 install venv setuptools
+    python3 -mvenv ~/slor_venv
+    source ~/slor_venv/bin/activate
+    pip install --upgrade pip
+    pip install pyjson pyyaml boto3
+    git clone https://github.com/thirstler/slor.git
+    cd slor
     python -m build
     pip install --upgrade ./dist/slor-[version].tgz
 
-It should be available in a proper pip repository in the near future as well.
+If you want you can tar-up ~/slor_venv and put it on the driver systems.
+The venv approach is great for getting things installed in air-gapped 
+environments.
 
 
 Running a Workload

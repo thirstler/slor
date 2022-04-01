@@ -293,8 +293,15 @@ class statHandler:
         self.last_rm_count = x
 
     def dunno(self, width=10, final=False, color=""):
-        # blocks = ("\u2596", "\u2597", "\u2598", "\u2599", "\u259A", "\u259B", "\u259C", "\u259D", "\u259E", "\u259F", "\u25E2", "\u25E3", "\u25E4", "\u25E5")
-        blocks = ("\u258F", "\u258E", "\u258D", "\u258C", "\u258B", "\u258A", "\u2589", "\u2588", "\u2589", "\u258A", "\u258B", "\u258C", "\u258D", "\u258E", "\u258F")
+        blocks = (
+            "\u258F", "\u258E",
+            "\u258D", "\u258C",
+            "\u258B", "\u258A",
+            "\u2589", "\u2588",
+            "\u2589", "\u258A",
+            "\u258B", "\u258C",
+            "\u258D", "\u258E",
+            "\u258F")
         
         if final:
             sys.stdout.write(

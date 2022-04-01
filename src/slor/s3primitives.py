@@ -38,19 +38,28 @@ class S3primitives:
         return resp
 
     def get_object(self, bucket, key, version_id=None, range=None):
-        # None for Range is OK but not VersionId *sigh*
-        if version_id:
+
+        # Annoying af, decide what kind of get_object you are.
+        if version_id and range:
             resp = self.s3client.get_object(
                 Bucket=bucket, Key=key, VersionId=version_id, Range=range
             )
-        else:
+        elif version_id and not range:
+            resp = self.s3client.get_object(
+                Bucket=bucket, Key=key, VersionId=version_id
+            )
+        elif not version_id and range:
             resp = self.s3client.get_object(
                 Bucket=bucket, Key=key, Range=range
+            )
+        else:
+            resp = self.s3client.get_object(
+                Bucket=bucket, Key=key
             )
         return resp
 
     def head_object(self, bucket, key, version_id=None):
-        if version_id != None:
+        if version_id:
             resp = self.s3client.head_object(
                 Bucket=bucket, Key=key, VersionId=version_id
             )
@@ -59,7 +68,7 @@ class S3primitives:
         return resp
 
     def delete_object(self, bucket, key, version_id=None):
-        if version_id != None:
+        if version_id:
             resp = self.s3client.delete_object(
                 Bucket=bucket, Key=key, VersionId=version_id
             )

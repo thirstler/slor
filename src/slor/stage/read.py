@@ -25,7 +25,6 @@ class Read(SlorProcess):
         stop = False
         rerun = 0
         rangeref = self.config["get_range"]
-
         # Wrap-around when out of keys to read
         while True:
             if stop:
@@ -48,13 +47,14 @@ class Read(SlorProcess):
                     version_id = random.choice(pkey[2]) # grab any version
 
                 if rangeref:
-                    if len(rangeref) == 2:
+                    if len(rangeref) > 1:
                         sz = random.randint(rangeref[0], rangeref[1])
                     else:
                         sz = rangeref[0]
                     offset = random.randint(0, (self.config["sz_range"][0]-sz) )
                     end = offset+sz
-                    range_specifier = "bytes={}-{}".format(offset, end)
+                    range_specifier = "bytes={}-{}".format(int(offset), int(end))
+
                 try:
                     self.start_io("read")
                     resp = self.s3ops.get_object(pkey[0], pkey[1], version_id=version_id, range=range_specifier)

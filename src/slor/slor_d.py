@@ -159,7 +159,6 @@ class SlorDriver:
                 try:
                     client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
                     self.log_to_controller("Warning: bucket present ({0})".format(bn))
-                    print(str(config))
                     if not config["use_existing_buckets"]:
                         msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
                         self.log_to_controller({"command": "abort", "message": msg})

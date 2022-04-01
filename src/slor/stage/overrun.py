@@ -28,7 +28,7 @@ class Overrun(SlorProcess):
             )
             + 1
         )
-
+        
         self.start_benchmark(("write",), target=count)
         self.start_sample()
 

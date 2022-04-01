@@ -235,6 +235,13 @@ def generate_tasks(args):
         else:
             newloads.append(l)
 
+    if "blowout" in loads and args.cachemem_size == "0":
+        try:
+            while True:
+                newloads.remove("blowout") # Exception abuse
+        except:
+            pass
+
     # Add cleanup if specified
     if args.cleanup:
         newloads.append("cleanup")
@@ -337,6 +344,6 @@ def classic_workload(args):
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,
-        "get_range": parse_get_range(args.get_range)
+        "get_range": parse_size_range(args.get_range)
     }
     return root_config

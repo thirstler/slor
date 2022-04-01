@@ -36,8 +36,6 @@ class SlorControl:
 
     def exec(self):
 
-        print(BANNER)
-
         # Print config
         box_text(self.config_text())
 
@@ -119,14 +117,15 @@ class SlorControl:
                 )
             )
             if self.config["get_range"]:
-                cfg = ""
-                avg = 0
-                for x in self.config["get_range"]:
-                    avg += x
-                    cfg += human_readable(x) + " - "
-                if int(avg/len(self.config["get_range"])) != self.config["get_range"][0]:
-                    cfg += human_readable(avg/len(self.config["get_range"])) + " (avg),  "
-                cft_text += "Get-range config:   {0}\n".format(cfg[:-3])
+                cft_text += "Get range size(s):  {0}\n".format(
+                    human_readable(self.config["get_range"][0], precision=0)
+                    if self.config["get_range"][0] == self.config["get_range"][1]
+                    else "low: {0}, high: {1} (avg: {2})".format(
+                        human_readable(self.config["get_range"][0], precision=0),
+                        human_readable(self.config["get_range"][1], precision=0),
+                        human_readable(self.config["get_range"][2], precision=0),
+                    )
+                )
 
             cft_text += "Key length(s):      {0}\n".format(
                 self.config["key_sz"][0]
@@ -393,9 +392,31 @@ class SlorControl:
             self.stats_h.show()
             time.sleep(0.01)
 
-        # Replace with readmap with a versioned one and shuffle
+        # Replace with readmap with a versioned one, save it if "save_redmap"
+        # is specified and shuffle
         if stage == "prepare":
+            cfg_keys = (
+                "sz_range",
+                "bucket_prefix",
+                "bucket_count",
+                "key_sz",
+                "ttl_prepare_sz",
+                "prepare_objects",
+            )
             self.readmap = self.new_readmap
+
+            if self.config["save_readmap"]:
+                sys.stdout.write("\u2502     {}Saving readmap... ".format(bcolors.GRAY))
+                sys.stdout.flush()
+                save_contents = {"readmap": self.readmap}
+                for cfg in cfg_keys:
+                    save_contents[cfg] = self.config[cfg]
+
+                with open(self.config["save_readmap"], "w") as fh:
+                    fh.write(json.dumps(save_contents))
+                    fh.close()
+                sys.stdout.write("done{}\n".format(bcolors.ENDC))
+                sys.stdout.flush()
             random.shuffle(self.readmap)
 
         if (
@@ -546,14 +567,14 @@ class SlorControl:
                     fin = True
                 stat_h.readmap_progress(z, objcount, final=fin)
 
-        if self.config["save_readmap"]:
-            save_contents = {"readmap": self.readmap}
-            for cfg in cfg_keys:
-                save_contents[cfg] = self.config[cfg]
+        #if self.config["save_readmap"]:
+        #    save_contents = {"readmap": self.readmap}
+        #    for cfg in cfg_keys:
+        #        save_contents[cfg] = self.config[cfg]
 
-            with open(self.config["save_readmap"], "w") as fh:
-                fh.write(json.dumps(save_contents))
-                fh.close()
+        #    with open(self.config["save_readmap"], "w") as fh:
+        #        fh.write(json.dumps(save_contents))
+        #        fh.close()
 
     def parse_stage_string(self, stage_str):
         items = stage_str.split("~")

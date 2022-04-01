@@ -21,6 +21,8 @@ def start_driver():
 def input_checks(args):
 
     keepgoing = True
+    warnings = ""
+    errors = ""
 
     if args.force:
         return True
@@ -35,20 +37,26 @@ def input_checks(args):
             "objects missing. ")
         yn = input("You sure you mean this? (y/n): ")
         if yn[0].upper == "N":
-            keepgoing = False
+            keepgoing = False # Error
 
-    if args.loads.find("blowout") and args.cachemem_size == "0":
-        sys.stdout.write(
-            "blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n"
-        )
+    if "blowout" in args.loads.split(",") and args.cachemem_size == "0":
+        warnings += "blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n"
+        keepgoing = True # Warning
 
     if args.mpu_size and parse_size(args.mpu_size) <= MINIMUM_MPU_CHUNK_SIZE:
-        sys.stdout.write(
-            "MPU part size too small, must be greather than {}\n".format(
+        errors += "MPU part size too small, must be greather than {}\n".format(
                 human_readable(MINIMUM_MPU_CHUNK_SIZE)
             )
-        )
-        keepgoing = False
+        keepgoing = False # Error
+
+    if parse_size(args.get_range.split("-")[-1]) > parse_size(args.object_size.split("-")[0]):
+        errors += "Cannot perform get-range operations on objects smaller than the range size"
+        keepgoing = False # Error
+
+    if errors:
+        box_text("{}Argument error(s){}:\n".format(bcolors.BOLD, bcolors.ENDC) + errors)
+    elif warnings:
+        box_text("{}Argument warning(s){}:\n".format(bcolors.BOLD, bcolors.ENDC) + warnings)
 
     return keepgoing
 
@@ -125,11 +133,6 @@ def run():
     parser.add_argument(
         "--mpu-size", default=None, help="write objects as MPUs using this chunk size"
     )
-    # parser.add_argument(
-    #    "--workload-file",
-    #    default=None,
-    #    help="specify a workload file in YAML format, ignores most options and executes workload as defined in the file"
-    # )
     parser.add_argument(
         "--versioning", action="store_true", help="use versioned buckets, include versioned read, re-read and delete requests when possible during mixed workloads (see README)"
     )
@@ -225,6 +228,8 @@ def run():
         print("SLoR version: {}".format(SLOR_VERSION))
         sys.exit(0)
 
+    print(BANNER)
+    
     if not input_checks(args):
         sys.exit(1)
 

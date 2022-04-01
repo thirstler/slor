@@ -5,7 +5,7 @@ import sys
 
 if __name__ == "__main__":
 
-    if sys.argv[1] == "--version":
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print("SLoR version: {}".format(SLOR_VERSION))
         sys.exit(0)
 

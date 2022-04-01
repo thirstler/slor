@@ -185,6 +185,7 @@ class SlorAnalysis:
                 )
             )
             if global_config["get_range"]:
+                '''
                 cfg = ""
                 avg = 0
                 for x in global_config["get_range"]:
@@ -196,6 +197,25 @@ class SlorAnalysis:
                 left.append(self.format_key_value(
                     "Get-range config", cfg[:-3]
                 ))
+                '''
+
+                left.append(
+                    self.format_key_value(
+                        "Get range config:",
+                        (
+                            "{} - {}  (avg: {})".format(
+                                human_readable(s_config[0]["get_range"][0]),
+                                human_readable(s_config[0]["get_range"][1]),
+                                human_readable(s_config[0]["get_range"][2]),
+                            )
+                            if s_config[0]["get_range"][0] != s_config[0]["get_range"][1]
+                            else (human_readable(s_config[0]["get_range"][0]))
+                        ),
+                    )
+                )
+
+
+
             left.append(
                 self.format_key_value(
                     "Key length config:",
