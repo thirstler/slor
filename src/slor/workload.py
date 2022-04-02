@@ -207,15 +207,6 @@ def generate_tasks(args):
         mix_prof_obj = json.loads(args.mixed_profiles)
         check_mixed_workloads(mix_prof_obj, loads)
 
-        for mixed in mix_prof_obj:
-            perc = 0
-            for l in MIXED_LOAD_TYPES:
-                if l in mixed:
-                    perc += int(mixed[l])
-            if perc != 100:
-                sys.stderr.write("your mixed load profile values don't equal 100\n")
-                sys.exit(1)
-
     # Always happens:
     loads.insert(0, "init")
 
@@ -312,7 +303,7 @@ def classic_workload(args):
             int(args.iop_limit),
         )
 
-    # Create a working config form command line arguments
+    # Create a working config from command line arguments
     root_config = {
         "name": args.name,
         "config_type": "basic",
@@ -344,6 +335,6 @@ def classic_workload(args):
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,
-        "get_range": parse_size_range(args.get_range)
+        "get_range": parse_size_range(args.get_range) if args.get_range else None
     }
     return root_config

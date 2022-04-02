@@ -178,9 +178,9 @@ class SlorControl:
             if stage == "mixed":
                 mixed_prof = self.config["tasks"]["mixed_profiles"][mixed_count]
                 mixed_count += 1
-                cft_text += "                    {0}: {1} - ".format(stagecount, stage)
+                cft_text += "                    {0}: {1} - ratios: ".format(stagecount, stage)
                 for j, m in enumerate(mixed_prof):
-                    cft_text += "{0}:{1}%".format(m, mixed_prof[m])
+                    cft_text += "{0}:{1}".format(m, mixed_prof[m])
                     if (j + 1) < len(mixed_prof):
                         cft_text += ", "
                 cft_text += " ({} seconds)\n".format(duration)

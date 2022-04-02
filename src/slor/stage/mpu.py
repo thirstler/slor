@@ -5,6 +5,7 @@ import time
 
 
 class Mpu(SlorProcess):
+    
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
