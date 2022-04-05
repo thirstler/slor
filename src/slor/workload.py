@@ -2,9 +2,8 @@ from slor.shared import *
 from slor.driver import _slor_driver
 from slor.stat_handler import *
 import yaml, json
-import copy
 
-
+'''
 def parse_workload(file):
 
     try:
@@ -144,17 +143,9 @@ def build_prefix_keys(struct_def):
 
         if "prefix_struct" in prefix:
             build_prefix_keys(prefix["prefix_struct"])
+'''
 
-
-def calc_prepare_size(sizerange, runtime, iops):
-    if len(sizerange) > 1:
-        avgsz = (sizerange[0] + sizerange[1]) / 2
-    else:
-        avgsz = sizerange[0]
-
-    return avgsz * iops * runtime
-
-
+'''
 def parse_size_range(stringval):
     if type(stringval) == list or type(stringval) == tuple:
         return stringval  # this has already been processed
@@ -169,7 +160,7 @@ def parse_size_range(stringval):
         high = int(parse_size(vals[1].strip()))
         avg = (low + high) / 2
         return (low, high, avg)
-
+'''
 
 def parse_driver_list(stringval):
     hostlist = []
@@ -206,15 +197,6 @@ def generate_tasks(args):
 
         mix_prof_obj = json.loads(args.mixed_profiles)
         check_mixed_workloads(mix_prof_obj, loads)
-
-        for mixed in mix_prof_obj:
-            perc = 0
-            for l in MIXED_LOAD_TYPES:
-                if l in mixed:
-                    perc += int(mixed[l])
-            if perc != 100:
-                sys.stderr.write("your mixed load profile values don't equal 100\n")
-                sys.exit(1)
 
     # Always happens:
     loads.insert(0, "init")
@@ -284,35 +266,19 @@ def classic_workload(args):
     if not args.access_key and not args.secret_key:
         args.access_key, args.secret_key = get_keys(args.profile)
 
-    # Must be AWS if no endpoint is given, to keep boto3 easy we should
+    # Must be AWS if no endpoint is given, to keep boto3 easy, we should
     # construct the AWS endpoint explicitly.
-    if args.endpoint == "":
+    if not args.endpoint:
         args.endpoint = "https://s3.{0}.amazonaws.com".format(args.region)
-
-    key_sz = args.key_length.split("-")
-    if len(key_sz) == 1:
-        key_sz = (int(key_sz[0]), int(key_sz[0]), int(key_sz[0]))
-    else:
-        key_sz = (
-            int(key_sz[0]),
-            int(key_sz[1]),
-            int((int(key_sz[0]) + int(key_sz[1])) / 2),
-        )
 
     tasks = generate_tasks(args)
 
-    if args.prepare_objects != None:
-        ttl_prepare_sz = (
-            parse_size(args.prepare_objects) * parse_size_range(args.object_size)[2]
-        )
+    if args.prepare_objects:
+        ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
     else:
-        ttl_prepare_sz = calc_prepare_size(
-            parse_size_range(args.object_size),
-            int(args.stage_time),
-            int(args.iop_limit),
-        )
+        ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.iop_limit)
 
-    # Create a working config form command line arguments
+    # Create a working config from command line arguments
     root_config = {
         "name": args.name,
         "config_type": "basic",
@@ -322,8 +288,8 @@ def classic_workload(args):
         "endpoint": verify_endpoint(args.endpoint),
         "verify": args.verify,
         "region": args.region,
-        "key_sz": key_sz,
-        "sz_range": parse_size_range(args.object_size),
+        "key_sz": sizeRange(range_arg=args.key_length).serialize(),
+        "sz_range": sizeRange(range_arg=args.object_size).serialize(),
         "mpu_size": parse_size(args.mpu_size),
         "run_time": int(args.stage_time),
         "bucket_count": int(args.bucket_count),
@@ -344,6 +310,6 @@ def classic_workload(args):
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,
-        "get_range": parse_size_range(args.get_range)
+        "get_range": sizeRange(range_arg=args.get_range).serialize()
     }
     return root_config

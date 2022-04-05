@@ -1,14 +1,16 @@
+import json
 import platform
 import configparser
 import os, sys
 import random
 import string
+from unicodedata import numeric
 
-SLOR_VERSION = 0.3
+SLOR_VERSION = 0.4
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
-DEFAULT_ENDPOINT = ""
+DEFAULT_ENDPOINT = None
 DEFAULT_REGION = "us-east-1"
 DEFAULT_BUCKET_PREFIX = "slor-"
 DEFAULT_BENCH_LEN = "300"
@@ -18,7 +20,7 @@ DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "10"
 DEFAULT_UPPER_IOP_LIMIT = "1000"
 DEFAULT_TESTS = "read,write,head,mixed,delete,cleanup"
-DEFAULT_MIXED_PROFILE = '[{"read": 60, "write": 25, "delete": 5, "head": 10}]'
+DEFAULT_MIXED_PROFILE = '[{"read": 5, "write": 2, "delete": 2, "head": 3}]'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
 DEFAULT_WRITE_PREFIX = "write/"
@@ -108,6 +110,51 @@ class bcolors:
     UNDERLINE = "\033[4m"
     GRAY = "\033[38;5;243m"
 
+class sizeRange:
+
+    # Defaults
+    low:int = None
+    high:int = None
+    avg:float = None
+
+    def __init__(self, low:int=None, high:int=None, range_arg:str=None):
+
+        # Create range values from argument input
+        if range_arg:
+            items = range_arg.split("-")
+            if len(items) == 1:
+                low = parse_size(items[0])
+                high = low
+            elif len(items) == 2:
+                low = parse_size(items[0])
+                high = parse_size(items[1])
+
+        # I'm sure there's a more clever way to do this:
+        if low and high:
+            self.avg = (low+high)/2
+            self.low = low
+            self.high = high
+        elif low:
+            self.avg = low
+            self.high = low
+            self.low = low
+        elif high:
+            self.avg = high
+            self.high = high
+            self.low = high
+    
+    def getVal(self) -> int:
+        """return random int in range"""
+        if self.low == self.high:
+            return round(self.low)
+        else:
+            return round(self.low + ((self.high-self.low) * random.random()))
+
+    def serialize(self):
+        # Need to avoid pickling in the future.
+        return {"low": self.low, "high": self.high, "avg": self.high}
+
+
 
 BANNER = "\n<<{0}SLoR{1}>> (ver. {2})\n".format(
     bcolors.BOLD, bcolors.ENDC, SLOR_VERSION
@@ -115,7 +162,7 @@ BANNER = "\n<<{0}SLoR{1}>> (ver. {2})\n".format(
 ###############################################################################
 ## Globally shared routines
 ##
-def parse_size(stringval: str) -> float:
+def parse_size(stringval: str) -> int:
 
     # if float(stringval)
     if stringval == None:
@@ -127,18 +174,18 @@ def parse_size(stringval: str) -> float:
 
     for s in ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"]:
         if stringval[-3:] == s:
-            return float(stringval[0:-3]) * (2**pwr)
+            return round(float(stringval[0:-3]) * (2**pwr))
         pwr += 10
 
     for s in ["KB", "MB", "GB", "TB", "PB", "EB"]:
         # Deal with single-letter suffixes and two letter (e.g. "MB" and "M")
         if stringval[-1:] == s[0]:
-            return float(stringval[0:-1]) * (10**sipwr)
+            return round(float(stringval[0:-1]) * (10**sipwr))
         if stringval[-2:] == s:
-            return float(stringval[0:-2]) * (10**sipwr)
+            return round(float(stringval[0:-2]) * (10**sipwr))
         sipwr += 3
 
-    return float(stringval)
+    return int(stringval)
 
 
 def human_readable(value, val_format="SI", print_units="bytes", precision=2):
@@ -251,3 +298,14 @@ def box_text(text):
     for line in text_lines:
         print("\u2502 " + line)
     bottom_box()
+
+def mixed_ratio_perc(mixed_json):
+    rttl = 0
+    percentages = {}
+    for op in mixed_json:
+        rttl += mixed_json[op]
+    for op in mixed_json:
+        percentages[op] = mixed_json[op]/rttl
+    return percentages
+    
+

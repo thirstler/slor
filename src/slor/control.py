@@ -49,7 +49,7 @@ def input_checks(args):
             )
         keepgoing = False # Error
 
-    if parse_size(args.get_range.split("-")[-1]) > parse_size(args.object_size.split("-")[0]):
+    if args.get_range and (parse_size(args.get_range.split("-")[-1]) > parse_size(args.object_size.split("-")[0])):
         errors += "Cannot perform get-range operations on objects smaller than the range size"
         keepgoing = False # Error
 
@@ -191,7 +191,7 @@ def run():
     parser.add_argument(
         "--mixed-profiles",
         default=DEFAULT_MIXED_PROFILE,
-        help="list of profiles of mixed loads in JSON format, eg: '{0}'".format(
+        help="list of profiles for mixed loads in JSON format (see README); each operation is given a share: e.g. '{0}'".format(
             DEFAULT_MIXED_PROFILE
         ),
     )

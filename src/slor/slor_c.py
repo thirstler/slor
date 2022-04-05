@@ -106,34 +106,37 @@ class SlorControl:
         if self.config["use_readmap"]:
             cft_text += "Using readmap:      {0}\n".format(self.config["use_readmap"])
         else:
+            # calculate memory needed for bytepool per driver process
+            driver_mem = (self.config["sz_range"]["high"]*2) * int(self.config["driver_proc"])
 
             cft_text += "Object size(s):     {0}\n".format(
-                human_readable(self.config["sz_range"][0], precision=0)
-                if self.config["sz_range"][0] == self.config["sz_range"][1]
+                human_readable(self.config["sz_range"]["low"], precision=0)
+                if self.config["sz_range"]["low"] == self.config["sz_range"]["high"]
                 else "low: {0}, high: {1} (avg: {2})".format(
-                    human_readable(self.config["sz_range"][0], precision=0),
-                    human_readable(self.config["sz_range"][1], precision=0),
-                    human_readable(self.config["sz_range"][2], precision=0),
+                    human_readable(self.config["sz_range"]["low"], precision=0),
+                    human_readable(self.config["sz_range"]["high"], precision=0),
+                    human_readable(self.config["sz_range"]["avg"], precision=0),
                 )
             )
+            cft_text += "Req driver mem:     {0}\n".format(human_readable(driver_mem))
             if self.config["get_range"]:
                 cft_text += "Get range size(s):  {0}\n".format(
-                    human_readable(self.config["get_range"][0], precision=0)
-                    if self.config["get_range"][0] == self.config["get_range"][1]
+                    human_readable(self.config["get_range"]["low"], precision=0)
+                    if self.config["get_range"]["low"] == self.config["get_range"]["high"]
                     else "low: {0}, high: {1} (avg: {2})".format(
-                        human_readable(self.config["get_range"][0], precision=0),
-                        human_readable(self.config["get_range"][1], precision=0),
-                        human_readable(self.config["get_range"][2], precision=0),
+                        human_readable(self.config["get_range"]["low"], precision=0),
+                        human_readable(self.config["get_range"]["high"], precision=0),
+                        human_readable(self.config["get_range"]["avg"], precision=0),
                     )
                 )
 
             cft_text += "Key length(s):      {0}\n".format(
-                self.config["key_sz"][0]
-                if self.config["key_sz"][0] == self.config["key_sz"][1]
+                self.config["key_sz"]["low"]
+                if self.config["key_sz"]["low"] == self.config["key_sz"]["high"]
                 else "low: {0}, high:  {1} (avg: {2})".format(
-                    self.config["key_sz"][0],
-                    self.config["key_sz"][1],
-                    self.config["key_sz"][2],
+                    self.config["key_sz"]["low"],
+                    self.config["key_sz"]["high"],
+                    self.config["key_sz"]["avg"],
                 )
             )
             cft_text += "Prepared objects:   {0} (readmap length)\n".format(
@@ -177,11 +180,12 @@ class SlorControl:
 
             if stage == "mixed":
                 mixed_prof = self.config["tasks"]["mixed_profiles"][mixed_count]
+                mixed_perc = mixed_ratio_perc(mixed_prof)
                 mixed_count += 1
-                cft_text += "                    {0}: {1} - ".format(stagecount, stage)
-                for j, m in enumerate(mixed_prof):
-                    cft_text += "{0}:{1}%".format(m, mixed_prof[m])
-                    if (j + 1) < len(mixed_prof):
+                cft_text += "                    {0}: {1} - perc: ".format(stagecount, stage)
+                for j, m in enumerate(mixed_perc):
+                    cft_text += "{0}:{1:.2f}%".format(m, mixed_perc[m]*100)
+                    if (j + 1) < len(mixed_perc):
                         cft_text += ", "
                 cft_text += " ({} seconds)\n".format(duration)
             elif stage == "readmap":
@@ -458,7 +462,7 @@ class SlorControl:
         try:
             blksz = self.config["driver_proc"] * len(self.config["driver_list"])
             objcount = (
-                int(self.config["ttl_prepare_sz"] / self.config["sz_range"][2]) + 1
+                int(self.config["ttl_prepare_sz"] / self.config["sz_range"]["high"]) + 1
             )
         except:
             objcount = 0
@@ -556,7 +560,7 @@ class SlorControl:
                         ),
                         self.config["key_prefix"]
                         + gen_key(
-                            key_desc=self.config["key_sz"],
+                            key_desc=(self.config["key_sz"]["low"], self.config["key_sz"]["high"]),
                             inc=z,
                             prefix=DEFAULT_READMAP_PREFIX,
                         ),

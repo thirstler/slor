@@ -46,12 +46,12 @@ class Read(SlorProcess):
                 if self.config["versioning"] and len(pkey) == 3:
                     version_id = random.choice(pkey[2]) # grab any version
 
-                if rangeref:
-                    if len(rangeref) > 1:
-                        sz = random.randint(rangeref[0], rangeref[1])
+                if self.config["get_range"]:
+                    if len(self.config["get_range"]) > 1:
+                        sz = random.randint(self.config["get_range"]["low"], self.config["get_range"]["high"])
                     else:
-                        sz = rangeref[0]
-                    offset = random.randint(0, (self.config["sz_range"][0]-sz) )
+                        sz = self.config["get_range"]["low"]
+                    offset = random.randint(0, (self.config["sz_range"]["low"]-sz) )
                     end = offset+sz
                     range_specifier = "bytes={}-{}".format(int(offset), int(end))
 

@@ -2,7 +2,7 @@ SLoR
 ====
 
 S3 Load Ruler is a (relatively) easy-to-use benchmarking and load generation tool
-for S3 storage systems. 
+for S3 storage. 
 
 What does it do?
 ----------------
@@ -14,22 +14,23 @@ and tagging) in discrete and mixed workload configurations.
 
 How does it do?
 ---------------
-It operates in a distributed mode similar controller/driver arrangement used by
-other load-generation systems (cosbench, warp, etc):
+It operates as a system of load-generators (drivers) that are instructed to do 
+things by a controller process. This is similar to other load generation
+systems:
 
     Controller ___ Driver1
                 \_ Driver2
                 \_ Driver3
                 \_ etc...
 
-You start workload servers, or drivers, on the systems you want to use for
-load generation. Then, you will references these servers when starting
-workloads with slor via a "controller" process. The controller is responsible
+You start load-generators (or drivers) on the systems you want to use for
+load generation. Then you will reference these servers when starting
+a workload with a slor "controller" process. The controller is responsible
 for sending workloads to driver processes and then collecting the returned
 performance data.
 
 Where does it do?
-------------------
+-----------------
 
 It should run anywhere Python3 runs (though it is more tested on POSIX type
 systems). The only limiting factor is the use of the "pickle" module which is
@@ -43,21 +44,22 @@ Installation
 
 Slor can be installed by building the pip package and installing it. I like to
 create virtual environments so I can get recent versions of dependencies
-without messing up the system. Requires the venv and setuptools packages:
+without messing up the system. Requires the venv, build and setuptools
+packages:
 
-    pip3 install venv setuptools
+    pip3 install venv # (or use your OS packages)
     python3 -mvenv ~/slor_venv
     source ~/slor_venv/bin/activate
     pip install --upgrade pip
-    pip install pyjson pyyaml boto3
+    pip install pyjson pyyaml boto3 build
     git clone https://github.com/thirstler/slor.git
     cd slor
     python -m build
     pip install --upgrade ./dist/slor-[version].tgz
 
-If you want you can tar-up ~/slor_venv and put it on the driver systems.
-The venv approach is great for getting things installed in air-gapped 
-environments.
+If you want, you can tar-up ~/slor_venv and put it on additional driver
+systems. The venv approach is great for getting things installed in air-gapped 
+environments where you can't pip yourself into success
 
 
 Running a Workload
@@ -96,14 +98,15 @@ whatever. You can specify the stages in the workload with the --loads flag.
     ./slor controller --access-key user \
     --secret-key password \
     --endpoint http://123.45.67.89 \
-    --loads read,write,cleanup
+    --loads read,write \
+    --cleanup
 
 This will run only a read and write workload with a clean-up stage at the end
-that will remove all objects and then delete the bucket.
+that will remove all objects from the bucket (ALL of them).
 
 Let's add a mixed workload (that isn't the default). Mixed workloads accept
-the following operation classes along with a percentage for how often that
-operation will appear in the stage (percentages must add-up to 100):
+the following operation classes along with a "share" values that says how
+often that operation will appear in the stage:
 
 * read
 * write
@@ -118,7 +121,7 @@ Example:
     --secret-key password \
     --endpoint http://123.45.67.89 \
     --loads read,write,mixed,cleanup \
-    ----mixed-profiles '[{"read": 50, "reread": 10, "write": 20, "overwrite": 5, "delete": 5, "head": 10}]'
+    ----mixed-profiles '[{"read": 10, "reread": 2, "write": 4, "overwrite": 1, "delete": 5, "head": 5}]'
 
 You can add multiple stages to a workload of the same type.
 
@@ -135,14 +138,14 @@ array:
     --endpoint http://123.45.67.89 \
     --loads read,mixed,mixed,cleanup \
     --mixed-profiles '[
-        {"read": 50, "reread": 10, "write": 20, "overwrite": 5, "delete": 5, "head": 10},
-        {"read": 10, "reread": 2, "write": 68, "overwrite": 5, "delete": 5, "head": 10}
+        {"read": 5, "reread": 1, "write": 2, "overwrite": 1, "delete": 1, "head": 2},
+        {"read": 2, "reread": 1, "write": 5, "overwrite": 1, "delete": 1, "head": 2}
     ]'
 
 If you're benchmarking spinning disks you might need to overrun page cache
 so that you're testing cold reads from disk rather than data from memory.
 This is done with a "blowout" stage. In order to use this effectively you 
-need to know how much cache you need to overrun before you can force the 
+need to know how much page cache you have to overrun before you can force the 
 system to read from the media. Fail-safe amount is the total amount
 of memory in the storage cluster you're testing. If you're targeting a 
 cluster with 6 nodes of 512GB a piece you can used 512*6 as your overrun
@@ -180,7 +183,7 @@ This selects a random size for each object inside the specified range
 (inclusive).
 
 A limitation you may notice is that you can specify several workload stages
-but you cannot change the paramaters for the individually. For instance
+but you cannot change the paramaters for each individually. For instance
 you can't, in the same workload command, specify a different object size
 for the write stage than for the read stage - or separate cachemem-sizes
 for blowout stages - or different run-times for each stage. For that you
@@ -234,9 +237,9 @@ trying to realistically assess platform performance then you don't want to re-
 read the same data over and over again. This means you need to have _enough_
 data to sustain the IO rate for the length of time the benchmark takes to run. 
 
-If this sounds like you need to already have some knowledge of how the
-targeted platform can be expected to perform, then you're right. You may not
-really know but changes are you can  make a pretty good guess.
+If this sounds like you need to already know how the targeted platform can be
+expected to perform, then you're right. You may not really know, but changes
+are you can make some pretty good guesses.
 * What are the network limitations?
 * What are the IO limitations of the metadata
 layer?
@@ -256,12 +259,13 @@ minutes using a 256KB object size:
     --secret-key password \
     --endpoint http://127.0.0.1 \
     --cachemem-size 3.072T \
-    --loads write,blowout,read,cleanup \
+    --loads write,blowout,read \
     --object-size 256K \
     --driver-list loadgen1,loadgen2,loadgen3,loadgen4 \
     --processes-per-driver 64
     --stage-time 900 \
-    --iop-limit 12000
+    --iop-limit 12000 \
+    --cleanup
 
 This will prepare 2.7TB (10.8 million objects) of 256K files anticipating 
 that reads will not exceed 12000 operations a second. It will blow-out
@@ -317,7 +321,8 @@ Saving Data
 
 It's painful to see good data go to waste. If you're doing a lot of read-testing
 and _not_ deleting data as part for the workloads, you can reuse data with 
-the "--save-readmap" flag.
+the "--save-readmap" flag. If can also be useful if you're breaking down 
+workloads across controller commands.
 
 SLOR pre-generates all of the keys it's going to use for prepared data (this is
 what's going on during the "readmap" stage). It's essentially a list of of 
@@ -343,7 +348,7 @@ generation:
     --save-readmap /tmp/readmap.json
 
 Then you can use that data again by loading the readmap later. Keep in mind
-that any object size or key information to specify in this command line is
+that any object size or key information you specify in this command line is
 ignored as it pertains to reading data (since it's not prepared by this
 command).
 
@@ -355,13 +360,13 @@ command).
     --processes-per-driver 64
     --stage-time 900 \
     --iop-limit 12000 \
-    --loads blowout,read,mixed,delete,cleanup \
+    --loads blowout,read,mixed,delete \
     --mixed-profiles '[{"read": 50, "write": 25, "head": 25}]
     --sleep-time 60 \
     --use-readmap /tmp/readmap.json
 
-Of course, in the above workload, there's a delete and clean-up stage which 
-makes the saved readmap file useless after this run. I hope you're happy.
+Of course, in the above workload, there's a delete stage which makes the saved
+readmap file useless after this run. I hope you're happy.
 
 Internals
 =========
@@ -375,8 +380,7 @@ using the Python multiprocessing module connection functions. The controller
 takes the global view of the workload, divides the work equally among the 
 driver processes and sends the workloads to the drivers. The drivers, in turn, 
 will divide that share of the workload equally among the defined number of
-processes per driver. They then spawn those processes with the multiprocessing
-modules.
+processes per driver. They then spawn those processes and go to town.
 
 
     controller _____
@@ -481,7 +485,7 @@ Command Line Arguments
 
 --verbose
 
-    Dumps more output to the console, might be overwhelming
+    Dumps more output to the console, might be overwhelming (might not even work)
 
 --name
 
@@ -489,7 +493,7 @@ Command Line Arguments
 
 --profile
 
-    It you have a boto3 profile in your home dir (~/.aws/credentails), this will credentials from the indicated profile name for creating and accesssing S3 buckets.
+    It you have a boto3 profile in your home dir (~/.aws/credentials), this will credentials from the indicated profile name for creating and accessing S3 buckets.
 
 --endpoint
 
@@ -513,23 +517,33 @@ Command Line Arguments
 
 --loads
 
-    Specify the workloads you would like to run and in what order. Correct choices are: read, write, head, delete, mixed, sleep, blowout, cleanup
+    Specify the workloads you would like to run and in what order. Correct choices are: read, write, head, delete, mixed, sleep and blowout.
 
 --mixed-profiles
 
-    When specifying "mixed" as a workload, you'll need to define what that means. Mixed workload profiles are supplied as a JSON array. Since you can specify multiple workloads of the same type under "--loads" (e.g.: read,write,mixed,write,mixed,cleanup), you may need more than one profile in the array. Here's an example profile:
+    When specifying "mixed" as a workload, you'll need to define what that means. Mixed workload profiles are supplied as an array of JSON object. Since you can specify multiple workloads of the same type under "--loads" (e.g.: read,write,mixed,write,mixed), you may need more than one profile in the array. Here's an example profile:
 
-    '[{"read": 50, "reread": 10, "write": 20, "overwrite": 5, "delete": 5, "head": 10}]'
+        '[{"read": 6, "reread": 1, "write": 3, "overwrite": 1, "delete": 2, "head": 3}]'
 
-    Total values for each workload need to equal 100 (this will change to share ratios in the near future and thus will not require a percentage total)
+    The value assigned to an operation indicates its "share" of the total operations. For instance the above example will work out to:
 
-    For a "--loads" list with two "mixed" instances in it:
+        read: 37.5%, reread: 6.25%, write: 18.75%, overwrite: 6.25, delete: 12.5, head: 18.75%
 
-    '[{"read": 70, "reread": 30}, {"read": 30, "reread": 70}]'
+    Here's an example where 1 out of every 1000 operations is a HEAD.
+
+        '[{"read": 999, "head": 1}]'
+
+    If percentages are easier for you to work with, you can specify shares as percentages and that will work too (integers only). 
+
+        '[{"read": 30, "write": 60, "head": 10}]'
+
+    A "--loads" list with two "mixed" instances in it (one 70/30 read/write, and one 30/70 read/write) will look like this:
+
+        '[{"read": 7, "reread": 3}, {"read": 3, "reread": 7}]'
 
 --stage-time
 
-    Time in seconds to run each stage. If you would like different lengths of time for each stage you may want to just issue two load generation commands with different lengths.
+    Time in seconds to run each stage. If you would like different lengths of time for each stage you may want to just issue separate generation commands with different lengths. You can reused data between runs with the "--save-readmap" flag.
 
 --iop-limit
 
@@ -541,7 +555,7 @@ Command Line Arguments
 
 --cachemem-size
 
-    Indicate the expected page-cache + controller-cache capacity of the target storage cluster. This value is used by the "blowout" stage to write N bytes of data to the cluster (in 8MB objects). This is to overrun the system's page and controller caches with garbage, forcing cold reads from disk during a subsequent read workload.
+    Indicate the expected page-cache + controller-cache capacity of the target storage cluster. This value is used by the "blowout" stage to write N bytes of data to the cluster (in 8MB objects). This is to overrun the system page and controller caches with garbage, forcing cold reads from disk during a subsequent read workload.
 
 --sleep
 
@@ -557,7 +571,7 @@ Command Line Arguments
 
 --use-existing-buckets
 
-    SLoR will fail to start if a target benchmark bucket already exists. This is to prevent the accidental used of an existing operational bucket that might get polluted with benchmark garbage, or worse, cleaned-up removing all data. Since this tool will operation on versioned buckets it will also annihilate all old versions of anything in the bucket if --cleanup is specified. Very dangerous. Use this to override that protection. I'll be necessary if you want to operation on pre-created buckets (like if you want to test object locked buckets or something).
+    SLoR will fail to start if a target benchmark bucket already exists. This is to prevent the accidental used of an existing operational bucket that might get polluted with benchmark garbage, or worse, cleaned-up removing all data. Since this tool will operation on versioned buckets it will also annihilate all old versions of anything in the bucket if --cleanup is specified. Very dangerous. Use this to override that protection. It'll be necessary if you want to operate on pre-created buckets (like if you want to test object locked buckets, policies or something).
 
 --object-size
 
@@ -565,7 +579,8 @@ Command Line Arguments
 
 --mpu-size
 
-    Writes are always performed in a single PUT operation regardless of size. If, however, you indicate an multi-part upload (MPU) size, writes will always be executed as multi-part uploads. Timing data will cover the MPU creation, PUT operations and MPU completion as a single time-to-complete value.
+    Writes are always performed in a single PUT operation regardless of size. If, however, you indicate a multi-part upload (MPU) size, writes will always be executed as multi-part uploads. Timing data will cover the MPU creation, PUT operations (in serial) and MPU completion as a single time-to-complete value - per worker process.
+    MPU workloads are not parallelized across workers.
 
 --versioning
 
@@ -579,10 +594,10 @@ Command Line Arguments
 
     Indicate how many processes will spawn per driver. Defaults to 10.
 
-
 --save-readmap
 
-    Each workload requiring a "prepare" stage includes a "readmap" stage - during which a list of bucket/key values are computed before any data is written. If you pass "--save-readmap" a file name, it will save this key list in JSON format. This is useful if the workload you're executing does not have an DELETEs in it and you do not include a "clean" stage. You can then use "--use-readmap" in subsequent workloads to reuse data.
+    Each workload requiring a "prepare" stage includes a "readmap" stage - during which a list of bucket/key values are computed before any data is written. If you pass "--save-readmap" a file name, it will save this key list in JSON format. This is useful if the workload you're executing does not have any DELETEs in it and you do not include the "--cleanup" flag. You can then use "--use-readmap" in subsequent
+    workloads to reuse data.
 
 --use-readmap
 

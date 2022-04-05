@@ -44,6 +44,8 @@ class SlorAnalysis:
 
         stats = self.get_all_basic_stats()
         global_config = self.get_config()[0]
+        obj_sz_range = sizeRange(low=global_config["sz_range"]["low"], high=global_config["sz_range"]["high"])
+        key_sz_range = sizeRange(low=global_config["key_sz"]["low"], high=global_config["key_sz"]["high"])
         # print(global_config)
 
         print("GLOBAL CONFIGURATION")
@@ -65,12 +67,12 @@ class SlorAnalysis:
                 "Object size config:",
                 (
                     "{} - {}  avg: {}".format(
-                        human_readable(global_config["sz_range"][0]),
-                        human_readable(global_config["sz_range"][1]),
-                        human_readable(global_config["sz_range"][2]),
+                        human_readable(obj_sz_range.low),
+                        human_readable(obj_sz_range.high),
+                        human_readable(obj_sz_range.avg),
                     )
-                    if global_config["sz_range"][0] != global_config["sz_range"][1]
-                    else (human_readable(global_config["sz_range"][0]))
+                    if obj_sz_range.low != obj_sz_range.high
+                    else human_readable(obj_sz_range.low)
                 ),
             )
         )
@@ -78,12 +80,12 @@ class SlorAnalysis:
             self.format_key_value(
                 "Key length config:",
                 "{} - {}  avg: {}".format(
-                    global_config["key_sz"][0],
-                    global_config["key_sz"][1],
-                    global_config["key_sz"][2],
+                    key_sz_range.high,
+                    key_sz_range.low,
+                    key_sz_range.avg,
                 )
-                if global_config["key_sz"][0] != global_config["key_sz"][1]
-                else global_config["key_sz"][0],
+                if key_sz_range.low != key_sz_range.high
+                else key_sz_range.low,
             )
         )
         if global_config["get_range"]:
@@ -125,11 +127,11 @@ class SlorAnalysis:
                     bcolors.ENDC,
                     human_readable(global_config["iop_limit"], print_units="ops"),
                     global_config["run_time"],
-                    human_readable(global_config["sz_range"][2]),
+                    human_readable(global_config["sz_range"]["avg"]),
                     human_readable(
                         global_config["run_time"]
                         * global_config["iop_limit"]
-                        * global_config["sz_range"][2]
+                        * global_config["sz_range"]["avg"]
                     ),
                 )
             )
@@ -175,12 +177,12 @@ class SlorAnalysis:
                     "Object size config:",
                     (
                         "{} - {}  (avg: {})".format(
-                            human_readable(s_config[0]["sz_range"][0]),
-                            human_readable(s_config[0]["sz_range"][1]),
-                            human_readable(s_config[0]["sz_range"][2]),
+                            human_readable(s_config[0]["sz_range"]["low"]),
+                            human_readable(s_config[0]["sz_range"]["high"]),
+                            human_readable(s_config[0]["sz_range"]['avg']),
                         )
-                        if s_config[0]["sz_range"][0] != s_config[0]["sz_range"][1]
-                        else (human_readable(s_config[0]["sz_range"][0]))
+                        if s_config[0]["sz_range"]["low"] != s_config[0]["sz_range"]["high"]
+                        else (human_readable(s_config[0]["sz_range"]["low"]))
                     ),
                 )
             )
@@ -204,12 +206,12 @@ class SlorAnalysis:
                         "Get range config:",
                         (
                             "{} - {}  (avg: {})".format(
-                                human_readable(s_config[0]["get_range"][0]),
-                                human_readable(s_config[0]["get_range"][1]),
-                                human_readable(s_config[0]["get_range"][2]),
+                                human_readable(s_config[0]["get_range"]["low"]),
+                                human_readable(s_config[0]["get_range"]["high"]),
+                                human_readable(s_config[0]["get_range"]["avg"]),
                             )
-                            if s_config[0]["get_range"][0] != s_config[0]["get_range"][1]
-                            else (human_readable(s_config[0]["get_range"][0]))
+                            if s_config[0]["get_range"]["low"] != s_config[0]["get_range"]["high"]
+                            else (human_readable(s_config[0]["get_range"]["low"]))
                         ),
                     )
                 )
@@ -220,12 +222,12 @@ class SlorAnalysis:
                 self.format_key_value(
                     "Key length config:",
                     "{} - {}  avg: {}".format(
-                        s_config[0]["key_sz"][0],
-                        s_config[0]["key_sz"][1],
-                        s_config[0]["key_sz"][2],
+                        s_config[0]["key_sz"]["low"],
+                        s_config[0]["key_sz"]["high"],
+                        s_config[0]["key_sz"]["avg"],
                     )
-                    if s_config[0]["key_sz"][0] != s_config[0]["key_sz"][1]
-                    else s_config[0]["key_sz"][0],
+                    if s_config[0]["key_sz"]["low"] != s_config[0]["key_sz"]["high"]
+                    else s_config[0]["key_sz"]["low"],
                 )
             )
             left.append(

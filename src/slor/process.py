@@ -8,7 +8,11 @@ import json
 
 
 class SlorProcess:
-
+    """
+    Root for all worker processes. Contains shared routines for triggering 
+    timers, communicating with the parent (driver) process and managing
+    bytes from a data pool.
+    """
     sock = None
     config = None
     id = None  # Process ID (unique to the driver, not the whole distributed job)

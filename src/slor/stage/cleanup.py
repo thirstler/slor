@@ -37,6 +37,7 @@ class CleanUp(SlorProcess):
         self.start_sample()
 
         try:
+            r = s3client.list_object_versions(Bucket=self.config["bucket"], MaxKeys=1)
             ls_pg = s3client.get_paginator("list_object_versions")
         except:
             ls_pg = s3client.get_paginator("list_objects_v2")

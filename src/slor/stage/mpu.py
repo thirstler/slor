@@ -5,6 +5,7 @@ import time
 
 
 class Mpu(SlorProcess):
+    
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
@@ -12,6 +13,7 @@ class Mpu(SlorProcess):
         self.config = config
         self.operations = ("write",)
         self.benchmark_stop = time.time() + config["run_time"]
+        self.rangeObj = sizeRange(low=self.config["sz_range"]["low"], high=self.config["sz_range"]["high"])
 
     def ready(self):
 
@@ -31,13 +33,11 @@ class Mpu(SlorProcess):
                 str(int(random.random() * self.config["bucket_count"])),
             )
             key = gen_key(
-                self.config["key_sz"],
+                (self.config["key_sz"]["low"], self.config["key_sz"]["high"]),
                 inc=ocount,
                 prefix=DEFAULT_WRITE_PREFIX + self.config["key_prefix"] + w_str,
             )
-            blen = random.randint(
-                self.config["sz_range"][0], self.config["sz_range"][1]
-            )
+            blen = self.rangeObj.getVal()
 
             try:
                 self.start_io("write")
