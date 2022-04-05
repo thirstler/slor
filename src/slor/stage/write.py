@@ -12,10 +12,11 @@ class Write(SlorProcess):
         self.config = config
         self.operations = ("write",)
         self.benchmark_stop = time.time() + config["run_time"]
+        self.rangeObj = sizeRange(low=int(config["sz_range"]["low"]), high=int(config["sz_range"]["high"]))
 
     def ready(self):
 
-        self.mk_byte_pool(int(self.config["sz_range"][1]) * 2)
+        self.mk_byte_pool(self.rangeObj.high * 2)
         if self.hand_shake():
             self.delay()
             self.exec()
@@ -24,6 +25,7 @@ class Write(SlorProcess):
         w_str = str(self.config["w_id"])
         self.start_benchmark()
         self.start_sample()
+        
         ocount = 0
         while True:
             bucket = "{}{}".format(
@@ -31,14 +33,11 @@ class Write(SlorProcess):
                 str(int(random.random() * self.config["bucket_count"])),
             )
             key = gen_key(
-                self.config["key_sz"],
+                (self.config["key_sz"]["low"], self.config["key_sz"]["high"]),
                 inc=ocount,
                 prefix=DEFAULT_WRITE_PREFIX + self.config["key_prefix"] + w_str,
             )
-            blen = random.randint(
-                self.config["sz_range"][0], self.config["sz_range"][1]
-            )
-            body_data = self.get_bytes_from_pool(blen)
+            body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
             try:
                 self.start_io("write")
                 self.s3ops.put_object(bucket, key, body_data)

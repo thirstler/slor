@@ -19,6 +19,8 @@ class Mixed(SlorProcess):
             self.operations += (x,)
         self.wid_str = str(self.config["w_id"])
         self.benchmark_stop = time.time() + config["run_time"]
+        self.rangeObj = sizeRange(low=int(config["sz_range"]["low"]), high=int(config["sz_range"]["high"]))
+        self.rangeKey = sizeRange(low=int(config["key_sz"]["low"]), high=int(config["key_sz"]["high"]))
 
     def ready(self):
 
@@ -65,7 +67,7 @@ class Mixed(SlorProcess):
         perform write as an MPU of size specified in the load definition.
         Uses boto3 directly rather than through a wrapper.
         """
-        blen = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
+        blen = self.rangeObj.getVal()
         self.writemap.append(
             (
                 "{}{}".format(
@@ -74,7 +76,7 @@ class Mixed(SlorProcess):
                 ),
                 self.config["key_prefix"]
                 + gen_key(
-                    key_desc=self.config["key_sz"],
+                    key_desc=(self.rangeKey.low, self.rangeKey.high),
                     inc=len(self.writemap),
                     prefix=DEFAULT_WRITE_PREFIX + self.wid_str,
                 ),
@@ -124,7 +126,7 @@ class Mixed(SlorProcess):
             self.stop_io(failed=True)
 
     def _write(self):
-        size = random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
+        size = self.rangeObj.getVal()
         body_data = self.get_bytes_from_pool(size)
 
         # Create new key and add to list of written objects
@@ -136,7 +138,7 @@ class Mixed(SlorProcess):
                 ),
                 self.config["key_prefix"]
                 + gen_key(
-                    key_desc=self.config["key_sz"],
+                    key_desc=(self.rangeKey.low, self.rangeKey.high),
                     inc=len(self.writemap),
                     prefix=DEFAULT_WRITE_PREFIX + self.wid_str,
                 )
@@ -229,9 +231,7 @@ class Mixed(SlorProcess):
             self.stop_io(failed=True)
 
     def _overwrite(self):
-        body_data = self.get_bytes_from_pool(
-            random.randint(self.config["sz_range"][0], self.config["sz_range"][1])
-        )
+        body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
         key = self.get_key_from_existing()
         size = len(body_data)
         
@@ -244,30 +244,6 @@ class Mixed(SlorProcess):
             sys.stderr.flush()
             self.stop_io(failed=True)
 
-    def do(self, operation):
-        ret = {}
-        if operation == "read":
-            ret = self._read()
-
-        elif operation == "write":
-            if self.config["mpu_size"]:
-                self._mpu()
-            else:
-                self._write()
-
-        elif operation == "head":
-            self._head()
-
-        elif operation == "delete":
-            self._delete()
-
-        elif operation == "reread":
-            self._reread()
-
-        elif operation == "overwrite":
-            self._overwrite()
-
-        return ret
 
     def get_key_from_existing(self):
         """Fetch a key from both the prepaired data or anything written during the load run"""
@@ -283,9 +259,30 @@ class Mixed(SlorProcess):
     def mk_dice(self):
 
         dice = []
+        op = None
         for m in self.config["mixed_profile"]:
+            if m == "read":
+                op = self._read
+            elif m == "write":
+                if self.config["mpu_size"]:
+                    op = self._mpu
+                else:
+                    op = self._write
+            elif m == "head":
+                op = self._head
+            elif m == "delete":
+                op = self._delete
+            elif m == "reread":
+                op = self._reread
+            elif m == "overwrite":
+                op = self._overwrite
+            else:
+                op = None
+
+            # add to map
             for x in range(0, self.config["mixed_profile"][m]):
-                dice.append(m)
+                dice.append(op)
+
         return dice
 
     def exec(self):
@@ -294,7 +291,8 @@ class Mixed(SlorProcess):
         self.start_sample()
         while True:
 
-            self.do(random.choice(self.dice))
+            # self.dice is a map of function pointers
+            ret = random.choice(self.dice)()
 
             if self.unit_start >= self.benchmark_stop:
                 self.stop_sample()

@@ -1,6 +1,5 @@
 from slor.shared import *
 from slor.process import SlorProcess
-import random
 
 
 class Prepare(SlorProcess):
@@ -14,13 +13,11 @@ class Prepare(SlorProcess):
         self.w_id = w_id
         self.config = config
         self.operations = ("write",)
+        self.rangeObj = sizeRange(low=int(config["sz_range"]["low"]), high=int(config["sz_range"]["high"]))
 
     def ready(self):
 
-        sz_range = self.config["sz_range"]
-        self.r1 = int(sz_range[0])
-        self.r2 = int(sz_range[1])
-        self.mk_byte_pool(int(sz_range[1]) * 2)
+        self.mk_byte_pool(self.rangeObj.high * 2)
 
         if self.hand_shake():
             self.delay()
@@ -33,13 +30,13 @@ class Prepare(SlorProcess):
 
         self.start_benchmark(("write",), target=len(self.config["mapslice"]))
         self.start_sample()
+
         count = 0
         for o, skey in enumerate(self.config["mapslice"]):
             if self.check_for_messages() == "stop":
                 break
 
-            c_len = random.randint(self.r1, self.r2)
-            body_data = self.get_bytes_from_pool(c_len)
+            body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
             blen = len(body_data)
 
             # Retry loop. Prepared data PUTS need to be retried until
