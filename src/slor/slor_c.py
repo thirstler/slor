@@ -33,6 +33,7 @@ class SlorControl:
         self.readmap = []
         self.stat_buf = []
         self.stage_itr = {}
+        self.reread = 0
 
     def exec(self):
 
@@ -393,6 +394,8 @@ class SlorControl:
                     "threads complete for this stage ({0})".format(stage), verbose=True
                 )
                 break
+            if self.reread > 0:
+                self.stats_h.reread = self.reread
             self.stats_h.show()
             time.sleep(0.01)
 
@@ -489,6 +492,9 @@ class SlorControl:
 
         elif "type" in message and message["type"] == "readmap":
             self.new_readmap += message["value"]
+        elif "type" in message and message["type"] == "rereadnotice":
+            if int(message["value"]) > self.reread:
+                self.reread = int(message["value"])
         elif "message" in message:
             print("\u2502 message from {0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":

@@ -9,6 +9,7 @@ class Mixed(SlorProcess):
     readmap_index = 0
     dice = None
     wid_str = None
+    reread = 0 
 
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
@@ -39,6 +40,9 @@ class Mixed(SlorProcess):
         # then just read from any pool of written data. 
         if self.readmap_index >= len(self.config["mapslice"]):
             key = self.get_key_from_existing()
+            if self.reread == 0:
+                self.reread = 1
+                self.msg_to_driver(type="rereadnotice", value=self.reread)
         else:
             key = self.config["readmap"][self.readmap_index]
 
@@ -102,7 +106,7 @@ class Mixed(SlorProcess):
                     Bucket=bucket,
                     Key=key,
                     PartNumber=part_num,
-                    UploadId=mpu["UploadId"],
+                    UploadId=mpu["UploadId"]
                 )
                 mpu_info.append({"PartNumber": part_num, "ETag": up_resp["ETag"]})
                 if outer == blen: # size was precisely on MPU boundary

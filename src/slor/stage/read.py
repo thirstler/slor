@@ -31,11 +31,7 @@ class Read(SlorProcess):
                 break
 
             if rerun > 0:
-                sys.stderr.write(
-                    "WARNING: rereading objects (x{0}), consider preparing more objects\n".format(
-                        rerun
-                    )
-                )
+                self.msg_to_driver(type="rereadnotice", value=rerun)
 
             for i, pkey in enumerate(self.config["mapslice"]):
 
@@ -63,7 +59,7 @@ class Read(SlorProcess):
                     del data
 
                 except Exception as e:
-                    print(str(e))
+                    sys.stderr.write(str(e) + "\n")
                     self.stop_io(failed=True)
 
                 if self.unit_start >= self.benchmark_stop:
