@@ -35,6 +35,7 @@ class statHandler:
         self.stage_start_time = time.time()
         self.progress_start_time = self.stage_start_time
         self.duration = duration
+        self.reread = 0
 
         if self.stage == "mixed":
             for s in config["mixed_profile"]:
@@ -329,9 +330,13 @@ class statHandler:
         fillchar = "\u2588"
         char_w = perc * width
         leading_char = blocks[math.floor((char_w * 8) % 8)]
+        
         if final:
             color = bcolors.GRAY
             leading_char = " "
+        if self.reread > 0:
+            color = bcolors.WARNING
+
         sys.stdout.write(
             "{}{}{}{}{:>3}%{}".format(
                 color,
