@@ -3,7 +3,7 @@ from slor.sample import *
 import sqlite3
 import json
 import datetime
-
+import statistics
 
 class SlorAnalysis:
     conn = None
@@ -393,7 +393,12 @@ class SlorAnalysis:
                         "{:.4f} ms".format(alias["resp_perc"]["0.5"] * 1000),
                     )
                 )
-
+                right.append(
+                    self.format_key_value(
+                        "Standard deviation:",
+                        "{:.4f} ms".format(alias["resp_stddiv"] * 1000),
+                    )
+                )
                 for z in range(0, max(len(left), len(right))):
                     if z not in left:
                         left.append(self.format_key_value("", ""))
@@ -569,6 +574,8 @@ class SlorAnalysis:
                 "ttl_operations": master.get_metric("ios", op),
                 "ttl_bytes": master.get_metric("bytes", op),
                 "resp_perc": self.get_precentiles(master.get_metric("iotime", op)),
+                "resp_stddiv": statistics.stdev(master.get_metric("iotime", op))
+                
             }
         cur.close()
         return returnval

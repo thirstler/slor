@@ -1,7 +1,7 @@
 from slor.shared import *
 import time
 import json
-
+import statistics
 
 class perfSample:
     """
@@ -285,10 +285,13 @@ class perfSample:
         return rate
 
     def get_resp_avg(self, opclass: str) -> float:
-        iottl = 0
-        for r in self.operations[opclass]["iotime"]:
-            iottl += r
-        return (iottl / len(self.operations[opclass]["iotime"])) if len(self.operations[opclass]["iotime"]) > 0 else 0
+        if opclass not in self.operations:
+            return None
+        if len(self.operations[opclass]["iotime"]) == 0:
+            return 0
+        else:
+            return statistics.mean(self.operations[opclass]["iotime"])
+
 
     def get_workload_ios(self):
         io_ttl = 0

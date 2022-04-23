@@ -436,7 +436,8 @@ class SlorControl:
             self.last_stage = stage
 
         del self.stats_h
-
+        self.reread = 0
+        
     def block_until_ready(self):
 
         sys.stdout.write("\r\u2502 [waiting on worker processes...]")
