@@ -4,6 +4,7 @@ import configparser
 import os, sys
 import random
 import string
+from tkinter.font import ITALIC
 from unicodedata import numeric
 
 SLOR_VERSION = 0.4
@@ -109,6 +110,7 @@ class bcolors:
     BOLD = "\033[1m"
     UNDERLINE = "\033[4m"
     GRAY = "\033[38;5;243m"
+    ITALIC = '\033[3m'
 
 class sizeRange:
 
