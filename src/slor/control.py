@@ -1,5 +1,6 @@
 from slor.slor_c import *
 from slor.shared import *
+from slor.output import *
 from slor.driver import _slor_driver
 from slor.workload import *
 import argparse
@@ -23,10 +24,13 @@ def input_checks(args):
     keepgoing = True
     warnings = ""
     errors = ""
+    mixed_profiles = json.loads(args.mixed_profiles)
 
     if args.force:
         return True
 
+    # Confirm before saving a readmap file that will have missing objects
+    # on the storage system due to delete workload.
     if args.save_readmap and (
         any(args.loads.find(x) for x in ("cleanup", "delete"))
         or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))
@@ -39,19 +43,37 @@ def input_checks(args):
         if yn[0].upper == "N":
             keepgoing = False # Error
 
+    # You specified a "blowout" stage but no cacheme-size?
     if "blowout" in args.loads.split(",") and args.cachemem_size == "0":
         warnings += "blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n"
         keepgoing = True # Warning
 
+    # MPU side too small for soe reason?
     if args.mpu_size and parse_size(args.mpu_size) <= MINIMUM_MPU_CHUNK_SIZE:
         errors += "MPU part size too small, must be greather than {}\n".format(
                 human_readable(MINIMUM_MPU_CHUNK_SIZE)
             )
         keepgoing = False # Error
 
+    # Get-range sanity check
     if args.get_range and (parse_size(args.get_range.split("-")[-1]) > parse_size(args.object_size.split("-")[0])):
-        errors += "Cannot perform get-range operations on objects smaller than the range size"
+        errors += "cannot perform get-range operations on objects smaller than the range size\n"
         keepgoing = False # Error
+
+    # read workloads after deletes?
+    del_conflict = False
+    mixed_index = 0
+    for w in args.loads.split(","):
+        if w == "delete":
+            del_conflict = True
+        if w == "mixed":
+            if "delete" in mixed_profiles[mixed_index]:
+                del_conflict = True
+            mixed_index += 1
+        if del_conflict and w in ("delete", "head", "read", "reread", "tag_read"):
+            errors += "you've specified a \"read\" workload when data might be missing from a previous \"delete\" workload\n"
+            keepgoing = False # Error
+
 
     if errors:
         box_text("{}Argument error(s){}:\n".format(bcolors.BOLD, bcolors.ENDC) + errors)

@@ -1,5 +1,6 @@
 from slor.shared import *
 from slor.sample import *
+from slor.output import *
 import sqlite3
 import json
 import datetime
@@ -477,7 +478,7 @@ class SlorAnalysis:
                     continue
                 tick = self.get_tick(row[1] / 1000)
 
-                for op in stat["value"]["st"]:
+                for op in stat["value"]["operations"]:
                     if op not in series_master[tick]:
                         series_master[tick][op] = {
                             "bytes/s": 0,
@@ -487,11 +488,11 @@ class SlorAnalysis:
                             "failures": 0,
                         }
 
-                    series_master[tick][op]["bytes/s"] += stat["value"]["st"][op][
+                    series_master[tick][op]["bytes/s"] += stat["value"]["operations"][op][
                         "bytes/s"
                     ]
-                    series_master[tick][op]["ios/s"] += stat["value"]["st"][op]["ios/s"]
-                    series_master[tick][op]["iotime"] += stat["value"]["st"][op][
+                    series_master[tick][op]["ios/s"] += stat["value"]["operations"][op]["ios/s"]
+                    series_master[tick][op]["iotime"] += stat["value"]["operations"][op][
                         "iotime"
                     ]
                     series_master[tick][op]["failures"] += (
