@@ -352,7 +352,7 @@ class SlorDriver:
             return
         elif cmd_buffer["command"] == "workload":
             if "config" in cmd_buffer:
-                self.w_id = cmd_buffer["config"]["host"]
+                self.w_id = "{}:{}".format(cmd_buffer["config"]["host"], cmd_buffer["config"]["port"])
             # Init is done at the driver level, make buckets and exit
             if (
                 "type" in cmd_buffer["config"]

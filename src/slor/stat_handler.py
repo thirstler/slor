@@ -1,5 +1,7 @@
+from hashlib import new
 from slor.shared import *
 from slor.sample import perfSample
+from slor.output import *
 import time
 import math
 import statistics
@@ -226,28 +228,34 @@ class statHandler:
             elif self.stage in PROGRESS_BY_COUNT:
                 self.progress(stat_sample.percent_complete(), final=final)
 
+            # Start global I/O history
             if not "global_rate" in self.operation_hist:
                 self.operation_hist["global_rate"] = []
-            rate_s = stat_sample.get_workload_io_rate()
-            if calc_avg and not final:
-                self.operation_hist["global_rate"].append(rate_s)
-            
-            # show each operation ops/s
-            for o in self.operations:
-                resp_a = stat_sample.get_resp_avg(o)
+            self.operation_hist["global_rate"].append(stat_sample.get_workload_io_rate())
 
+            # Record op history and show each operation response time
+            for op in self.operations:
+                
                 if calc_avg and not final:
-                    if not o in self.operation_hist:
-                        self.operation_hist[o] = []
-                    self.operation_hist[o].append(resp_a)
+                    if op not in self.operation_hist:
+                        self.operation_hist[op] = {
+                            "ios": [],
+                            "bytes": [],
+                            "resp": [],
+                            "failures": []
+                        }
+                    self.operation_hist[op]["ios"].append(stat_sample.get_rate("ios", op))
+                    self.operation_hist[op]["bytes"].append(stat_sample.get_rate("bytes", op))
+                    self.operation_hist[op]["resp"].append(stat_sample.get_resp_avg(op))
+                    self.operation_hist[op]["failures"].append(stat_sample.get_metric("failures", op))
                 
                 if final:
                     sys.stdout.write(
-                        " {}".format(self.disp_resp_avg(statistics.mean(self.operation_hist[o])))
+                        " {}".format(self.disp_resp_avg(statistics.mean(self.operation_hist[op]["resp"])))
                     )
                 else:
                     sys.stdout.write(
-                        " {}".format(self.disp_resp_avg(resp_a))
+                        " {}".format(self.disp_resp_avg(stat_sample.get_resp_avg(op)))
                     )
 
             # show total ops/s
@@ -257,22 +265,34 @@ class statHandler:
                 )
             else:
                 sys.stdout.write(
-                    " {}".format(self.disp_ops_sec(rate_s))
+                    " {}".format(self.disp_ops_sec(stat_sample.get_workload_io_rate()))
                 )
 
             sys.stdout.write(" {}".format(self.elapsed_time()))
             
             if final:
                 sys.stdout.write("\n")
-                sys.stdout.write("\u2502" + "          {0}stability (CV):".format(bcolors.ITALIC+bcolors.GRAY, bcolors.ENDC))
-                for o in self.operations:
-                    resp_a = statistics.mean(self.operation_hist[o])
-                    resp_sd = statistics.stdev(self.operation_hist[o])
+                box_line("  results:                   throughput      bandwidth        resp ms       failures    CV", newline=True)
+                for op in self.operation_hist:
+                    if op == "global_rate": continue
+                    rate_s = statistics.mean(self.operation_hist[op]["ios"])
+                    bytes_s = statistics.mean(self.operation_hist[op]["bytes"])
+                    resp_a = statistics.mean(self.operation_hist[op]["resp"])
+                    resp_sd = statistics.stdev(self.operation_hist[op]["resp"])
                     respdev_col = self.dev_color(resp_a, resp_sd)
-                    sys.stdout.write("{0}{1}{2:>13.2f}%{3} ".format(
-                        bcolors.ITALIC, respdev_col, (resp_sd/resp_a)*100, bcolors.ENDC)
+                    box_line( 
+                        "{:>23}: {} {} {} {} {}".format(
+                            op,
+                            self.disp_ops_sec(rate_s),
+                            self.disp_bytes_sec(bytes_s),
+                            self.disp_resp_avg(resp_a),
+                            self.disp_failure_count(stat_sample.get_metric("failures", op)),
+                            "{}{:>7.2f}%{}".format(respdev_col, (resp_sd/resp_a)*100, bcolors.ENDC)
+                        ),
+                        newline=True
                     )
-                sys.stdout.write("\n\u2502")
+                box_line("\n")
+
 
         # Discrete operation
         else:
@@ -337,33 +357,39 @@ class statHandler:
 
                 try:
                     if final:
-                        resp_cv = statistics.covariance
-                        resp_a = statistics.mean(self.operation_hist[op]["resp"])
-                        resp_sd = statistics.stdev(self.operation_hist[op]["resp"])
-                        respdev_col = self.dev_color(resp_a, resp_sd)
-                        
+
+                        # Keep from crashing if the stage does nothing
+                        try:
+                            resp_a = statistics.mean(self.operation_hist[op]["resp"])
+                            resp_sd = statistics.stdev(self.operation_hist[op]["resp"])
+                            resp_cv = (resp_sd/resp_a) * 100
+                            respdev_col = self.dev_color(resp_a, resp_sd)
+                        except:
+                            resp_a = 0
+                            resp_sd = 0
+                            resp_cv = 0
+                            respdev_col = bcolors.GRAY
 
                         sys.stdout.write("\n")
-                        sys.stdout.write("\u2502" + " "*45)
-                        sys.stdout.write("{0}stability (CV): {1}{2:>8}{3}".format(
-                            bcolors.ITALIC+bcolors.GRAY, respdev_col, "{:.2f}%".format((resp_sd/resp_a)*100), bcolors.ENDC)
-                        )
-                        sys.stdout.write("\n\u2502")
+                        if all(self.stage != x for x in ("prepare", "cleanup")):
+                            box_line("        {0}instability (CV) ".format(bcolors.ITALIC+bcolors.GRAY))
+                            sys.stdout.write(" "*30 + "{}{}{}".format(respdev_col, "{:>12.2f}%".format(resp_cv), bcolors.ENDC))
+                            sys.stdout.write("\n")
+                        box_line("\n")
                 except KeyError:
                     # If a stage stops immediately, then there won't be an
                     # operations history. Give up.
                     pass
                 
 
-        if final:
-            sys.stdout.write("\n")
+        #if final:
+        #    sys.stdout.write("\n")
         sys.stdout.flush()
 
         del stat_sample
 
         # print(self.stat_rotation)
         self.last_show = now
-
 
     def readmap_progress(self, x, outof, final=False):
 

@@ -1,8 +1,10 @@
 from slor.shared import *
 from slor.stat_handler import statHandler
-from slor.db_ops import SlorDB
+from slor.slor_db import _slor_db
+from slor.output import *
 import sys
 from multiprocessing.connection import Client
+from multiprocessing import Process, Pipe
 import random
 import time
 import json
@@ -21,13 +23,11 @@ class SlorControl:
     readmap = None
     stat_buf = None
     last_stage = None
-    slordb = None
     mixed_count = None
     stage_itr = None
 
     def __init__(self, root_config):
         self.config = root_config
-        self.slordb = SlorDB(root_config)
         self.mixed_count = 0
         self.conn = []
         self.readmap = []
@@ -38,7 +38,7 @@ class SlorControl:
     def exec(self):
 
         # Print config
-        box_text(self.config_text())
+        box_text(config_text(self.config))
 
         # Gather and show driver info
         print("")
@@ -63,21 +63,28 @@ class SlorControl:
             ):
                 self.stage_itr[opclass_from_label(stage)] = -1
 
+        # Get database handler going
+        if not self.config["no_db"]:
+            self.db_sock, db_child_sock = Pipe()
+            db_proc = Process(
+                target=_slor_db,
+                args=(db_child_sock, self.config),
+            )
+            db_proc.start()
+
         for c, stage in enumerate(self.config["tasks"]["loadorder"]):
             stage, duration = self.parse_stage_string(stage)
 
-            if stage in ("read", "delete", "head", "mixed", "cleanup", "tag"):
+            if stage in ("read", "delete", "head", "mixed", "tag"):
                 sys.stdout.write("\r\u2502   [   shuffling readmap...   ]   ")
                 sys.stdout.flush()
                 random.shuffle(self.readmap)
 
             elif stage == "sleep":
-                sys.stdout.write(
-                    "\u2502     [     sleeping ({})...     ]   ".format(duration)
-                )
-                sys.stdout.flush()
+                box_line("     [     sleeping ({})...     ]   ".format(duration), newline=False)
                 time.sleep(duration)
                 continue
+
             elif stage == "readmap":
                 self.mk_read_map()
                 continue
@@ -86,171 +93,18 @@ class SlorControl:
 
         for c in self.conn:
             c.close()
+        
+        
+        if not self.config["no_db"]:
+            box_line("stopping db handler...")
+            self.db_sock.send({"command": "STOP"})
+            db_proc.join()
+            sys.stdout.write("done\n")
 
         bottom_box()
+
         print("\ndone.\n")
-        if not self.config["no_db"]:
-            print(
-                "run {} analysis --input {}\n".format(sys.argv[0], self.slordb.db_file)
-            )
 
-    def config_text(self):
-
-        cft_text = "CONFIGURATION:\n"
-        cft_text += "\n"
-        cft_text += "Workload name:      {0}\n".format(self.config["name"])
-        cft_text += "User key:           {0}\n".format(self.config["access_key"])
-        cft_text += "Target endpoint:    {0}\n".format(self.config["endpoint"])
-        cft_text += "Stage run time:     {0}s\n".format(self.config["run_time"])
-        if self.config["save_readmap"]:
-            cft_text += "Saving readmap:     {0}\n".format(self.config["save_readmap"])
-        if self.config["use_readmap"]:
-            cft_text += "Using readmap:      {0}\n".format(self.config["use_readmap"])
-        else:
-            # calculate memory needed for bytepool per driver process
-            driver_mem = (self.config["sz_range"]["high"]*2) * int(self.config["driver_proc"])
-
-            cft_text += "Object size(s):     {0}\n".format(
-                human_readable(self.config["sz_range"]["low"], precision=0)
-                if self.config["sz_range"]["low"] == self.config["sz_range"]["high"]
-                else "low: {0}, high: {1} (avg: {2})".format(
-                    human_readable(self.config["sz_range"]["low"], precision=0),
-                    human_readable(self.config["sz_range"]["high"], precision=0),
-                    human_readable(self.config["sz_range"]["avg"], precision=0),
-                )
-            )
-            cft_text += "Req driver mem:     {0}\n".format(human_readable(driver_mem))
-            if self.config["get_range"]:
-                cft_text += "Get range size(s):  {0}\n".format(
-                    human_readable(self.config["get_range"]["low"], precision=0)
-                    if self.config["get_range"]["low"] == self.config["get_range"]["high"]
-                    else "low: {0}, high: {1} (avg: {2})".format(
-                        human_readable(self.config["get_range"]["low"], precision=0),
-                        human_readable(self.config["get_range"]["high"], precision=0),
-                        human_readable(self.config["get_range"]["avg"], precision=0),
-                    )
-                )
-
-            cft_text += "Key length(s):      {0}\n".format(
-                self.config["key_sz"]["low"]
-                if self.config["key_sz"]["low"] == self.config["key_sz"]["high"]
-                else "low: {0}, high:  {1} (avg: {2})".format(
-                    self.config["key_sz"]["low"],
-                    self.config["key_sz"]["high"],
-                    self.config["key_sz"]["avg"],
-                )
-            )
-            cft_text += "Prepared objects:   {0} (readmap length)\n".format(
-                human_readable(self.get_readmap_len(), print_units="ops")
-            )
-            cft_text += "Upper IO limit:     {0}\n".format(self.config["iop_limit"])
-            cft_text += "Bucket prefix:      {0}\n".format(self.config["bucket_prefix"])
-            cft_text += "Num buckets:        {0}\n".format(self.config["bucket_count"])
-            cft_text += "Versioning enabled: {0}\n".format(str(self.config["versioning"]))
-            cft_text += "Prepared data size: {0}\n".format(
-                human_readable(self.config["ttl_prepare_sz"]),
-                ((int(self.config["ttl_prepare_sz"]) / DEFAULT_CACHE_OVERRUN_OBJ) + 1),
-                human_readable(DEFAULT_CACHE_OVERRUN_OBJ),
-            )
-
-        cft_text += "Driver processes:   {0}\n".format(len(self.config["driver_list"]))
-        cft_text += "Procs per driver:   {0} ({1} worker processes total)\n".format(
-            self.config["driver_proc"],
-            (int(self.config["driver_proc"]) * len(self.config["driver_list"])),
-        )
-        cft_text += "Cache overrun size: {0} ({1} x {2} objects)\n".format(
-            human_readable(self.config["ttl_sz_cache"]),
-            (int(self.config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ) + 1),
-            human_readable(DEFAULT_CACHE_OVERRUN_OBJ),
-        )
-        cft_text += "Stats database:     {0}\n".format(self.slordb.db_file)
-        cft_text += "Stages:\n"
-        stagecount = 0
-        mixed_count = 0
-
-        for i, stage in enumerate(self.config["tasks"]["loadorder"]):
-            stage = (
-                stage[: stage.find(":")] if ":" in stage else stage
-            )  # Strip label information
-            stagecount += 1
-            duration = (
-                self.config["sleeptime"]
-                if stage == "sleep"
-                else self.config["run_time"]
-            )
-
-            if stage == "mixed":
-                mixed_prof = self.config["tasks"]["mixed_profiles"][mixed_count]
-                mixed_perc = mixed_ratio_perc(mixed_prof)
-                mixed_count += 1
-                cft_text += "                    {0}: {1} - perc: ".format(stagecount, stage)
-                for j, m in enumerate(mixed_perc):
-                    cft_text += "{0}:{1:.2f}%".format(m, mixed_perc[m]*100)
-                    if (j + 1) < len(mixed_perc):
-                        cft_text += ", "
-                cft_text += " ({} seconds)\n".format(duration)
-            elif stage == "readmap":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "readmap - generate keys for use during read operations",
-                )
-            elif stage == "init":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19, stagecount, "init - create needed buckets/config"
-                )
-            elif stage == "prepare":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "prepare - write objects needed for read operations",
-                )
-            elif stage == "blowout":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19, stagecount, "blowout - overrun page cache"
-                )
-            elif stage == "read":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "read - pure GET workload ({} seconds)".format(duration),
-                )
-            elif stage == "write":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "write - pure PUT workload ({} seconds)".format(duration),
-                )
-            elif stage == "head":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "head - pure HEAD workload ({} seconds)".format(duration),
-                )
-            elif stage == "delete":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "delete - pure DELETE workload ({} seconds)".format(duration),
-                )
-            elif stage == "tag":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19,
-                    stagecount,
-                    "tag - pure tagging (metadata) workload ({} seconds)".format(
-                        duration
-                    ),
-                )
-            elif stage == "cleanup":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19, stagecount, "cleanup - remove all objects{}".format(" (and buckets)" if self.config["remove_buckets"] else "")
-                )
-            elif stage[:5] == "sleep":
-                cft_text += "{} {}: {}\n".format(
-                    " " * 19, stagecount, "sleep for {} seconds".format(duration)
-                )
-
-        return cft_text
 
     def connect_to_driver(self):
         ret_val = True
@@ -270,7 +124,6 @@ class SlorControl:
                 self.conn[-1].send({"command": "sysinfo"})
                 resp = self.conn[-1].recv()
                 self.check_driver_info(resp)
-                self.slordb.mk_data_store(hostport["host"])
 
             except Exception as e:
                 sys.stderr.write(
@@ -328,9 +181,12 @@ class SlorControl:
             stage_cfg = self.mk_stage(target, stage, wc, duration)
             if stage_cfg:
                 workloads.append(stage_cfg)
-                self.slordb.commit_stage_config(stage, stage_cfg)
             else:
                 return
+
+        # record stage config
+        if not self.config["no_db"]:
+            self.db_sock.send({"stage": stage, "stage_config": workloads})
 
         # Distribute buckets to driver for init
         if stage == "init":
@@ -364,9 +220,10 @@ class SlorControl:
             else:
                 self.stats_h.set_count_target(self.get_readmap_len())
 
-        # If this is a prepare stage we need t be set to replace the readmap
+        # If this is a prepare stage we need to be set to replace the readmap
         if stage == "prepare":
             self.new_readmap = []
+
 
         # Disply headers for stats output
         self.stats_h.headers(self.mixed_count)
@@ -500,14 +357,8 @@ class SlorControl:
             print("\u2502 message from {0}: {1}".format(message["w_id"], message["message"]))
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
-            loc_stage_iter = None
-
-            self.slordb.store_stat(
-                message,
-                stage_itr=str(self.stage_itr[message["stage"]])
-                if message["stage"] in self.stage_itr
-                else None,
-            )
+            if not self.config["no_db"]:
+                self.db_sock.send(message)
         else:
             pass
 
@@ -577,15 +428,7 @@ class SlorControl:
                 if (z + 1) == objcount:
                     fin = True
                 stat_h.readmap_progress(z, objcount, final=fin)
-
-        #if self.config["save_readmap"]:
-        #    save_contents = {"readmap": self.readmap}
-        #    for cfg in cfg_keys:
-        #        save_contents[cfg] = self.config[cfg]
-
-        #    with open(self.config["save_readmap"], "w") as fh:
-        #        fh.write(json.dumps(save_contents))
-        #        fh.close()
+                
 
     def parse_stage_string(self, stage_str):
         items = stage_str.split("~")

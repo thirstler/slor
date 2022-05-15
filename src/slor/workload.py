@@ -262,6 +262,7 @@ def check_mixed_workloads(mix_prof_obj, loads):
 
 
 def classic_workload(args):
+    
     # if no cmd line args, get from profile, then env (in that order)
     if not args.access_key and not args.secret_key:
         args.access_key, args.secret_key = get_keys(args.profile)

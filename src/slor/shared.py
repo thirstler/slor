@@ -4,10 +4,8 @@ import configparser
 import os, sys
 import random
 import string
-from tkinter.font import ITALIC
-from unicodedata import numeric
 
-SLOR_VERSION = 0.4
+SLOR_VERSION = 0.42
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -30,6 +28,7 @@ DEFAULT_READMAP_PREFIX = "read/"
 DEFAULT_CACHE_OVERRUN_OBJ = 8388608
 DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
 DEFAULT_SLEEP_TIME = 30
+DEFAULT_STATS_SAMPLE_LEN = 1048576
 
 # Root help message
 ROOT_HELP = """
@@ -286,20 +285,7 @@ def opclass_from_label(label):
     return label[: label.find(":")] if ":" in label else label
 
 
-def top_box():
-    print("\u250C{0}".format("\u2500" * (os.get_terminal_size().columns - 1)))
 
-
-def bottom_box():
-    print("\u2514{0}".format("\u2500" * (os.get_terminal_size().columns - 1)))
-
-
-def box_text(text):
-    text_lines = text.split("\n")
-    top_box()
-    for line in text_lines:
-        print("\u2502 " + line)
-    bottom_box()
 
 def mixed_ratio_perc(mixed_json):
     rttl = 0
