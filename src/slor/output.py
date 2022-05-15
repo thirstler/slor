@@ -202,6 +202,7 @@ class output_table:
     row_content = []
     tbl_width = 0
     tbl_def = None
+    rows = []
 
     def __init__(self, definition=None, title=None):
         self.title = title
@@ -214,7 +215,7 @@ class output_table:
         # check input, ignore garbage
         self.tbl_def = []
         for column in definion:
-            if len(column) not >= 2:
+            if len(column) < 2:
                 continue
             if type(column[0]) != str or type(column[1]) != int:
                 continue
@@ -225,7 +226,13 @@ class output_table:
         self.tbl_def.append((coldef[0], coldef[1]))
 
     def rm_col(self, colid:int):
-        del self.tbl_def[colid]
+        try:
+            del self.tbl_def[colid]
+        except KeyError:
+            sys.stderr.write("cannot remove columb {}, doesn't exits\n".format(colid))
+        for row in self.rows:
+            del row[colid]
+
 
         
 
