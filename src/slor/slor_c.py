@@ -133,6 +133,7 @@ class SlorControl:
                 )
                 ret_val = False
         bottom_box()
+
         return ret_val
 
     def check_driver_info(self, data):
@@ -223,10 +224,6 @@ class SlorControl:
         # If this is a prepare stage we need to be set to replace the readmap
         if stage == "prepare":
             self.new_readmap = []
-
-
-        # Disply headers for stats output
-        self.stats_h.headers(self.mixed_count)
 
         """
         Primary Loop - monitors the drivers by polling messages from them

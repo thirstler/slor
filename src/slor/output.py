@@ -1,4 +1,3 @@
-from re import L
 from slor.shared import *
 
 def config_text(config):
@@ -196,47 +195,32 @@ def box_text(text):
     bottom_box()
 
 
-class output_table:
-    title = None
-    cols = 0
-    row_content = []
-    tbl_width = 0
-    tbl_def = None
-    rows = []
-
-    def __init__(self, definition=None, title=None):
-        self.title = title
-
-    def define(self, definion:list):
-        """
-        define the colums with a list of tuples in one go:
-        [(header_stext, col_width), etc...]
-        """
-        # check input, ignore garbage
-        self.tbl_def = []
-        for column in definion:
-            if len(column) < 2:
-                continue
-            if type(column[0]) != str or type(column[1]) != int:
-                continue
-            self.tbl_width += column[1]
-            self.tbl_def.append(column)
-
-    def add_col(self, coldef:tuple):
-        self.tbl_def.append((coldef[0], coldef[1]))
-
-    def rm_col(self, colid:int):
-        try:
-            del self.tbl_def[colid]
-        except KeyError:
-            sys.stderr.write("cannot remove columb {}, doesn't exits\n".format(colid))
-        for row in self.rows:
-            del row[colid]
-
-
+def format_row(content:list, newline=False, replace=False, padding=0) -> str:
+    """
+    Content format:
+    [
+        (text, width, term_chars, justification),
+        etc...
+    ]
+    example:
+    [
+        ("text content 1", 15, "\033[94m", ">"),
+        ("more content", 8, "", "<")
+    ]
+    """
+    row_text = ""
+    if replace:
+        row_text += "\r"
+    for i, item in enumerate(content):
+        format_str = item[2]+"{:"+item[3]+str(item[1])+"}"+"\033[0m"
+        row_text += format_str.format(item[0])
+        row_text += " "*padding
         
+    if newline:
+        row_text += "\n"
 
-            
-        
+    return(row_text.rstrip(" "))
+    
 
-            
+    
+
