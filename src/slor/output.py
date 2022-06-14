@@ -59,6 +59,8 @@ def config_text(config):
         cft_text += "Prepared objects:   {0} (readmap length)\n".format(
             human_readable(readmap_size, print_units="ops")
         )
+        if not config["no_db"]:
+            cft_text += "Database file:      {0} (base file name)\n".format("{}{}.db".format(POSIX_DB_TMP, config["name"]))
         cft_text += "Upper IO limit:     {0}\n".format(config["iop_limit"])
         cft_text += "Bucket prefix:      {0}\n".format(config["bucket_prefix"])
         cft_text += "Num buckets:        {0}\n".format(config["bucket_count"])
@@ -194,6 +196,13 @@ def box_text(text):
         print("\u2502 " + line)
     bottom_box()
 
+def indent(text, indent=1):
+
+    text_lines = text.split("\n")
+    for line in text_lines:
+        sys.stdout.write(" "*indent + line + "\n")
+    sys.stdout.flush()
+    
 
 def format_row(content:list, newline=False, replace=False, padding=0) -> str:
     """

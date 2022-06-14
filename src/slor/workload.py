@@ -207,31 +207,22 @@ def generate_tasks(args):
         if not args.use_readmap:
             loads.insert(2, "prepare")  # Will always be after readmap
 
-    # rename repeat load classes to lables that include an instance index
-    lclass_itr = {}
-    newloads = []
-    for i, l in enumerate(loads):
-        if sum(x == l for x in loads) > 1:
-            lclass_itr[l] = 0 if l not in lclass_itr else lclass_itr[l] + 1
-            newloads.append("{}:{}".format(loads[i], lclass_itr[l]))
-        else:
-            newloads.append(l)
 
     if "blowout" in loads and args.cachemem_size == "0":
         try:
             while True:
-                newloads.remove("blowout") # Exception abuse
+                loads.remove("blowout") # Exception abuse
         except:
             pass
 
     # Add cleanup if specified
     if args.cleanup:
-        newloads.append("cleanup")
+        loads.append("cleanup")
 
-    if args.remove_buckets and "cleanup" not in newloads:
-        newloads.append("cleanup")
+    if args.remove_buckets and "cleanup" not in loads:
+        loads.append("cleanup")
 
-    return {"loadorder": newloads, "mixed_profiles": mix_prof_obj}
+    return {"loadorder": loads, "mixed_profiles": mix_prof_obj}
 
 
 def basic_workload(args):

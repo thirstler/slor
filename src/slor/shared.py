@@ -153,7 +153,7 @@ class sizeRange:
 
     def serialize(self):
         # Need to avoid pickling in the future.
-        return {"low": self.low, "high": self.high, "avg": self.high}
+        return {"low": self.low, "high": self.high, "avg": self.avg}
 
 
 
@@ -196,7 +196,7 @@ def human_readable(value, val_format="SI", print_units="bytes", precision=2):
         sipwr = 18
 
         if print_units == "ops":
-            units = ["E", "P", "T", "G", "M", "K", ""]
+            units = [" E", " P", " T", " G", " M", " K", ""]
         else:
             units = [" EB", " PB", " TB", " GB", " MB", " KB", " B"]
 

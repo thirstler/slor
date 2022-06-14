@@ -13,6 +13,7 @@ class statHandler:
     operations = None
     last_show = 0
     stage = None
+    stage_class = None
     count_target = 0
     global_io_counter = 0
     progress_start_time = 0
@@ -35,20 +36,21 @@ class statHandler:
         self.config = config
         self.operations = ()
         self.stage = stage
+        self.stage_class = opclass_from_label(stage)
         self.stage_start_time = time.time()
         self.progress_start_time = self.stage_start_time
         self.duration = duration
         self.reread = 0
         self.operation_hist = {}
 
-        if self.stage == "mixed":
+        if self.stage_class == "mixed":
             for s in config["mixed_profile"]:
                 self.operations += (s,)
         else:
-            if any(self.stage == x for x in ("prepare", "blowout")):
+            if any(self.stage_class == x for x in ("prepare", "blowout")):
                 self.operations = ("write",)
             else:
-                self.operations = (self.stage,)
+                self.operations = (self.stage_class,)
 
         # How many processes in this job are we expecting?
         self.ttl_procs = len(self.config["driver_list"]) * self.config["driver_proc"]
@@ -105,7 +107,7 @@ class statHandler:
 
     def mk_merged_sample(self):
         now = time.time()
-        if self.stage in PROGRESS_BY_COUNT:
+        if self.stage_class in PROGRESS_BY_COUNT:
             target = self.count_target
         else:
             target = None
@@ -168,7 +170,7 @@ class statHandler:
         else:  # should never happen
             color = bcolors.FAIL
 
-        # Multipal operations in the sample (mixed)
+        # Multiple operations in the sample (mixed)
         if len(stat_sample.operations) > 1:
 
             if self.headers:
@@ -183,7 +185,7 @@ class statHandler:
             progress_chars = ""
 
             # Workloads with time limit (any benchmark workload)
-            if self.stage in PROGRESS_BY_TIME:
+            if self.stage_class in PROGRESS_BY_TIME:
                 perc = 0
                 # Nothing reported in yet set values
                 if stat_sample.sample_seq == 0:
@@ -197,7 +199,7 @@ class statHandler:
                 progress_chars = self.progress(perc, final=final, printme=False)
 
             # Work-to-finish workloads (won't happen w/mixed workload)
-            elif self.stage in PROGRESS_BY_COUNT:
+            elif self.stage_class in PROGRESS_BY_COUNT:
                 progress_chars = self.progress(stat_sample.percent_complete(), final=final, printme=False)
 
             # Start global I/O history
@@ -208,7 +210,7 @@ class statHandler:
             # Record op history and show each operation response time
             row_data = [
                 ("\u2502", 1, "", "<"),
-                (self.stage+":", 8, "", ">"),
+                (self.stage_class+":", 8, "", ">"),
                 (progress_chars, 18, "", "<")
             ]
             for op in self.operations:
@@ -262,7 +264,6 @@ class statHandler:
                         ("bandwidth", 14, "", ">"),
                         ("resp ms", 14, "", ">"),
                         ("failures", 14, "", ">"),
-                        ("elapsed", 10, "", ">"),
                         ("CV", 8, "", ">")
                     ],
                     replace=False,
@@ -285,7 +286,6 @@ class statHandler:
                             (self.disp_bytes_sec(bytes_s), 14, "", ">"),
                             (self.disp_resp_avg(resp_a), 14, "", ">"),
                             (self.disp_failure_count(failures), 14, "", ">"),
-                            (self.elapsed_time(), 10, "", ">"),
                             ("{}{:>7.2f}%{}".format(respdev_col, (resp_sd/resp_a)*100, bcolors.ENDC), 8, "", "<")
                         ],
                         replace=False,
@@ -315,7 +315,7 @@ class statHandler:
                 self.headers = False
 
             progress_chars = ""
-            if self.stage in PROGRESS_BY_TIME:
+            if self.stage_class in PROGRESS_BY_TIME:
                 perc = 0
                 # Nothing to report,set  dummy values
                 if stat_sample.global_io_count == 0:
@@ -329,11 +329,11 @@ class statHandler:
                 progress_chars = self.progress(perc, final=final, printme=False)
 
             # Work-to-finish workloads (prepare, blowout)
-            elif self.stage in PROGRESS_BY_COUNT:
+            elif self.stage_class in PROGRESS_BY_COUNT:
                 progress_chars = self.progress(stat_sample.percent_complete(), final=final, printme=False)
 
             # Unknown terminus (cleanup)
-            elif self.stage in UNKNOWN_PROGRESS:
+            elif self.stage_class in UNKNOWN_PROGRESS:
                 progress_chars = self.dunno(final=final, printme=False)
 
             for op in stat_sample.operations: # there's only one operation if we're here
@@ -366,7 +366,7 @@ class statHandler:
                 sys.stdout.write(format_row(
                     [
                         ("\u2502", 1, "", "<"),
-                        (self.stage+":", 8, "", ">", ),
+                        (self.stage_class+":", 8, "", ">", ),
                         (progress_chars, 18, "", ">"),
                         (self.disp_ops_sec(rate_s), 14, "", ">"),
                         (self.disp_bytes_sec(bytes_s), 14, "", ">"),
@@ -394,10 +394,20 @@ class statHandler:
                             respdev_col = bcolors.GRAY
 
                         sys.stdout.write("\n")
-                        if all(self.stage != x for x in ("prepare", "cleanup")):
-                            box_line("         {0}instability (CV) ".format(bcolors.ITALIC+bcolors.GRAY))
-                            sys.stdout.write(" "*30 + "{}{}{}".format(respdev_col, "{:>12.2f}%".format(resp_cv), bcolors.ENDC))
-                            sys.stdout.write("\n")
+                        if all(self.stage_class != x for x in ("prepare", "cleanup")):
+                            #box_line("         {0}instability (CV) ".format(bcolors.ITALIC+bcolors.GRAY))
+                            #sys.stdout.write(" "*30 + "{}{}{}".format(respdev_col, "{:>12.2f}%".format(resp_cv), bcolors.ENDC))
+                            #sys.stdout.write("\n")
+                            sys.stdout.write(format_row(
+                                [
+                                    ("\u2502", 1, "", "<"),
+                                    ("instability (CV):", 54, bcolors.ITALIC+bcolors.GRAY, ">"),
+                                    ("{:>12.2f}%".format(resp_cv), 14, bcolors.ITALIC+bcolors.GRAY, ">")
+
+                                ],
+                                newline=True,
+                                padding=1
+                            ))
                         box_line("\n")
                         
                 except KeyError:
@@ -463,16 +473,7 @@ class statHandler:
     def progress(self, perc, width=10, final=False, color="", printme=True):
         if final or perc > 1:
             perc = 1
-        blocks = (
-            "\u258F",
-            "\u258E",
-            "\u258D",
-            "\u258C",
-            "\u258B",
-            "\u258A",
-            "\u2589",
-            "\u2588",
-        )  # eighth blocks
+        blocks = ("▏","▎","▍", "▌", "▋", "▊", "▉", "█") # eighth blocks
         fillchar = "\u2588"
         char_w = perc * width
         leading_char = blocks[math.floor((char_w * 8) % 8)]

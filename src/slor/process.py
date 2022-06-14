@@ -112,7 +112,7 @@ class SlorProcess:
     def send_sample(self, message):
         self.msg_to_driver(
             type="stat",
-            stage=self.config["type"],
+            stage=self.config["label"],
             value=message,
             time_ms=int(time.time() * 1000),
         )

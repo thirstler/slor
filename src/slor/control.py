@@ -20,11 +20,18 @@ def start_driver():
 
 
 def input_checks(args):
+    """
+    Before any parsing, perform sanity checks
+    """
+    keepgoing = True # fatal error occurred if true
+    warnings = ""    # hold warnings, show them
+    errors = ""      # error messages
 
-    keepgoing = True
-    warnings = ""
-    errors = ""
-    mixed_profiles = json.loads(args.mixed_profiles)
+    try:
+        mixed_profiles = json.loads(args.mixed_profiles)
+    except json.decoder.JSONDecodeError as e:
+        keepgoing = False
+        errors += "check mixed-profiles JSON string, it's busted: {}\n".format(e)
 
     if args.force:
         return True
@@ -61,16 +68,17 @@ def input_checks(args):
         keepgoing = False # Error
 
     # read workloads after deletes?
-    del_conflict = False
+    del_occurred = 0
     mixed_index = 0
     for w in args.loads.split(","):
         if w == "delete":
-            del_conflict = True
+            del_occurred += 1
         if w == "mixed":
             if "delete" in mixed_profiles[mixed_index]:
-                del_conflict = True
+                del_occurred += 1
             mixed_index += 1
-        if del_conflict and w in ("delete", "head", "read", "reread", "tag_read"):
+
+        if (del_occurred > 0 and w in ("head", "read", "reread", "tag_read")) or del_occurred > 1:
             errors += "you've specified a \"read\" workload when data might be missing from a previous \"delete\" workload\n"
             keepgoing = False # Error
 

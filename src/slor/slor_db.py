@@ -4,7 +4,32 @@ import os
 from pathlib import Path
 import pickle
 import time
+import zlib
 import statistics
+
+"""
+Database schema:
+
+Configuration table stores data as text JSON:
+
+    CREATE TABLE "config" (
+        "ts"	INT,
+        "stage"	STRING,
+        "data"	JSON
+    );
+
+Statistics content tables store data as python PICKLE serial data. This is
+to minimizes performance impact of packing and unpacking so much JSON data,
+and to minimize the space used by so many long floating-point numbers.
+
+    CREATE TABLE "%DRIVER_PORT_HASH%" (
+        "t_id"	INT,
+        "ts"	INT,
+        "stage"	STRING,
+        "data"	BLOB
+    );
+
+"""
 
 def _slor_db(sock, config):
     """ SLorDB entry shim """
@@ -59,6 +84,9 @@ class SlorDB:
         if self.config["no_db"]:
             return
         host = self.host_table_hash(host)
+
+        # data is stored as a BLOB to efficiently store all of the floats
+        # in the operation time sets.
         query = "CREATE TABLE {0} (t_id INT, ts INT, stage STRING, data BLOB)".format(
             host
         )
@@ -69,23 +97,18 @@ class SlorDB:
 
     def store_stat(self, message):
         host = self.host_table_hash(message["w_id"])
-        stage = "{}:{}".format(message["stage"], self.stage_record[message["stage"]])
         
-
-        # Add to database for analysis later
         sql = "INSERT INTO {0} VALUES ({1}, {2}, '{3}', ?)".format(
             host,
             message["t_id"],
             message["time"],
-            stage
+            message["stage"]
         )
-        self.db_cursor.execute(sql, [pickle.dumps(message)])
+        self.db_cursor.execute(sql, [zlib.compress(pickle.dumps(message))])
         self.db_conn.commit()
-
 
     def host_table_hash(self, hostname):
         return "h" + hex(hash(hostname))[2:]
-
 
     def mk_db_conn(self):
         dbroot = POSIX_DB_TMP
@@ -105,50 +128,32 @@ class SlorDB:
 
             self.db_conn = sqlite3.connect(self.db_file.as_posix())
             self.db_cursor = self.db_conn.cursor()
-            query = "CREATE TABLE config (ts INT, stage STRING, data BLOB)"
+            query = "CREATE TABLE config (ts INT, stage STRING, data JSON)"
             self.db_cursor.execute(query)
-            query = "INSERT INTO config VALUES ({}, 'global', ?)".format(time.time())
-            self.db_cursor.execute(query, [pickle.dumps(self.config)])
+            query = "INSERT INTO config VALUES ({}, 'global', '{}')".format(time.time(), json.dumps(self.config))
+            self.db_cursor.execute(query)
             self.db_conn.commit()
 
 
     def commit_stage_config(self, stage, config):
-
-        if stage not in self.stage_record:
-            self.stage_record[stage] = 1
-        else:
-            self.stage_record[stage] += 1
-
-        query = "INSERT INTO config VALUES ({}, '{}', ?)".format(
-            time.time(), "{}:{}".format(stage,self.stage_record[stage])
+        
+        query = "INSERT INTO config VALUES ({}, '{}', '{}')".format(
+            time.time(), stage, json.dumps(config)
         )
-        self.db_cursor.execute(query, [pickle.dumps(config)])
+        self.db_cursor.execute(query)
         self.db_conn.commit()
-
-
-    def calc_resp_stats(self) -> None:
-        self.resp_t_buffer.sort()
-        rb_leb = len(self.resp_t_buffer)
-        self.stats = {
-            "mean": statistics.mean(self.resp_t_buffer),
-            "median": statistics.median(self.resp_t_buffer),
-            "min": self.resp_t_buffer[0],
-            "max": self.resp_t_buffer[-1],
-            "p9999": self.resp_t_buffer[int(0.9999 * rb_leb)],
-            "p999": self.resp_t_buffer[int(0.999 * rb_leb)],
-            "p99": self.resp_t_buffer[int(0.99 * rb_leb)],
-            "p9": self.resp_t_buffer[int(0.9 * rb_leb)]
-        }
-
-    def write_stats_to_db(self) -> bool:
-        return True
 
     def logger(self, message:str):
         self.sock.send({"log": {"message": message}})
-        
 
+    
+    def get_config(self, stage="global"):
+        query = "SELECT ts, data FROM config WHERE stage = '{}'".format(stage)
+        data = self.db_cursor.execute(query)
 
-
+        # If there's more than 1 row this is busted
+        for row in data:
+            print(row)
             
 
 

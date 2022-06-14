@@ -5,6 +5,8 @@ import sqlite3
 import json
 import datetime
 import statistics
+import pickle
+import zlib
 
 class SlorAnalysis:
     conn = None
@@ -47,20 +49,19 @@ class SlorAnalysis:
         global_config = self.get_config()[0]
         obj_sz_range = sizeRange(low=global_config["sz_range"]["low"], high=global_config["sz_range"]["high"])
         key_sz_range = sizeRange(low=global_config["key_sz"]["low"], high=global_config["key_sz"]["high"])
-        # print(global_config)
 
-        print("GLOBAL CONFIGURATION")
+        sys.stdout.write("GLOBAL CONFIGURATION\n\n")
         left = []
         left.append(self.format_key_value("Workload name:", global_config["name"]))
         left.append(
-            self.format_key_value("Default runtime:", global_config["run_time"])
+            self.format_key_value("Stage runtime:", global_config["run_time"])
         )
         left.append(
             self.format_key_value("Bucket prefix:", global_config["bucket_prefix"])
         )
         left.append(
             self.format_key_value(
-                "Default bucket count:", global_config["bucket_count"]
+                "Bucket count:", global_config["bucket_count"]
             )
         )
         left.append(
@@ -146,9 +147,9 @@ class SlorAnalysis:
                 right.append(self.format_key_value("", ""))
             text += "{:<50} {:<30}\n".format(left[z], right[z])
 
-        box_text(text)
+        indent(text, indent=2)
 
-        print("WORKLOAD STATISTICS")
+        sys.stdout.write("WORKLOAD STATISTICS\n\n")
 
         for stage in stats:
 
@@ -158,12 +159,13 @@ class SlorAnalysis:
                 if "readmap" in driver:
                     rmkeys += len(driver["readmap"])
                     driver["readmap"].clear()
-
+            
             # Start new "test" string #
-            text = "STAGE: " + stage + "\n\n"
+            sys.stdout.write("STAGE: " + stage + "\n\n")
+            text = ""
             left = []
             try:
-                s_config[0]
+                s_config = s_config[0]
             except IndexError:
                 print("bad stage key: " + stage)
                 print(json.dumps(s_config, indent=2))
@@ -301,7 +303,7 @@ class SlorAnalysis:
                 )
                 left.append(
                     self.format_key_value(
-                        "  Average GET size:",
+                        "  Average operation size:",
                         human_readable(alias["ttl_bytes"] / alias["ttl_operations"]),
                     )
                 )
@@ -315,19 +317,19 @@ class SlorAnalysis:
                 left.append(
                     self.format_key_value(
                         "  Average ops/s:",
-                        human_readable(alias["ios/s"], print_units="ops"),
+                        human_readable(alias["ios/s"], print_units="ops", precision=4),
                         valcolor=bcolors.BOLD,
                     )
                 )
                 left.append(
                     self.format_key_value(
-                        "  Total bytes:", human_readable(alias["ttl_bytes"])
+                        "  Total bytes:", human_readable(alias["ttl_bytes"], precision=4)
                     )
                 )
                 left.append(
                     self.format_key_value(
                         "  Total operations:",
-                        human_readable(alias["ttl_operations"], print_units="ops"),
+                        human_readable(alias["ttl_operations"], print_units="ops", precision=4),
                     )
                 )
                 left.append(
@@ -400,6 +402,12 @@ class SlorAnalysis:
                         "{:.4f} ms".format(alias["resp_stddiv"] * 1000),
                     )
                 )
+                right.append(
+                    self.format_key_value(
+                        "Coefficient of variation:",
+                        "{:.2f}".format(alias["resp_stddiv"]/alias["resp_avg"]),
+                    )
+                )
                 for z in range(0, max(len(left), len(right))):
                     if z not in left:
                         left.append(self.format_key_value("", ""))
@@ -410,7 +418,7 @@ class SlorAnalysis:
                 if (i + 1) < len(stats[stage]["operations"]):
                     text += "\n"
 
-            box_text(text)
+            indent(text, indent=2)
 
     def get_all_basic_stats(self):
         stats = {}
@@ -431,6 +439,7 @@ class SlorAnalysis:
             print("STAGE," + stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
+            continue
 
             headers = []
             for ts in series:
@@ -451,8 +460,9 @@ class SlorAnalysis:
                         row.append(str(series[ts][operation][stat]))
                     print(",".join(row))
 
-    def get_tick(self, timestamp, quanta=STATS_QUANTA):
-        return int(timestamp) - (int(timestamp) % quanta)
+    def get_tick(self, timestamp:int, quanta=STATS_QUANTA):
+        return timestamp - (timestamp % quanta)
+
 
     def get_series(self, stage, start, stop):
         workers = self.get_workers()
@@ -460,9 +470,8 @@ class SlorAnalysis:
         series_master = {}
         start_s = start / 1000
         stop_s = stop / 1000
-
         for i in range(
-            self.get_tick(start_s), self.get_tick(stop_s) + STATS_QUANTA, STATS_QUANTA
+            self.get_tick(int(start_s)), self.get_tick(int(stop_s)) + STATS_QUANTA, STATS_QUANTA
         ):
             series_master[i] = {}
 
@@ -471,44 +480,34 @@ class SlorAnalysis:
                 worker, stage, start, stop
             )
             data = cur.execute(query)
-
+            table_row = []
             for row in data:
-                stat = json.loads(row[0])
+                stat = pickle.loads(zlib.decompress(row[0]))
                 if "final" in stat["value"]:
                     continue
-                tick = self.get_tick(row[1] / 1000)
+                sec = int(stat["value"]["window_start"])
+                dateslot = self.get_tick(sec, STATS_QUANTA)
 
                 for op in stat["value"]["operations"]:
-                    if op not in series_master[tick]:
-                        series_master[tick][op] = {
+                    if dateslot not in series_master:
+                        continue
+                    if op not in series_master[dateslot]:
+                        series_master[dateslot][op] = {
                             "bytes/s": 0,
                             "ios/s": 0,
-                            "resp": 0,
-                            "iotime": 0,
-                            "failures": 0,
+                            "res_t": 0
                         }
-
-                    series_master[tick][op]["bytes/s"] += stat["value"]["operations"][op][
-                        "bytes/s"
-                    ]
-                    series_master[tick][op]["ios/s"] += stat["value"]["operations"][op]["ios/s"]
-                    series_master[tick][op]["iotime"] += stat["value"]["operations"][op][
-                        "iotime"
-                    ]
-                    series_master[tick][op]["failures"] += (
-                        stat["value"]["st"][op]["failures"] / stat["value"]["walltime"]
-                    )
-
-                    if len(stat["value"]["st"][op]["resp"]) == 0:
-                        continue
-
-                    resp = 0
-                    for r in stat["value"]["st"][op]["resp"]:
-                        resp += r
-                    series_master[tick][op]["resp"] = resp / len(
-                        stat["value"]["st"][op]["resp"]
-                    )
-
+                    series_master[dateslot][op]["bytes/s"] += \
+                            stat["value"]["operations"][op]["bytes"]/(stat["value"]["window_end"]-stat["value"]["window_start"])
+                    series_master[dateslot][op]["ios/s"] += \
+                            stat["value"]["operations"][op]["ios"]/(stat["value"]["window_end"]-stat["value"]["window_start"])
+                    if len(stat["value"]["operations"][op]["iotime"]) > 0:
+                        series_master[dateslot][op]["res_t"] += \
+                            statistics.mean(stat["value"]["operations"][op]["iotime"])
+                    else:
+                        series_master[dateslot][op]["res_t"] = None
+                        
+        print(series_master)
         return series_master
 
     def get_config(self, stage="global"):
@@ -547,7 +546,7 @@ class SlorAnalysis:
             ##
             # Each row is a sample from a single driver
             for row in data:
-                stat = json.loads(row[0])
+                stat = pickle.loads(zlib.decompress(row[0]))
                 sample = perfSample(from_json=stat["value"])
                 master.merge(sample)
                 sample_count += 1
@@ -622,6 +621,7 @@ class SlorAnalysis:
                 if x[0] not in self.stages:
                     self.stages.append(x[0])
         cur.close()
+
         return self.stages
 
     def get_processes(self, stage):
