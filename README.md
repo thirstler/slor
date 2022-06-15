@@ -15,7 +15,7 @@ and tagging) in discrete and mixed workload configurations.
 How does it do?
 ---------------
 It operates as a system of load-generators (drivers) that are instructed to do 
-things by a controller process. This is similar to other load generation
+"things" by a controller process. This is similar to other load generation
 systems:
 
     Controller ___ Driver1
@@ -33,19 +33,17 @@ Where does it do?
 -----------------
 
 It should run anywhere Python3 runs (though it is more tested on POSIX type
-systems). The only limiting factor is the use of the "pickle" module which is
-used in the Python multiprocessing modules. Inter-process communication data
-is pickled with routines that are not guaranteed to be compatible between 
-Python versions. In other words, don't try to run with disparate Python
-versions between the drivers and controller.
+systems). The limiting factor is the use of the "pickle" module. Data moved
+between controller and drivers is serialized with routines that are not
+guaranteed to be compatible between Python versions: no controller with one
+major Python version and drivers with another.
 
 Installation
 ------------
 
 Slor can be installed by building the pip package and installing it. I like to
-create virtual environments so I can get recent versions of dependencies
-without messing up the system. Requires the venv, build and setuptools
-packages:
+create virtual environments so I can use recent python/module versions without
+messing up the system. This requires the venv, build and setuptools packages:
 
     pip3 install venv # (or use your OS packages)
     python3 -mvenv ~/slor_venv
@@ -57,9 +55,9 @@ packages:
     python -m build
     pip install --upgrade ./dist/slor-[version].tgz
 
-If you want, you can tar-up ~/slor_venv and put it on additional driver
-systems. The venv approach is great for getting things installed in air-gapped 
-environments where you can't pip yourself into success
+If you want, you can tar-up ~/slor_venv and move it around. The venv approach
+is great for getting things installed in air-gapped environments where you
+can't pip yourself into success
 
 
 Running a Workload
@@ -71,7 +69,7 @@ need an accessKey/secretKey and an endpoint to use. For example:
     ./slor controller --access-key user --secret-key password --endpoint http://123.45.67.89
 
 A driver process will automatically launch and a default benchmark workload
-will be sent to it with the following default workload configuraiton and settings:
+will be deployed with the following configuration:
 
 * Workload list:
     * read
@@ -91,7 +89,7 @@ will be sent to it with the following default workload configuraiton and setting
 * A single (1) bucket will be used in the test
 * Bucket prefix will be "slor-" (resulting bucket name "slor-0")
 
-This is a perfectly good way to start but you'll likely want to benchmark 
+This is a perfectly good way to start, but you'll likely want to benchmark 
 different file sizes, I/O thread counts, workload mixtures, bucket counts,
 whatever. You can specify the stages in the workload with the --loads flag.
 
@@ -101,11 +99,12 @@ whatever. You can specify the stages in the workload with the --loads flag.
     --loads read,write \
     --cleanup
 
-This will run only a read and write workload with a clean-up stage at the end
-that will remove all objects from the bucket (ALL of them).
+This will run a read, then write workload with a clean-up stage at the end.
+Clean-up will remove ALL objects from the bucket - ALL of them, don't use
+existing buckets for benchmarking!
 
 Let's add a mixed workload (that isn't the default). Mixed workloads accept
-the following operation classes along with a "share" values that says how
+the following operation classes along with "share" values that say how
 often that operation will appear in the stage:
 
 * read
