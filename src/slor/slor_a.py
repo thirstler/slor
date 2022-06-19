@@ -7,6 +7,7 @@ import datetime
 import statistics
 import pickle
 import zlib
+from  datetime import datetime
 
 class SlorAnalysis:
     conn = None
@@ -439,32 +440,26 @@ class SlorAnalysis:
             print("STAGE," + stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
-            continue
+            
+            row = "ts,"
+            for col in list(series.values())[0]:
+                row += col+":ios/s,"+col+":bytes/s,"+col+":resp_ms,"
+            sys.stdout.write(row[:-1]+"\n")
 
-            headers = []
             for ts in series:
-                for item in series[ts]:
-                    if item not in headers:
-                        headers.append(item)
-
-            for operation in headers:
-                print("Operation," + operation)
-                sys.stdout.write("time,")
-                stats = ("bytes/s", "ios/s", "resp", "iotime", "failures")
-                print(",".join(stats))
-                # for x in stats: sys.stdout.write(x)
-                for ts in series:
-                    row = []
-                    row.append(datetime.datetime.fromtimestamp(ts).isoformat())
-                    for stat in stats:
-                        row.append(str(series[ts][operation][stat]))
-                    print(",".join(row))
+                row = datetime.fromtimestamp(ts).isoformat() + ","
+                for op in series[ts]:
+                    row += str(series[ts][op]["ios/s"]) + "," + str(series[ts][op]["bytes/s"]) + "," + str(series[ts][op]["res_t"]) + ","
+                sys.stdout.write(row[:-1]+"\n")
 
     def get_tick(self, timestamp:int, quanta=STATS_QUANTA):
         return timestamp - (timestamp % quanta)
 
 
     def get_series(self, stage, start, stop):
+        """
+        Get sample data in the timestamp order for CSV output
+        """
         workers = self.get_workers()
         cur = self.conn.cursor()
         series_master = {}
@@ -480,7 +475,6 @@ class SlorAnalysis:
                 worker, stage, start, stop
             )
             data = cur.execute(query)
-            table_row = []
             for row in data:
                 stat = pickle.loads(zlib.decompress(row[0]))
                 if "final" in stat["value"]:
@@ -507,11 +501,12 @@ class SlorAnalysis:
                     else:
                         series_master[dateslot][op]["res_t"] = None
                         
-        print(series_master)
         return series_master
 
     def get_config(self, stage="global"):
-
+        """
+        Get benchmark run configuration
+        """
         query = "SELECT * FROM config WHERE stage='{}'".format(stage)
         cur = self.conn.cursor()
         data = cur.execute(query)

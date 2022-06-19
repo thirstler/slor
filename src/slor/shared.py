@@ -5,7 +5,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.42
+SLOR_VERSION = 0.45
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -156,8 +156,7 @@ class sizeRange:
         return {"low": self.low, "high": self.high, "avg": self.avg}
 
 
-
-BANNER = "\n<<{0}SLoR{1}>> (ver. {2})\n".format(
+BANNER = "\n⚞ {0}SLoR{1} ⚟ (ver. {2})\n".format(
     bcolors.BOLD, bcolors.ENDC, SLOR_VERSION
 )
 ###############################################################################
