@@ -22,13 +22,10 @@ class SlorControl:
     conn = None
     readmap = None
     stat_buf = None
-    last_stage = None
-    mixed_count = None
     stage_itr = None
 
     def __init__(self, root_config):
         self.config = root_config
-        self.mixed_count = 0
         self.conn = []
         self.readmap = []
         self.stat_buf = []
@@ -36,6 +33,17 @@ class SlorControl:
         self.reread = 0
 
     def exec(self):
+
+        # Label the stages in the load order
+        indexes = {}
+        load_order = []
+        for i, task in enumerate(self.config["tasks"]["loadorder"]):
+            if task not in indexes:
+                indexes[task] = 0
+            else:
+                indexes[task] += 1
+            load_order.append("{}:{}".format(task, indexes[task]))
+        self.config["tasks"]["loadorder"] = load_order
 
         # Print config
         box_text(config_text(self.config))
@@ -49,19 +57,9 @@ class SlorControl:
         print("")
         top_box()
         sys.stdout.write(
-            "\u2502 STAGES ({}); ".format(len(self.config["tasks"]["loadorder"]))
+            "\u2502 STAGES ({}); ".format(len(load_order))
         )
         sys.stdout.write("\n\u2502\n")
-        for stage_val in self.config["tasks"]["loadorder"]:
-            stage, duration = self.parse_stage_string(stage_val)
-            if (
-                sum(
-                    opclass_from_label(stage_val) == opclass_from_label(x)
-                    for x in self.config["tasks"]["loadorder"]
-                )
-                > 1
-            ):
-                self.stage_itr[opclass_from_label(stage)] = -1
 
         # Get database handler going
         if not self.config["no_db"]:
@@ -72,20 +70,21 @@ class SlorControl:
             )
             db_proc.start()
 
-        for c, stage in enumerate(self.config["tasks"]["loadorder"]):
-            stage, duration = self.parse_stage_string(stage)
+        for c, stage in enumerate(load_order):
+            duration = self.config["run_time"]
+            stage_class = opclass_from_label(stage)
 
-            if stage in ("read", "delete", "head", "mixed", "tag"):
+            if stage_class in ("read", "delete", "head", "mixed", "tag"):
                 sys.stdout.write("\r\u2502   [   shuffling readmap...   ]   ")
                 sys.stdout.flush()
                 random.shuffle(self.readmap)
 
-            elif stage == "sleep":
+            elif stage_class == "sleep":
                 box_line("     [     sleeping ({})...     ]   ".format(duration), newline=False)
                 time.sleep(duration)
                 continue
 
-            elif stage == "readmap":
+            elif stage_class == "readmap":
                 self.mk_read_map()
                 continue
 
@@ -133,6 +132,7 @@ class SlorControl:
                 )
                 ret_val = False
         bottom_box()
+
         return ret_val
 
     def check_driver_info(self, data):
@@ -169,12 +169,10 @@ class SlorControl:
         """
         Contains the main loop communicating with driver processes
         """
-
+        stage_class = opclass_from_label(stage)
+        workload_index = int(stage[stage.find(":")+1:])
         workloads = []
         n_wrkrs = len(self.config["driver_list"])
-
-        if opclass_from_label(stage) in self.stage_itr:
-            self.stage_itr[opclass_from_label(stage)] += 1
 
         # Create the workloads
         for wc, target in enumerate(self.config["driver_list"]):
@@ -184,12 +182,26 @@ class SlorControl:
             else:
                 return
 
-        # record stage config
+        # record stage config to stats db. Remove readmap, takes a lot of space
+        # and is not necessary
         if not self.config["no_db"]:
-            self.db_sock.send({"stage": stage, "stage_config": workloads})
+            send_copy = []
+            for work in workloads:
+                send_copy.append(copy.deepcopy(work))
+                if "readmap" in send_copy[-1]:
+                    del send_copy[-1]["readmap"]
+
+            try:
+                self.db_sock.send({"stage": stage, "stage_config": send_copy})
+            except:
+                sys.stdout.write("\r\u2502 error sending stats to db process")
+                sys.stdout.flush()
+                pass
+            
+            del send_copy
 
         # Distribute buckets to driver for init
-        if stage == "init":
+        if stage_class == "init":
             for bc in range(0, self.config["bucket_count"]):
                 workloads[bc % n_wrkrs]["bucket_list"].append(
                     "{0}{1}".format(self.config["bucket_prefix"], bc)
@@ -208,12 +220,13 @@ class SlorControl:
 
         self.print_message("running stage ({0})".format(stage), verbose=True)
 
+        # Replace mixed profile with the proper one
         stats_config = copy.deepcopy(self.config)
-        stats_config["mixed_profile"] = self.config["mixed_profiles"][self.mixed_count]
+        stats_config["mixed_profile"] = self.config["mixed_profiles"][workload_index]
 
-        self.stats_h = statHandler(stats_config, opclass_from_label(stage), duration)
-        if self.get_readmap_len() > 0 or stage == "blowout":
-            if stage == "blowout":
+        self.stats_h = statHandler(stats_config, stage, duration)
+        if self.get_readmap_len() > 0 or stage_class == "blowout":
+            if stage_class == "blowout":
                 self.stats_h.set_count_target(
                     self.config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ
                 )
@@ -221,19 +234,15 @@ class SlorControl:
                 self.stats_h.set_count_target(self.get_readmap_len())
 
         # If this is a prepare stage we need to be set to replace the readmap
-        if stage == "prepare":
+        if stage_class == "prepare":
             self.new_readmap = []
-
-
-        # Disply headers for stats output
-        self.stats_h.headers(self.mixed_count)
 
         """
         Primary Loop - monitors the drivers by polling messages from them
         """
         donestack = len(workloads)
         while True:
-            group_time = time.time()
+
             sys.stdout.write("\r")
             for i, wl in enumerate(workloads):
                 while self.conn[i].poll():
@@ -241,7 +250,7 @@ class SlorControl:
                         mesg = self.conn[i].recv()
                         if self.check_status(mesg) == "done":
                             donestack -= 1
-                        self.process_message(mesg)  # Decide what to do with the mssage
+                        self.process_message(mesg)  # Decide what to do with the message
                     except EOFError:
                         pass
             if donestack == 0:
@@ -258,7 +267,7 @@ class SlorControl:
 
         # Replace with readmap with a versioned one, save it if "save_redmap"
         # is specified and shuffle
-        if stage == "prepare":
+        if stage_class == "prepare":
             cfg_keys = (
                 "sz_range",
                 "bucket_prefix",
@@ -282,15 +291,6 @@ class SlorControl:
                 sys.stdout.write("done{}\n".format(bcolors.ENDC))
                 sys.stdout.flush()
             random.shuffle(self.readmap)
-
-        if (
-            opclass_from_label(stage) == "mixed"
-            and self.mixed_count < len(self.config["mixed_profiles"]) - 1
-        ):
-            self.mixed_count += 1
-
-        if stage != "sleep":
-            self.last_stage = stage
 
         del self.stats_h
         self.reread = 0
@@ -430,23 +430,14 @@ class SlorControl:
                 stat_h.readmap_progress(z, objcount, final=fin)
                 
 
-    def parse_stage_string(self, stage_str):
-        items = stage_str.split("~")
-        if len(items) == 2:
-            return items[0], int(items[1])
-        else:
-            # Sleep time has it's own global config so deal with it here
-            return items[0], int(self.config["sleeptime"]) if items[
-                0
-            ] == "sleep" else int(self.config["run_time"])
+
 
     def mk_stage(self, target, stage, wid, duration):
         """
         Create a configuration specific to the target driver
         """
-
-        stage = opclass_from_label(stage)
-
+        stage_class = opclass_from_label(stage)
+        load_index = int(stage[stage.find(":")+1:])
         # Base config for every stage
         config = {
             "host": target["host"],
@@ -471,13 +462,14 @@ class SlorControl:
             "cache_overrun_sz": int(
                 self.config["ttl_sz_cache"] / len(self.config["driver_list"])
             ),
-            "mixed_profile": self.config["mixed_profiles"][self.mixed_count],
+            "mixed_profile": self.config["mixed_profiles"][load_index],
             "startup_delay": (DRIVER_REPORT_TIMER / len(self.config["driver_list"])),
             "key_prefix": self.config["key_prefix"],
             "versioning": self.config["versioning"],
             "remove_buckets": self.config["remove_buckets"],
             "use_existing_buckets": self.config["use_existing_buckets"],
-            "get_range": self.config["get_range"]
+            "get_range": self.config["get_range"],
+            "label": stage
         }
 
         # Work out the readmap slices
@@ -486,29 +478,29 @@ class SlorControl:
         end_slice = offset + chunk
         mapslice = self.readmap[offset:end_slice]
 
-        if stage == "init":
+        if stage_class == "init":
             config["type"] = "init"
             config["bucket_list"] = []
-        if stage == "prepare":
+        if stage_class == "prepare":
             config["type"] = "prepare"
             config["readmap"] = mapslice
-        if stage == "blowout":
+        if stage_class == "blowout":
             config["type"] = "blowout"
-        if stage == "read":
+        if stage_class == "read":
             config["type"] = "read"
             config["readmap"] = mapslice
-        if stage == "write":
+        if stage_class == "write":
             config["type"] = "write"
-        if stage == "mixed":
+        if stage_class == "mixed":
             config["type"] = "mixed"
             config["readmap"] = mapslice
-        if stage == "delete":
+        if stage_class == "delete":
             config["type"] = "delete"
             config["readmap"] = mapslice
-        if stage == "head":
+        if stage_class == "head":
             config["type"] = "head"
             config["readmap"] = mapslice
-        if stage == "cleanup":
+        if stage_class == "cleanup":
             config["type"] = "cleanup"
 
         return config
