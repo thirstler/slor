@@ -95,7 +95,7 @@ POSIX_DB_TMP = "/tmp/"
 MINIMUM_MPU_CHUNK_SIZE = 5000000
 
 ##
-# Soem color short-hand
+# Some color short-hand
 class bcolors:
     HEADER = "\033[95m"
     OKBLUE = "\033[94m"

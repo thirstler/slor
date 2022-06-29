@@ -174,7 +174,7 @@ class SlorAnalysis:
 
             left.append(self.format_key_value("Stage configuration:", ""))
             left.append(self.format_key_value("Run time:", s_config[0]["run_time"]))
-            left.append(self.format_key_value("Prepared objects:", rmkeys))
+            left.append(self.format_key_value("Prepared objects:", "~"+ str(int(global_config["ttl_prepare_sz"]/obj_sz_range.avg))))
             right = []
             left.append(
                 self.format_key_value(
