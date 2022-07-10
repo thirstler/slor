@@ -1,7 +1,7 @@
 from slor.shared import *
 from slor.process import SlorProcess
 import time
-
+import sqlite3
 
 class Mixed(SlorProcess):
 
@@ -23,6 +23,12 @@ class Mixed(SlorProcess):
         self.rangeObj = sizeRange(low=int(config["sz_range"]["low"]), high=int(config["sz_range"]["high"]))
         self.rangeKey = sizeRange(low=int(config["key_sz"]["low"]), high=int(config["key_sz"]["high"]))
 
+        self.writelog = sqlite3.connect(WRITE_LOG_LOCATION)
+        try:
+            self.wl_con = self.writelog.execute('''CREATE TABLE writelog (id INT PRIMARY KEY NOT NULL, key TEXT NOT NULL, version TEXT)''')
+        except:
+            pass
+        
     def ready(self):
 
         self.dice = self.mk_dice()

@@ -265,10 +265,12 @@ def classic_workload(args):
 
     tasks = generate_tasks(args)
 
+
     if args.prepare_objects:
         ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
     else:
         ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.iop_limit)
+        args.prepare_objects = int(args.stage_time) * int(args.iop_limit)
 
     # Create a working config from command line arguments
     root_config = {

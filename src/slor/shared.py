@@ -5,7 +5,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.45
+SLOR_VERSION = 0.46
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -93,6 +93,8 @@ WRITE_STAGE_BYTEPOOL_SZ = 16777216
 WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
 MINIMUM_MPU_CHUNK_SIZE = 5000000
+WRITE_LOG_LOCATION="/dev/shm/slor_writelog.db"
+
 
 ##
 # Some color short-hand
@@ -118,7 +120,7 @@ class sizeRange:
     high:int = None
     avg:float = None
 
-    def __init__(self, low:int=None, high:int=None, range_arg:str=None):
+    def __init__(self, low:int=0, high:int=0, range_arg:str=None):
 
         # Create range values from argument input
         if range_arg:
@@ -129,20 +131,13 @@ class sizeRange:
             elif len(items) == 2:
                 low = parse_size(items[0])
                 high = parse_size(items[1])
+                
+        if low  > high:
+            high =  low
 
-        # I'm sure there's a more clever way to do this:
-        if low and high:
-            self.avg = (low+high)/2
-            self.low = low
-            self.high = high
-        elif low:
-            self.avg = low
-            self.high = low
-            self.low = low
-        elif high:
-            self.avg = high
-            self.high = high
-            self.low = high
+        self.avg = (low+high)/2
+        self.low = low
+        self.high = high
     
     def getVal(self) -> int:
         """return random int in range"""
@@ -167,6 +162,9 @@ def parse_size(stringval: str) -> int:
     # if float(stringval)
     if stringval == None:
         return None
+
+    if stringval[:1] == "0":
+        return 0
 
     """Parse human input for size values"""
     pwr = 10
