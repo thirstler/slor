@@ -1,16 +1,6 @@
 from slor.shared import *
 
 def config_text(config):
-
-    # Sloppy but whatever
-    try:
-        blksz = config["driver_proc"] * len(config["driver_list"])
-        objcount = (
-            int(config["ttl_prepare_sz"] / config["sz_range"]["high"]) + 1
-        )
-        readmap_size =  objcount - (objcount % blksz) + blksz
-    except:
-        readmap_size = 0
         
     cft_text = "CONFIGURATION:\n"
     cft_text += "\n"
@@ -57,7 +47,7 @@ def config_text(config):
             )
         )
         cft_text += "Prepared objects:   {0} (readmap length)\n".format(
-            human_readable(readmap_size, print_units="ops")
+            human_readable(config["prepare_objects"], print_units="ops")
         )
         if not config["no_db"]:
             cft_text += "Database file:      {0} (base file name)\n".format("{}{}.db".format(POSIX_DB_TMP, config["name"]))

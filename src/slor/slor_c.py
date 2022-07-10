@@ -265,7 +265,7 @@ class SlorControl:
             self.stats_h.show()
             time.sleep(0.01)
 
-        # Replace with readmap with a versioned one, save it if "save_redmap"
+        # Replace readmap with a versioned one, save it if "save_readmap"
         # is specified and shuffle
         if stage_class == "prepare":
             cfg_keys = (
@@ -320,13 +320,9 @@ class SlorControl:
         sys.stdout.flush()
 
     def get_readmap_len(self):
-        try:
-            blksz = self.config["driver_proc"] * len(self.config["driver_list"])
-            objcount = (
-                int(self.config["ttl_prepare_sz"] / self.config["sz_range"]["high"]) + 1
-            )
-        except:
-            objcount = 0
+
+        blksz = self.config["driver_proc"] * len(self.config["driver_list"])
+        objcount = int(self.config["prepare_objects"]) + 1
 
         return objcount - (objcount % blksz) + blksz
 
