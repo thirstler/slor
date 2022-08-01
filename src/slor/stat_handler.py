@@ -159,16 +159,19 @@ class statHandler:
         elif len(self.standing_sample) == 0:
             color = bcolors.FAIL
         elif self.ttl_procs > len(self.standing_sample):
-            color = bcolors.OKGREEN
+            color = bcolors.WARNING
         elif self.ttl_procs == len(self.standing_sample):
-            color = bcolors.OKBLUE
+            color = bcolors.CYAN
 
             # Now that all processes are reporting, start using figures for
             # calculating a final averages.
             calc_avg = True
-
         else:  # should never happen
             color = bcolors.FAIL
+
+        # If we're in a cleaup stage override all this shit and do CYAN    
+        if self.stage == "cleanup":
+            color = bcolors.CYAN
 
         # Multiple operations in the sample (mixed)
         if len(stat_sample.operations) > 1:
@@ -177,7 +180,7 @@ class statHandler:
                 row_data = [("\u2502", 26, "", "<")]
                 for op in stat_sample.operations:
                     row_data.append((op, 14, "", ">"))
-                row_data.append(("total", 14, "", ">"))
+                row_data.append(("total", 12, "", ">"))
                 row_data.append(("elapsed", 10, "", ">"))
                 sys.stdout.write(format_row(row_data, replace=False, newline=True, padding=1))
                 self.headers = False
@@ -210,7 +213,7 @@ class statHandler:
             # Record op history and show each operation response time
             row_data = [
                 ("\u2502", 1, "", "<"),
-                (self.stage_class+":", 8, "", ">"),
+                (self.stage_class+":", 8, color, ">"),
                 (progress_chars, 18, "", "<")
             ]
             for op in self.operations:
@@ -260,10 +263,10 @@ class statHandler:
                     [
                         ("\u2502", 1, "", "<"),
                         ("results:", 24, bcolors.BOLD, ">", ),
-                        ("throughput", 14, "", ">"),
+                        ("objects/s", 12, "", ">"),
                         ("bandwidth", 14, "", ">"),
-                        ("resp ms", 14, "", ">"),
-                        ("failures", 14, "", ">"),
+                        ("xfer ms avg", 14, "", ">"),
+                        ("failures/s", 12, "", ">"),
                         ("CV", 8, "", ">")
                     ],
                     replace=False,
@@ -282,10 +285,10 @@ class statHandler:
                         [
                             ("\u2502", 1, "", "<"),
                             (op+":", 24, "", ">", ),
-                            (self.disp_ops_sec(rate_s), 14, "", ">"),
+                            (self.disp_ops_sec(rate_s), 12, "", ">"),
                             (self.disp_bytes_sec(bytes_s), 14, "", ">"),
                             (self.disp_resp_avg(resp_a), 14, "", ">"),
-                            (self.disp_failure_count(failures), 14, "", ">"),
+                            (self.disp_failure_count(failures), 12, "", ">"),
                             ("{}{:>7.2f}%{}".format(respdev_col, (resp_sd/resp_a)*100, bcolors.ENDC), 8, "", "<")
                         ],
                         replace=False,
@@ -302,10 +305,10 @@ class statHandler:
                 sys.stdout.write(format_row(
                     [
                         ("\u2502", 26, "", "<"),
-                        ("throughput", 14, "", ">"),
+                        ("objects/s", 12, "", ">"),
                         ("bandwidth", 14, "", ">"),
-                        ("resp ms", 14, "", ">"),
-                        ("failures", 14, "", ">"),
+                        ("xfer ms avg", 14, "", ">"),
+                        ("failures/s", 12, "", ">"),
                         ("elapsed", 10, "", ">")
                     ],
                     replace=False,
@@ -366,12 +369,12 @@ class statHandler:
                 sys.stdout.write(format_row(
                     [
                         ("\u2502", 1, "", "<"),
-                        (self.stage_class+":", 8, "", ">", ),
+                        (self.stage_class+":", 8, color, ">", ),
                         (progress_chars, 18, "", ">"),
-                        (self.disp_ops_sec(rate_s), 14, "", ">"),
+                        (self.disp_ops_sec(rate_s), 12, "", ">"),
                         (self.disp_bytes_sec(bytes_s), 14, "", ">"),
                         (self.disp_resp_avg(resp_a), 14, "", ">"),
-                        (self.disp_failure_count(failures), 14, "", ">"),
+                        (self.disp_failure_count(failures), 12, "", ">"),
                         (self.elapsed_time(), 10, "", ">")
                     ],
                     replace=False,
@@ -395,13 +398,10 @@ class statHandler:
 
                         sys.stdout.write("\n")
                         if all(self.stage_class != x for x in ("prepare", "cleanup")):
-                            #box_line("         {0}instability (CV) ".format(bcolors.ITALIC+bcolors.GRAY))
-                            #sys.stdout.write(" "*30 + "{}{}{}".format(respdev_col, "{:>12.2f}%".format(resp_cv), bcolors.ENDC))
-                            #sys.stdout.write("\n")
                             sys.stdout.write(format_row(
                                 [
                                     ("\u2502", 1, "", "<"),
-                                    ("instability (CV):", 54, bcolors.ITALIC+bcolors.GRAY, ">"),
+                                    ("instability (CV):", 52, bcolors.ITALIC+bcolors.GRAY, ">"),
                                     ("{:>12.2f}%".format(resp_cv), 14, bcolors.ITALIC+bcolors.GRAY, ">")
 
                                 ],
@@ -517,23 +517,23 @@ class statHandler:
 
 
     def disp_bytes_sec(self, bytes_sec, width=14):
-        width=width-4
+        width=width-4  # minus number "real" characters in the format string.
         return "[{0:>{1}}/s]".format(human_readable(bytes_sec), str(width))
 
 
-    def disp_ops_sec(self, ops_sec, color="", width=14):
-        width=width-7
+    def disp_ops_sec(self, ops_sec, color="", width=12):
+        width=width-4  # minus number "real" characters in the format string.
         h_rate = human_readable(ops_sec, print_units="ops")
-        return "[{0}{1:>{3}} op/s{2}]".format(
+        return "[{0}{1:>{3}}/s{2}]".format(
             color, h_rate, bcolors.ENDC, str(width)
         )
 
 
     def disp_resp_avg(self, resp_avg, width=14):
-        width=width-5
+        width=width-5  # minus number "real" characters in the format string.
         return "[{0:>{1}.2f} ms]".format(resp_avg * 1000, str(width))
 
 
-    def disp_failure_count(self, count=0, width=14):
-        width=width-6
-        return "[{0:>{1}} ttl]".format(human_readable(count, print_units="ops"), str(width))
+    def disp_failure_count(self, count=0, width=12):
+        width=width-4 # minus number "real" characters in the format string.
+        return "[{0:>{1}}/s]".format(human_readable(count, print_units="ops"), str(width))
