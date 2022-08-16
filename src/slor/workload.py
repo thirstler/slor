@@ -284,6 +284,8 @@ def classic_workload(args):
         "region": args.region,
         "key_sz": sizeRange(range_arg=args.key_length).serialize(),
         "sz_range": sizeRange(range_arg=args.object_size).serialize(),
+        "random_from_pool": args.random_from_pool,
+        "compressible": float(args.compressible)/100,
         "mpu_size": parse_size(args.mpu_size),
         "run_time": int(args.stage_time),
         "bucket_count": int(args.bucket_count),

@@ -22,19 +22,20 @@ class Mixed(SlorProcess):
         self.benchmark_stop = time.time() + config["run_time"]
         self.rangeObj = sizeRange(low=int(config["sz_range"]["low"]), high=int(config["sz_range"]["high"]))
         self.rangeKey = sizeRange(low=int(config["key_sz"]["low"]), high=int(config["key_sz"]["high"]))
-
-        self.writelog = sqlite3.connect(WRITE_LOG_LOCATION)
-        try:
-            self.wl_con = self.writelog.execute('''CREATE TABLE writelog (id INT PRIMARY KEY NOT NULL, key TEXT NOT NULL, version TEXT)''')
-        except:
-            pass
+        
+        # DELETE ME???
+        #self.writelog = sqlite3.connect(WRITE_LOG_LOCATION)
+        #try:
+        #    self.wl_con = self.writelog.execute('''CREATE TABLE writelog (id INT PRIMARY KEY NOT NULL, key TEXT NOT NULL, version TEXT)''')
+        #except:
+        #    pass
         
     def ready(self):
 
-        self.dice = self.mk_dice()
-        self.mk_byte_pool(WRITE_STAGE_BYTEPOOL_SZ)
-
         if self.hand_shake():
+            self.dice = self.mk_dice()
+            if self.config["random_from_pool"]:
+                self.mk_byte_pool(self.rangeObj.high * 2)
             self.delay()
             self.exec()
 
@@ -101,12 +102,13 @@ class Mixed(SlorProcess):
             mpu_info = []
             for part_num in range(1, int(blen / self.config["mpu_size"]) + 2):
                 outer = part_num * self.config["mpu_size"]
-                bytes = (
+                part_bytes = (
                     self.config["mpu_size"]
                     if outer <= blen
                     else (self.config["mpu_size"] - (outer - blen))
                 )
-                body_data = self.get_bytes_from_pool(int(bytes))
+                #body_data = self.get_bytes_from_pool(int(part_bytes))
+                body_data = self.get_random_bytes(int(part_bytes), from_pool=self.config["random_from_pool"])
                 up_resp = self.s3ops.s3client.upload_part(
                     Body=body_data,
                     Bucket=bucket,
@@ -137,7 +139,8 @@ class Mixed(SlorProcess):
 
     def _write(self):
         size = self.rangeObj.getVal()
-        body_data = self.get_bytes_from_pool(size)
+        #body_data = self.get_bytes_from_pool(size)
+        body_data = self.get_random_bytes(size, from_pool=self.config["random_from_pool"])
 
         # Create new key and add to list of written objects
         self.writemap.append(
@@ -241,7 +244,8 @@ class Mixed(SlorProcess):
             self.stop_io(failed=True)
 
     def _overwrite(self):
-        body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
+        #body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
+        body_data = self.get_random_bytes(self.rangeObj.getVal(), from_pool=self.config["random_from_pool"])
         key = self.get_key_from_existing()
         size = len(body_data)
         
@@ -297,6 +301,7 @@ class Mixed(SlorProcess):
 
     def exec(self):
 
+        self.msg_to_driver(type="driver", value="process started for mixed stage")
         self.start_benchmark()
         self.start_sample()
         while True:

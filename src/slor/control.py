@@ -156,6 +156,17 @@ def run():
         ),
     )
     parser.add_argument(
+        "--random-from-pool",
+        action="store_true",
+        default=False,
+        help="use a pool of random data when writing rather than generate it on-the-fly - uses less CPU, but storage systems that dedupe will know",
+    )
+    parser.add_argument(
+        "--compressible",
+        default=0,
+        help="make random data compressible by N%",
+    )
+    parser.add_argument(
         "--get-range",
         default=None,
         help="specify a size or size range (e.g.: 1024-9172, or 712 or 15K) to get from prepared objects, noting that it cannot be larger than the prepared objects"

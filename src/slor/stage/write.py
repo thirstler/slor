@@ -5,6 +5,7 @@ import time
 
 
 class Write(SlorProcess):
+
     def __init__(self, socket, config, w_id, id):
         self.sock = socket
         self.id = id
@@ -16,12 +17,14 @@ class Write(SlorProcess):
 
     def ready(self):
 
-        self.mk_byte_pool(self.rangeObj.high * 2)
         if self.hand_shake():
+            if self.config["random_from_pool"]:
+                self.mk_byte_pool(self.rangeObj.high * 2)
             self.delay()
             self.exec()
 
     def exec(self):
+        self.msg_to_driver(type="driver", value="process started for write stage")
         w_str = str(self.config["w_id"])
         self.start_benchmark()
         self.start_sample()
@@ -37,7 +40,8 @@ class Write(SlorProcess):
                 inc=ocount,
                 prefix=DEFAULT_WRITE_PREFIX + self.config["key_prefix"] + w_str,
             )
-            body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
+            #body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
+            body_data = self.get_random_bytes(self.rangeObj.getVal(), from_pool=self.config["random_from_pool"])
             try:
                 self.start_io("write")
                 self.s3ops.put_object(bucket, key, body_data)

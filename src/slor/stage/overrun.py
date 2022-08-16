@@ -12,14 +12,15 @@ class Overrun(SlorProcess):
 
     def ready(self):
 
-        self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ * 2)
-
         if self.hand_shake():
+            if self.config["random_from_pool"]:
+                self.mk_byte_pool(DEFAULT_CACHE_OVERRUN_OBJ * 2)
             self.delay()
             self.exec()
 
     def exec(self):
-
+        
+        self.msg_to_driver(type="driver", value="process started for blow-out stage")
         count = (
             int(
                 self.config["cache_overrun_sz"]
@@ -37,7 +38,8 @@ class Overrun(SlorProcess):
             if self.check_for_messages() == "stop":
                 break
 
-            body_data = self.get_bytes_from_pool(DEFAULT_CACHE_OVERRUN_OBJ)
+            #body_data = self.get_bytes_from_pool(DEFAULT_CACHE_OVERRUN_OBJ)
+            body_data =self.get_random_bytes(DEFAULT_CACHE_OVERRUN_OBJ, from_pool=self.config["random_from_pool"])
             key = "w{}t{}o{}".format(self.config["w_id"], self.id, o)
 
             for i in range(0, PREPARE_RETRIES):

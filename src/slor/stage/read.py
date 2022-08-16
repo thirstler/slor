@@ -19,7 +19,7 @@ class Read(SlorProcess):
             self.exec()
 
     def exec(self):
-
+        self.msg_to_driver(type="driver", value="process started for read stage")
         self.start_benchmark()
         self.start_sample()
         stop = False

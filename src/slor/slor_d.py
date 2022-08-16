@@ -11,6 +11,7 @@ import slor.stage.workload
 import slor.stage.cleanup
 import boto3
 import time
+import json
 from multiprocessing import Process, Pipe
 
 
@@ -42,7 +43,7 @@ def _driver_t(socket, config, w_id, id):
 
 class SlorDriver:
     """
-    Slor driver root class. This
+    Slor driver root class.
     """
 
     sock = None
@@ -58,12 +59,42 @@ class SlorDriver:
     bindport = None
     w_name = None
     w_id = None
+    logfile = None
 
-    def __init__(self, socket, bindaddr, bindport):
+    def __init__(self, socket, bindaddr, bindport, args):
 
         self.sock = socket
         self.bindaddr = bindaddr
         self.bindport = bindport
+        self.d_id = str(self.bindaddr)+":"+str(bindport)
+
+        if args != None:
+            self.logfile = args.logfile
+        else:
+            self.logfile = DEFAULT_DRIVER_LOGFILE
+        self.logfile += "-"+self.d_id+".log"
+
+        try:
+            self.loghandle = open(self.logfile, "a")
+        except Exception as e:
+            sys.stderr.write("failed to open log file ({}): {}".format(self.logfile, e))
+        
+        self.logger("driver started")
+
+    def logger(self, message:str, p_id:str=None):
+        logobj = {
+            "ts": int(time.time() * 1000),
+            "d_id": self.d_id,
+            "message": message
+        }
+        if p_id != None:
+            logobj["p_id"] = p_id
+
+        try:
+            self.loghandle.write(json.dumps(logobj)+"\n")
+            self.loghandle.flush()
+        except Exception as e:
+            sys.stderr.write("failed to write to log file ({}): {}".format(self.logfile, e))
 
     def exec(self):
 
@@ -91,7 +122,7 @@ class SlorDriver:
 
         # loops and whatever else are done. Close shop.
         self.reset = False
-        print(" done with controller")
+        self.logger("done with controller")
         self.sock.close()
 
     def init_buckets(self, config):
@@ -198,6 +229,7 @@ class SlorDriver:
         """If the message is a string then it will be echoed to the console on the controller"""
         if not message:
             return
+
         if type(message) is str:
             message = {"message": message}
 
@@ -231,7 +263,7 @@ class SlorDriver:
     def thread_control(self, config):
 
         ##
-        # Clean-up is handled a little differently
+        # Clean-up stage is handled a little differently
         if config["type"] == "cleanup":
 
             drivers = len(config["driver_list"])
@@ -305,7 +337,7 @@ class SlorDriver:
 
                     # Basically everything is sent back to the controller
                     self.log_to_controller(
-                        self.process_thread_resp(t[0].recv())
+                        self.filter_thread_resp(t[0].recv())
                     )
 
             # Mark active if any threads are active
@@ -327,11 +359,16 @@ class SlorDriver:
         # Alert controller that the current workload is finished
         self.log_to_controller({"status": "done"})
 
-    def process_thread_resp(self, resp):
+    def filter_thread_resp(self, resp):
         # we can filter messages intended for the driver if we want
         if "status" in resp and resp["status"] == "done":
-            print("thread {0} exited".format(resp["t_id"]))
+            self.logger("process {0} exited".format(resp["t_id"]))
             return False
+        if "type" in resp and resp["type"] == "driver":
+            self.logger(resp["value"], p_id=resp["t_id"])
+            return False
+        
+        # pass-thru
         return resp
 
     def workload_handshake(self):

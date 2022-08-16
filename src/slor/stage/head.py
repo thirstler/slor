@@ -23,6 +23,7 @@ class Head(SlorProcess):
 
     def exec(self):
 
+        self.msg_to_driver(type="driver", value="process started for head stage")
         self.start_benchmark()
         self.start_sample()
         stop = False

@@ -23,6 +23,7 @@ class Delete(SlorProcess):
 
     def exec(self):
 
+        self.msg_to_driver(type="driver", value="process started for delete stage")
         self.start_benchmark()
         self.start_sample()
 

@@ -20,6 +20,7 @@ class CleanUp(SlorProcess):
 
     def exec(self):
 
+        self.msg_to_driver(type="driver", value="process started for cleanup stage")
         if self.config["verify"] == True:
             verify_tls = True
         elif self.config["verify"].to_lower() == "false":

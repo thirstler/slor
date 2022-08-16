@@ -5,7 +5,7 @@ import sys
 from multiprocessing.connection import Listener
 
 
-def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):
+def _slor_driver(bindaddr, bindport, exit_on_disconnect, args=None, quiet=False):
     """Non-cli entry point"""
     try:
         server_sock = Listener((bindaddr, int(bindport)))
@@ -21,7 +21,7 @@ def _slor_driver(bindaddr, bindport, exit_on_disconnect, quiet=False):
         sock = server_sock.accept()
         if not quiet:
             print(" new connection")
-        handle = SlorDriver(sock, bindaddr, bindport)
+        handle = SlorDriver(sock, bindaddr, bindport, args)
         handle.exec()
         sock.close()
         del handle
@@ -51,12 +51,17 @@ def run():
         default=False,
         help="display version and exit",
     )
+    parser.add_argument(
+        "--logfile",
+        default=DEFAULT_DRIVER_LOGFILE,
+        help="specify log driver file",
+    )
     args = parser.parse_args()
 
     if args.version:
         print("SLoR version: {}".format(SLOR_VERSION))
         sys.exit(0)
 
-    _slor_driver(args.bindaddr, args.listen, False)
+    _slor_driver(args.bindaddr, args.listen, False, args=args)
 
     sys.exit(0)

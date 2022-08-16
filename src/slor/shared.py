@@ -3,9 +3,10 @@ import platform
 import configparser
 import os, sys
 import random
+import numpy
 import string
 
-SLOR_VERSION = 0.46
+SLOR_VERSION = 0.47
 
 # Defaults
 DEFAULT_PROFILE_DEF = ""
@@ -29,6 +30,7 @@ DEFAULT_CACHE_OVERRUN_OBJ = 8388608
 DEFAULT_CACHE_OVERRUN_PREFIX = "overrun/"
 DEFAULT_SLEEP_TIME = 30
 DEFAULT_STATS_SAMPLE_LEN = 1048576
+DEFAULT_DRIVER_LOGFILE = "/tmp/slor_driver"
 
 # Root help message
 ROOT_HELP = """
