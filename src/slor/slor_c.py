@@ -434,7 +434,9 @@ class SlorControl:
         """
         stage_class = opclass_from_label(stage)
         load_index = int(stage[stage.find(":")+1:])
-        # Base config for every stage
+
+        # Base config for every stage, kind of shitty because most of this is
+        # just pass-thu
         config = {
             "host": target["host"],
             "port": target["port"],
@@ -449,6 +451,8 @@ class SlorControl:
             "bucket_count": int(self.config["bucket_count"]),
             "bucket_prefix": self.config["bucket_prefix"],
             "sz_range": self.config["sz_range"],
+            "random_from_pool": self.config["random_from_pool"],
+            "compressible": self.config["compressible"],
             "mpu_size": self.config["mpu_size"],
             "key_sz": self.config["key_sz"],
             "driver_list": self.config["driver_list"],

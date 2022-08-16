@@ -17,12 +17,14 @@ class Mpu(SlorProcess):
 
     def ready(self):
 
-        self.mk_byte_pool(int(self.config["mpu_size"]) * 2)
         if self.hand_shake():
+            if self.config["random_from_pool"]:
+                self.mk_byte_pool(self.rangeObj.high * 2)
             self.delay()
             self.exec()
 
     def exec(self):
+        self.msg_to_driver(type="driver", value="process started for write (MPU) stage")
         w_str = str(self.config["w_id"])
         self.start_benchmark()
         self.start_sample()
@@ -47,12 +49,13 @@ class Mpu(SlorProcess):
                 mpu_info = []
                 for part_num in range(1, int(blen / self.config["mpu_size"]) + 2):
                     outer = part_num * self.config["mpu_size"]
-                    bytes = (
+                    part_bytes = (
                         self.config["mpu_size"]
                         if outer <= blen
                         else (self.config["mpu_size"] - (outer - blen))
                     )
-                    body_data = self.get_bytes_from_pool(int(bytes))
+                    #body_data = self.get_bytes_from_pool(int(part_bytes))
+                    body_data = self.get_random_bytes(int(part_bytes), from_pool=self.config["random_from_pool"])
                     up_resp = self.s3ops.s3client.upload_part(
                         Body=body_data,
                         Bucket=bucket,
