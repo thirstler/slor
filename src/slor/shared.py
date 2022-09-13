@@ -1,13 +1,12 @@
-import json
 import platform
 import configparser
 import os, sys
 import random
-import numpy
 import string
 
 SLOR_VERSION = 0.47
 
+##
 # Defaults
 DEFAULT_PROFILE_DEF = ""
 DEFAULT_ENDPOINT = None
@@ -20,7 +19,7 @@ DEFAULT_DRIVER_LIST = "localhost:{0}".format(DEFAULT_DRIVER_PORT)
 DEFAULT_SESSION_COUNT = "10"
 DEFAULT_UPPER_IOP_LIMIT = "1000"
 DEFAULT_TESTS = "read,write,head,mixed,delete,cleanup"
-DEFAULT_MIXED_PROFILE = '[{"read": 5, "write": 2, "delete": 2, "head": 3}]'
+DEFAULT_MIXED_PROFILE = '[{"read": 5, "write": 2, "head": 3}]'
 DEFAULT_PREPARE_SIZE = "8M"
 DEFAULT_BUCKET_COUNT = 1
 DEFAULT_WRITE_PREFIX = "write/"
@@ -32,6 +31,7 @@ DEFAULT_SLEEP_TIME = 30
 DEFAULT_STATS_SAMPLE_LEN = 1048576
 DEFAULT_DRIVER_LOGFILE = "/tmp/slor_driver"
 
+##
 # Root help message
 ROOT_HELP = """
 Slor is a distributed load generation and benchmarking tool. Please see
@@ -42,6 +42,7 @@ Usage slor.py [controller|driver|analysis] [options]
   --version             display version and exit
 """
 
+##
 # Low-level config (changing may or may not break things)
 LOG_TO_CONSOLE = True
 DRIVER_SOCKET_TIMEOUT = 300  # seconds
