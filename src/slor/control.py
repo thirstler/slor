@@ -139,7 +139,7 @@ def run():
     parser.add_argument(
         "--key-length",
         default=DEFAULT_KEY_LENGTH,
-        help="key length(s) to use, can be single number or range (e.g. 10,50) - defaults to {0}".format(
+        help="key length(s) to use, can be single number or range (e.g. 10-50) - defaults to {0}".format(
             DEFAULT_KEY_LENGTH
         ),
     )
@@ -164,7 +164,7 @@ def run():
     parser.add_argument(
         "--compressible",
         default=0,
-        help="make random data compressible by N%",
+        help="make random data compressible by N percent",
     )
     parser.add_argument(
         "--get-range",
