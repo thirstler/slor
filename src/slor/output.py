@@ -66,11 +66,12 @@ def config_text(config):
         config["driver_proc"],
         (int(config["driver_proc"]) * len(config["driver_list"])),
     )
-    cft_text += "Cache overrun size: {0} ({1} x {2} objects)\n".format(
-        human_readable(config["ttl_sz_cache"]),
-        (int(config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ) + 1),
-        human_readable(DEFAULT_CACHE_OVERRUN_OBJ),
-    )
+    if config["ttl_sz_cache"] > 0:
+        cft_text += "Cache overrun size: {0} ({1} x {2} objects)\n".format(
+            human_readable(config["ttl_sz_cache"]),
+            (int(config["ttl_sz_cache"] / DEFAULT_CACHE_OVERRUN_OBJ) + 1),
+            human_readable(DEFAULT_CACHE_OVERRUN_OBJ),
+        )
     cft_text += "Stages:\n"
     stagecount = 0
     mixed_count = 0
