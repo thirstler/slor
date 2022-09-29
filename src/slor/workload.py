@@ -162,6 +162,7 @@ def parse_size_range(stringval):
         return (low, high, avg)
 '''
 
+
 def parse_driver_list(stringval):
     hostlist = []
     for hostport in stringval.split(","):
@@ -188,6 +189,8 @@ def generate_tasks(args):
 
     loads = list(args.loads.split(","))
     mix_prof_obj = {}
+    config_supplements = {}
+
     for l in loads:
         if l not in LOAD_TYPES:
             sys.stderr.write('"{0}" is not a load option\n'.format(l))
@@ -222,7 +225,17 @@ def generate_tasks(args):
     if args.remove_buckets and "cleanup" not in loads:
         loads.append("cleanup")
 
-    return {"loadorder": loads, "mixed_profiles": mix_prof_obj}
+    ##
+    # Add supplemental config overrides
+    if int(args.prepare_procs_per_driver) != -1 and  "prepare" in loads:
+        if "prepare" not in config_supplements:
+            config_supplements["prepare"] = {}
+        config_supplements["prepare"]["processes"] = int(args.prepare_procs_per_driver)
+
+    
+    tasks = {"loadorder": loads, "mixed_profiles": mix_prof_obj, "config_supplements": config_supplements}
+
+    return tasks
 
 
 def basic_workload(args):
@@ -265,12 +278,12 @@ def classic_workload(args):
 
     tasks = generate_tasks(args)
 
-
     if args.prepare_objects:
         ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
     else:
         ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.iop_limit)
         args.prepare_objects = int(args.stage_time) * int(args.iop_limit)
+
 
     # Create a working config from command line arguments
     root_config = {

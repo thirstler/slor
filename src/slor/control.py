@@ -190,6 +190,11 @@ def run():
         ),
     )
     parser.add_argument(
+        "--prepare-procs-per-driver",
+        default="-1",
+        help="number of processes per driver to run during the prepare stage, defaults to processes-per-driver value".format(),
+    )
+    parser.add_argument(
         "--cachemem-size",
         default="0",
         help="total amount of memory available in the target cluster for page cache and read caches; post-prepare stage will write this value to overwhelm caches for a cold read stage",

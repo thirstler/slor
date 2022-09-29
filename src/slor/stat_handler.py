@@ -55,6 +55,14 @@ class statHandler:
         # How many processes in this job are we expecting?
         self.ttl_procs = len(self.config["driver_list"]) * self.config["driver_proc"]
 
+        # Overrideable config (kill me now)
+        if self.stage_class in self.config["tasks"]["config_supplements"]:
+
+            # Process count override
+            if "processes" in self.config["tasks"]["config_supplements"][self.stage_class]:
+                self.ttl_procs = self.config["tasks"]["config_supplements"][self.stage_class]["processes"]
+
+
     def set_count_target(self, count):
         self.count_target = count
 

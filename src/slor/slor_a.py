@@ -8,7 +8,7 @@ import statistics
 import pickle
 import zlib
 from  datetime import datetime
-
+        
 class SlorAnalysis:
     conn = None
     stages = None
@@ -162,7 +162,7 @@ class SlorAnalysis:
                     driver["readmap"].clear()
             
             # Start new "test" string #
-            sys.stdout.write("STAGE: " + stage + "\n\n")
+            sys.stdout.write("─"*32 + "┤ " + "STAGE: {:>10}".format(stage) + " ├" + "─"*32 + "\n\n")
             text = ""
             left = []
             try:
@@ -219,8 +219,6 @@ class SlorAnalysis:
                         ),
                     )
                 )
-
-
 
             left.append(
                 self.format_key_value(
@@ -418,7 +416,10 @@ class SlorAnalysis:
 
                 if (i + 1) < len(stats[stage]["operations"]):
                     text += "\n"
-
+                text += "\nResponse time distribution, {}, (99% percentile):\n\n".format(operation)
+                text += str(alias["histogram"])
+                text += "\n"
+                
             indent(text, indent=2)
 
     def get_all_basic_stats(self):
@@ -559,6 +560,7 @@ class SlorAnalysis:
 
         returnval = {"global": globals, "operations": {}}
         for op in master.get_operations():
+            iotimes = master.get_metric("iotime", op)
             returnval["operations"][op] = {
                 "ios/s": master.get_rate("ios", op),
                 "bytes/s": master.get_rate("bytes", op),
@@ -568,8 +570,15 @@ class SlorAnalysis:
                 "resp_avg": master.get_resp_avg(op),
                 "ttl_operations": master.get_metric("ios", op),
                 "ttl_bytes": master.get_metric("bytes", op),
-                "resp_perc": self.get_precentiles(master.get_metric("iotime", op)),
-                "resp_stddiv": statistics.stdev(master.get_metric("iotime", op))
+                "resp_perc": self.get_precentiles(iotimes),
+                "resp_stddiv": statistics.stdev(iotimes),
+                "histogram": histogram(
+                    iotimes,
+                    72,
+                    height=8,
+                    min_val=0,
+                    units="ms",
+                    h_tickers=6)
                 
             }
         cur.close()

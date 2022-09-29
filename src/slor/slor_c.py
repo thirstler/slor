@@ -56,9 +56,7 @@ class SlorControl:
 
         print("")
         top_box()
-        sys.stdout.write(
-            "\u2502 STAGES ({}); ".format(len(load_order))
-        )
+        sys.stdout.write("\u2502 STAGES ({}); ".format(len(load_order)))
         sys.stdout.write("\n\u2502\n")
 
         # Get database handler going
@@ -80,7 +78,10 @@ class SlorControl:
                 random.shuffle(self.readmap)
 
             elif stage_class == "sleep":
-                box_line("     [     sleeping ({})...     ]   ".format(duration), newline=False)
+                box_line(
+                    "     [     sleeping ({})...     ]   ".format(duration),
+                    newline=False,
+                )
                 time.sleep(duration)
                 continue
 
@@ -88,12 +89,16 @@ class SlorControl:
                 self.mk_read_map()
                 continue
 
-            self.exec_stage(stage, duration)
+            supplement = (
+                self.config["tasks"]["config_supplements"][stage_class]
+                if stage_class in self.config["tasks"]["config_supplements"]
+                else None
+            )
+            self.exec_stage(stage, duration, supplement)
 
         for c in self.conn:
             c.close()
-        
-        
+
         if not self.config["no_db"]:
             box_line("stopping db handler...")
             self.db_sock.send({"command": "STOP"})
@@ -103,7 +108,6 @@ class SlorControl:
         bottom_box()
 
         print("\ndone.\n")
-
 
     def connect_to_driver(self):
         ret_val = True
@@ -165,18 +169,18 @@ class SlorControl:
                 return_msg.append(self.conn[i].recv())
         return return_msg
 
-    def exec_stage(self, stage, duration):
+    def exec_stage(self, stage, duration, supplement):
         """
         Contains the main loop communicating with driver processes
         """
         stage_class = opclass_from_label(stage)
-        workload_index = int(stage[stage.find(":")+1:])
+        workload_index = int(stage[stage.find(":") + 1 :])
         workloads = []
         n_wrkrs = len(self.config["driver_list"])
 
         # Create the workloads
         for wc, target in enumerate(self.config["driver_list"]):
-            stage_cfg = self.mk_stage(target, stage, wc, duration)
+            stage_cfg = self.mk_stage(target, stage, wc, duration, supplement)
             if stage_cfg:
                 workloads.append(stage_cfg)
             else:
@@ -197,7 +201,7 @@ class SlorControl:
                 sys.stdout.write("\r\u2502 error sending stats to db process")
                 sys.stdout.flush()
                 pass
-            
+
             del send_copy
 
         # Distribute buckets to driver for init
@@ -294,7 +298,7 @@ class SlorControl:
 
         del self.stats_h
         self.reread = 0
-        
+
     def block_until_ready(self):
 
         sys.stdout.write("\r\u2502 [waiting on worker processes...]")
@@ -350,7 +354,11 @@ class SlorControl:
             if int(message["value"]) > self.reread:
                 self.reread = int(message["value"])
         elif "message" in message:
-            print("\u2502 message from {0}: {1}".format(message["w_id"], message["message"]))
+            print(
+                "\u2502 message from {0}: {1}".format(
+                    message["w_id"], message["message"]
+                )
+            )
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             if not self.config["no_db"]:
@@ -414,26 +422,33 @@ class SlorControl:
                         ),
                         self.config["key_prefix"]
                         + gen_key(
-                            key_desc=(self.config["key_sz"]["low"], self.config["key_sz"]["high"]),
+                            key_desc=(
+                                self.config["key_sz"]["low"],
+                                self.config["key_sz"]["high"],
+                            ),
                             inc=z,
                             prefix=DEFAULT_READMAP_PREFIX,
                         ),
-                        []
+                        [],
                     )
                 )
                 if (z + 1) == objcount:
                     fin = True
                 stat_h.readmap_progress(z, objcount, final=fin)
-                
 
-
-
-    def mk_stage(self, target, stage, wid, duration):
+    def mk_stage(self, target, stage, wid, duration, supplement):
         """
         Create a configuration specific to the target driver
         """
         stage_class = opclass_from_label(stage)
-        load_index = int(stage[stage.find(":")+1:])
+        load_index = int(stage[stage.find(":") + 1 :])
+
+        # Overrideable config
+        procs = self.config["driver_proc"]
+        if supplement != None:
+            if "processes" in supplement:
+                procs = supplement["processes"]
+
 
         # Base config for every stage, kind of shitty because most of this is
         # just pass-thu
@@ -441,7 +456,7 @@ class SlorControl:
             "host": target["host"],
             "port": target["port"],
             "w_id": wid,
-            "threads": self.config["driver_proc"],
+            "threads": procs,
             "access_key": self.config["access_key"],
             "secret_key": self.config["secret_key"],
             "endpoint": self.config["endpoint"],
@@ -469,7 +484,7 @@ class SlorControl:
             "remove_buckets": self.config["remove_buckets"],
             "use_existing_buckets": self.config["use_existing_buckets"],
             "get_range": self.config["get_range"],
-            "label": stage
+            "label": stage,
         }
 
         # Work out the readmap slices
