@@ -22,11 +22,15 @@ class SlorAnalysis:
     )  # Skip theses stages when doing analysis
     stage_itr = {}  # handle multiple stages with the same name
     db_file = None
+    histogram_partitions = None
+    histogram_percentile = None
 
     def __init__(self, args):
 
         self.db_file = args.input
         self.conn = sqlite3.connect(args.input)
+        self.histogram_partitions = int(args.histogram_partitions)
+        self.histogram_percentile = float(args.histogram_percentile)
 
     def __del__(self):
         if self.conn:
@@ -416,7 +420,7 @@ class SlorAnalysis:
 
                 if (i + 1) < len(stats[stage]["operations"]):
                     text += "\n"
-                text += "\nResponse time distribution, {}, (99% percentile):\n\n".format(operation)
+                text += "\nResponse time distribution, {}, {}% percentile):\n\n".format(operation, int(self.histogram_percentile*100))
                 text += str(alias["histogram"])
                 text += "\n"
                 
@@ -574,11 +578,12 @@ class SlorAnalysis:
                 "resp_stddiv": statistics.stdev(iotimes),
                 "histogram": histogram(
                     iotimes,
-                    72,
+                    self.histogram_partitions,
                     height=8,
                     min_val=0,
                     units="ms",
-                    h_tickers=6)
+                    h_tickers=6,
+                    trim=self.histogram_percentile)
                 
             }
         cur.close()
