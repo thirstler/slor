@@ -109,7 +109,7 @@ class SlorAnalysis:
         right.append(
             self.format_key_value(
                 "Processes per driver:",
-                "{} ({} ttl)".format(
+                "{} ({} total)".format(
                     global_config["driver_proc"],
                     global_config["driver_proc"] * len(global_config["driver_list"]),
                 ),
@@ -125,7 +125,7 @@ class SlorAnalysis:
                 "Prepared data size:", human_readable(global_config["ttl_prepare_sz"])
             )
         )
-        right.append("IOs/sec target (used to calculate prepared data size):")
+        right.append("IOs/sec target:")
         right.append(
             "  {:20}".format(
                 "{}{}{} ops ({} ops x {} sec x {} = {})".format(
@@ -166,7 +166,7 @@ class SlorAnalysis:
                     driver["readmap"].clear()
             
             # Start new "test" string #
-            sys.stdout.write("─"*32 + "┤ " + "STAGE: {:>10}".format(stage) + " ├" + "─"*32 + "\n\n")
+            sys.stdout.write("─"*32 + "┤ " + "STAGE: {:>11}".format(stage) + " ├" + "─"*32 + "\n\n")
             text = ""
             left = []
             try:
@@ -290,12 +290,19 @@ class SlorAnalysis:
                 bcolors.ENDC,
                 bcolors.GRAY,
             )
+            
             stage_range = self.get_stage_range(stage)
             for i, operation in enumerate(stats[stage]["operations"]):
+                
                 alias = stats[stage]["operations"][operation]
+
                 text += "Operation class: {}{}{}\n".format(
                     bcolors.BOLD, operation, bcolors.ENDC
                 )
+
+                text += "\nResponse time distribution, ({}% percentile):\n\n".format(int(self.histogram_percentile*100))
+                text += histogram_graph(alias["histogram"], height=8, units="ms", h_tickers=6)
+                text += "\n"
 
                 left = []
                 left.append(
@@ -420,9 +427,6 @@ class SlorAnalysis:
 
                 if (i + 1) < len(stats[stage]["operations"]):
                     text += "\n"
-                text += "\nResponse time distribution, {}, {}% percentile):\n\n".format(operation, int(self.histogram_percentile*100))
-                text += str(alias["histogram"])
-                text += "\n"
                 
             indent(text, indent=2)
 
@@ -440,11 +444,13 @@ class SlorAnalysis:
     def dump_csv(self):
         stages = self.get_stages()
         for stage in stages:
+
             if opclass_from_label(stage) in self.not_workload:
                 continue
             print("STAGE," + stage)
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
+            stats = self.get_stats(stage, stage_range[0], stage_range[1])
             
             row = "ts,"
             for col in list(series.values())[0]:
@@ -455,7 +461,14 @@ class SlorAnalysis:
                 row = datetime.fromtimestamp(ts).isoformat() + ","
                 for op in series[ts]:
                     row += str(series[ts][op]["ios/s"]) + "," + str(series[ts][op]["bytes/s"]) + "," + str(series[ts][op]["res_t"]) + ","
+                
                 sys.stdout.write(row[:-1]+"\n")
+
+            sys.stdout.write("Response time histogram (ms):\n")
+            for op in stats["operations"]:
+                sys.stdout.write("bucket,count\n")
+                for part in stats["operations"][op]["histogram"]:
+                    sys.stdout.write(str(part["val"]) + "ms," + str(part["count"]) + "\n")
 
     def get_tick(self, timestamp:int, quanta=STATS_QUANTA):
         return timestamp - (timestamp % quanta)
@@ -463,7 +476,7 @@ class SlorAnalysis:
 
     def get_series(self, stage, start, stop):
         """
-        Get sample data in the timestamp order for CSV output
+        Get sample data in timestamp order for CSV output
         """
         workers = self.get_workers()
         cur = self.conn.cursor()
@@ -576,14 +589,7 @@ class SlorAnalysis:
                 "ttl_bytes": master.get_metric("bytes", op),
                 "resp_perc": self.get_precentiles(iotimes),
                 "resp_stddiv": statistics.stdev(iotimes),
-                "histogram": histogram(
-                    iotimes,
-                    self.histogram_partitions,
-                    height=8,
-                    min_val=0,
-                    units="ms",
-                    h_tickers=6,
-                    trim=self.histogram_percentile)
+                "histogram": histogram_data(iotimes, self.histogram_partitions, min_val=0, trim=self.histogram_percentile)
                 
             }
         cur.close()

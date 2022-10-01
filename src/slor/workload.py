@@ -281,8 +281,8 @@ def classic_workload(args):
     if args.prepare_objects:
         ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
     else:
-        ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.iop_limit)
-        args.prepare_objects = int(args.stage_time) * int(args.iop_limit)
+        ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.op_ceiling)
+        args.prepare_objects = int(args.stage_time) * int(args.op_ceiling)
 
 
     # Create a working config from command line arguments
@@ -307,7 +307,7 @@ def classic_workload(args):
         "sleeptime": float(args.sleep),
         "driver_proc": int(args.processes_per_driver),
         "ttl_sz_cache": parse_size(args.cachemem_size),
-        "iop_limit": int(args.iop_limit),
+        "iop_limit": int(args.op_ceiling),
         "ttl_prepare_sz": ttl_prepare_sz,
         "tasks": tasks,
         "mixed_profiles": json.loads(args.mixed_profiles),

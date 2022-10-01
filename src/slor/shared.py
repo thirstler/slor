@@ -327,7 +327,7 @@ def histogram_data(values, partitions, min_val=None, max_val=None, trim=0.99):
         values = values[:int(len(values)*trim)]
 
     max_val = max(values) if max_val == None else max_val
-    min_val = max(values) if min_val == None else min_val
+    min_val = min(values) if min_val == None else min_val
 
     d_range = max_val-min_val
     resolution = d_range/partitions
