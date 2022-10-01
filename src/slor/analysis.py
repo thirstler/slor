@@ -14,6 +14,16 @@ def run():
         help="dump time-series data to stdout in CSV format",
     )
     parser.add_argument(
+        "--histogram-partitions",
+        default="72",
+        help="the partition count (also calls bins or buckets) for response-time histogram grouping",
+    )
+    parser.add_argument(
+        "--histogram-percentile",
+        default="0.99",
+        help="the (lower) precentile to include in histogram reports",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         default=False,

@@ -4,7 +4,7 @@ import os, sys
 import random
 import string
 
-SLOR_VERSION = 0.47
+SLOR_VERSION = 0.48
 
 ##
 # Defaults
@@ -116,6 +116,21 @@ class bcolors:
     UNDERLINE = "\033[4m"
     GRAY = "\033[38;5;243m"
     ITALIC = '\033[3m'
+    DeepSkyBlue4 = "\033[24m"
+
+def color_str(str, color):
+    return "{}{}{}".format(color, str, bcolors.ENDC)
+
+def next_tens(val, truncate=1):
+    if val < 1: return 1
+    mult=10
+    while True:
+        if val > mult:
+            mult *= 10
+            continue
+        while mult/truncate < val:
+            truncate -= 1
+        return mult/truncate
 
 class sizeRange:
 
@@ -286,8 +301,6 @@ def opclass_from_label(label):
     return label[: label.find(":")] if ":" in label else label
 
 
-
-
 def mixed_ratio_perc(mixed_json):
     rttl = 0
     percentages = {}
@@ -297,4 +310,72 @@ def mixed_ratio_perc(mixed_json):
         percentages[op] = mixed_json[op]/rttl
     return percentages
     
+    
+def histogram(values, partitions, height=8, min_val=None, max_val=None, trim=0.99000, units="", h_tickers=6, print=False):
+    data = histogram_data(values, partitions, min_val=min_val, max_val=max_val, trim=trim)
+    gr_text =  histogram_graph(data, height=height, units=units, h_tickers=h_tickers)
+    if print:
+        print(gr_text)
+        return None
+    else:
+        return gr_text
 
+def histogram_data(values, partitions, min_val=None, max_val=None, trim=0.99):
+    
+    if trim > 0:
+        values.sort()
+        values = values[:int(len(values)*trim)]
+
+    max_val = max(values) if max_val == None else max_val
+    min_val = min(values) if min_val == None else min_val
+
+    d_range = max_val-min_val
+    resolution = d_range/partitions
+
+    slot = lambda x:int((x-min_val)/resolution)
+    toms = lambda x:int(x*100000)/100
+
+    hist_data = []
+    ticker = min_val
+    for h in range(0, partitions):
+        hist_data.append({"val": toms(ticker), "count": 0})
+        ticker += resolution
+
+    for i in values:
+        s = (partitions-1) if i == max_val else slot(i)
+        hist_data[s]["count"] += 1
+
+    return(hist_data)
+
+
+def histogram_graph(values, height=8, units="", h_tickers=6):
+    
+    blocks = ("▁","▂","▃", "▄", "▆", "▆", "▇", "█") # eighth blocks
+    scale_top = int(next_tens( max(values, key=lambda x:x['count'])['count'], 4))
+    block_rez = int(scale_top/height)
+    ticker_width = int(len(values)/h_tickers)
+
+    text = ""
+
+    topval=scale_top
+    while topval > 0:
+        text += bcolors.GRAY+"{:>11}│".format(human_readable(topval, print_units="ops"))+bcolors.ENDC
+        text += bcolors.CYAN
+        for col in values:
+            if col["count"] >= topval:
+                text += "█"
+            elif col["count"] > (topval-block_rez):
+                text += blocks[int(((col["count"] % block_rez)/block_rez)*len(blocks))]
+            else:
+                text += " "
+        text += bcolors.ENDC
+        text += '\n'
+        topval -= block_rez
+        if topval == 0:
+            text += bcolors.GRAY
+            for t in range(0, len(values), ticker_width):
+                text += "{:>9}ms┤".format(values[t]["val"])
+            text += "{:>9}ms┤".format(values[-1]["val"])
+    text += bcolors.ENDC+"\n"
+
+    return text

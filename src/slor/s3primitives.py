@@ -105,6 +105,5 @@ class S3primitives:
                 markers = listing["DeleteMarkers"]
                 allthings = versions + markers
                 deleted = self.s3client.delete_objects(Bucket=bucket, Delete=allthings)
-                print(deleted)
         else:
             pass  # fuck it

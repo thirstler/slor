@@ -47,7 +47,7 @@ def config_text(config):
             )
         )
         cft_text += "Prepared objects:   {0} (readmap length)\n".format(
-            human_readable(config["prepare_objects"], print_units="ops")
+            config["prepare_objects"]
         )
         if not config["no_db"]:
             cft_text += "Database file:      {0} (base file name)\n".format("{}{}.db".format(POSIX_DB_TMP, config["name"]))
