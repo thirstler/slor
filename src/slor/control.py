@@ -120,14 +120,14 @@ def run():
         ),
     )
     parser.add_argument(
-        "--iop-limit",
+        "--op-ceiling",
         default=DEFAULT_UPPER_IOP_LIMIT,
-        help="maximum expected IOP/s value that you can expect to hit given the workload; used with --stage-time to calculate the number of objects to preprare",
+        help="read operations/s ceiling you expect to achieve; used with --stage-time to determine the amount of data to prepare",
     )
     parser.add_argument(
         "--prepare-objects",
         default=None,
-        help="directly specify the amount of objects to prepare (count or size; e.g. 1.2TB, 50000K) - overrides calculation with --iop-limit",
+        help="directly specify the amount of objects to prepare (count or size; e.g. 1.2TB, 50000K) - overrides calculation with --op-ceiling",
     )
     parser.add_argument(
         "--bucket-prefix",

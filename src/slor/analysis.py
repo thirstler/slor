@@ -14,6 +14,11 @@ def run():
         help="dump time-series data to stdout in CSV format",
     )
     parser.add_argument(
+        "--raw-timings",
+        action="store_true",
+        help="used with --dump-csv, print raw response times for every operation. WARNING: could be megabytes to the console",
+    )
+    parser.add_argument(
         "--histogram-partitions",
         default="72",
         help="the partition count (also calls bins or buckets) for response-time histogram grouping",
@@ -37,7 +42,8 @@ def run():
 
     analysis = SlorAnalysis(args)
 
+    # Should only do one of the things
     if args.dump_csv:
-        analysis.dump_csv()
+        analysis.dump_csv(raw=args.raw_timings)
     else:
         analysis.print_basic_stats()
