@@ -300,8 +300,8 @@ class SlorAnalysis:
                     bcolors.BOLD, operation, bcolors.ENDC
                 )
 
-                text += "\nResponse time distribution, ({}% percentile):\n\n".format(int(self.histogram_percentile*100))
-                text += histogram_graph(alias["histogram"], height=8, units="ms", h_tickers=6)
+                text += "\nResponse time distribution, ({:.2f}% percentile):\n\n".format(self.histogram_percentile*100)
+                text += histogram_graph(alias["histogram"], height=10, units="ms", h_tickers=6)
                 text += "\n"
 
                 left = []
@@ -441,13 +441,19 @@ class SlorAnalysis:
             stats[stage] = self.get_stats(stage, stage_range[0], stage_range[1])
         return stats
 
-    def dump_csv(self):
-        stages = self.get_stages()
-        for stage in stages:
+    def dump_csv(self, raw=False):
+        config = self.get_config(stage="global")[0]
+        sys.stdout.write("CONFIGURATION:\n")
+        for key in config:
+            sys.stdout.write("{},\"{}\"\n".format(key, str(config[key])))
+        for stage in self.get_stages():
+
+            sys.stdout.write("\n")
 
             if opclass_from_label(stage) in self.not_workload:
                 continue
-            print("STAGE," + stage)
+
+            sys.stdout.write("STAGE,{}\n".format(stage))
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
             stats = self.get_stats(stage, stage_range[0], stage_range[1])
@@ -466,9 +472,16 @@ class SlorAnalysis:
 
             sys.stdout.write("Response time histogram (ms):\n")
             for op in stats["operations"]:
-                sys.stdout.write("bucket,count\n")
+                sys.stdout.write(op+":bucket,count\n")
                 for part in stats["operations"][op]["histogram"]:
-                    sys.stdout.write(str(part["val"]) + "ms," + str(part["count"]) + "\n")
+                    sys.stdout.write(str(part["val"]) + "," + str(part["count"]) + "\n")
+
+            if raw:
+                sys.stdout.write("Raw response times:\n")
+                for op in stats["operations"]:
+                    for t in stats["operations"][op]["iotimes"]:
+                        sys.stdout.write("{:.2f},".format(t*1000))
+                    sys.stdout.write("\n")
 
     def get_tick(self, timestamp:int, quanta=STATS_QUANTA):
         return timestamp - (timestamp % quanta)
@@ -535,6 +548,8 @@ class SlorAnalysis:
         cur.close()
         return retval
 
+
+
     def get_stats(self, stage, start, stop):
         """
         One giant pass to avoid running the same queries over and over again.
@@ -589,8 +604,8 @@ class SlorAnalysis:
                 "ttl_bytes": master.get_metric("bytes", op),
                 "resp_perc": self.get_precentiles(iotimes),
                 "resp_stddiv": statistics.stdev(iotimes),
-                "histogram": histogram_data(iotimes, self.histogram_partitions, min_val=0, trim=self.histogram_percentile)
-                
+                "histogram": histogram_data(iotimes, self.histogram_partitions, min_val=0, trim=self.histogram_percentile),
+                "iotimes": iotimes
             }
         cur.close()
         return returnval
@@ -685,3 +700,6 @@ class SlorAnalysis:
                 max = v
 
         return (min, max)
+
+        
+

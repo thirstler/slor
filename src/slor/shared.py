@@ -3,6 +3,7 @@ import configparser
 import os, sys
 import random
 import string
+from numpy import number
 
 SLOR_VERSION = 0.48
 
@@ -116,21 +117,30 @@ class bcolors:
     UNDERLINE = "\033[4m"
     GRAY = "\033[38;5;243m"
     ITALIC = '\033[3m'
-    DeepSkyBlue4 = "\033[24m"
 
+
+###############################################################################
+## Globally shared routines
+##
 def color_str(str, color):
     return "{}{}{}".format(color, str, bcolors.ENDC)
 
-def next_tens(val, truncate=1):
+def next_tens(val:int, divide=1):
+    '''
+    Just gets the next highest 10s value over val. The divide option will
+    divide the "next-tens" value into n equal parts and return the highest
+    value that isn't less than val
+    '''
     if val < 1: return 1
-    mult=10
-    while True:
-        if val > mult:
-            mult *= 10
+    d = len(str(val))
+    nt = int("1"+"0"*d)
+    if divide==1: return nt
+    ranges = int(nt/divide)
+    for r in range(0, nt+1, ranges):
+        if r < val:
             continue
-        while mult/truncate < val:
-            truncate -= 1
-        return mult/truncate
+        return(r)
+
 
 class sizeRange:
 
@@ -173,9 +183,7 @@ class sizeRange:
 BANNER = "\n⚞ {0}SLoR{1} ⚟ (ver. {2})\n".format(
     bcolors.BOLD, bcolors.ENDC, SLOR_VERSION
 )
-###############################################################################
-## Globally shared routines
-##
+
 def parse_size(stringval: str) -> int:
 
     # if float(stringval)
@@ -314,14 +322,23 @@ def mixed_ratio_perc(mixed_json):
 def histogram(values, partitions, height=8, min_val=None, max_val=None, trim=0.99000, units="", h_tickers=6, print=False):
     data = histogram_data(values, partitions, min_val=min_val, max_val=max_val, trim=trim)
     gr_text =  histogram_graph(data, height=height, units=units, h_tickers=h_tickers)
+
     if print:
         print(gr_text)
         return None
     else:
         return gr_text
 
-def histogram_data(values, partitions, min_val=None, max_val=None, trim=0.99):
-    
+def histogram_data(values:list, partitions:int, min_val=None, max_val=None, trim=0.99) -> dict:
+    """
+    Return a histogram object from list 'values' using 'partitions' number
+    of buckets. 'min_val' explicitly sets the smallest bucket clss rather than
+    using the min value in 'values', 'max_val' does the smame for the top of
+    the range. Trim specifies the bottom n percent to be present in the
+    histogram. This removes outliers that can make a visualization less
+    informativie.
+    """
+
     if trim > 0:
         values.sort()
         values = values[:int(len(values)*trim)]
@@ -348,15 +365,19 @@ def histogram_data(values, partitions, min_val=None, max_val=None, trim=0.99):
     return(hist_data)
 
 
-def histogram_graph(values, height=8, units="", h_tickers=6):
+def histogram_graph(values, height=8, units="", h_tickers=6) -> str:
+    """
+    Return a primitive console-based histogram graph from histogram object
+    'values' (created with histogram_data()).
+    """
     
     blocks = ("▁","▂","▃", "▄", "▆", "▆", "▇", "█") # eighth blocks
-    scale_top = int(next_tens( max(values, key=lambda x:x['count'])['count'], 4))
+    real_top = max(values, key=lambda x:x['count'])['count']
+    scale_top = int(next_tens(real_top, divide=4))
     block_rez = int(scale_top/height)
     ticker_width = int(len(values)/h_tickers)
 
     text = ""
-
     topval=scale_top
     while topval > 0:
         text += bcolors.GRAY+"{:>11}│".format(human_readable(topval, print_units="ops"))+bcolors.ENDC
@@ -371,7 +392,7 @@ def histogram_graph(values, height=8, units="", h_tickers=6):
         text += bcolors.ENDC
         text += '\n'
         topval -= block_rez
-        if topval == 0:
+        if topval <= 0:
             text += bcolors.GRAY
             for t in range(0, len(values), ticker_width):
                 text += "{:>9}ms┤".format(values[t]["val"])
