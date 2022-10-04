@@ -2,3 +2,4 @@ src/slor_thirstler.egg-info
 __pycache__
 src/__pycache__
 dist
+src/slor.egg-info
