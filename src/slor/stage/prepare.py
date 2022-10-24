@@ -37,8 +37,7 @@ class Prepare(SlorProcess):
         for o, skey in enumerate(self.config["mapslice"]):
             if self.check_for_messages() == "stop":
                 break
-
-            #body_data = self.get_bytes_from_pool(self.rangeObj.getVal())
+            
             body_data = self.get_random_bytes(self.rangeObj.getVal(), from_pool=self.config["random_from_pool"], compressible=self.config["compressible"])
             blen = len(body_data)
 

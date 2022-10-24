@@ -3,9 +3,12 @@ import configparser
 import os, sys
 import random
 import string
+from unicodedata import numeric
+import math
 from numpy import number
+import curses
 
-SLOR_VERSION = 0.48
+SLOR_VERSION = 0.49
 
 ##
 # Defaults
@@ -98,7 +101,11 @@ WINDOWS_DB_TMP = "C:/Windows/Temp/"
 POSIX_DB_TMP = "/tmp/"
 MINIMUM_MPU_CHUNK_SIZE = 5000000
 WRITE_LOG_LOCATION="/dev/shm/slor_writelog.db"
+MAX_CURSES_REFRESH_RATE=1
+MAX_MIN_MS=8650000
 
+TERM_ROW_MIN = 25
+TERM_COL_MIN = 90
 
 ##
 # Some color short-hand
@@ -125,22 +132,20 @@ class bcolors:
 def color_str(str, color):
     return "{}{}{}".format(color, str, bcolors.ENDC)
 
-def next_tens(val:int, divide=1):
-    '''
-    Just gets the next highest 10s value over val. The divide option will
-    divide the "next-tens" value into n equal parts and return the highest
-    value that isn't less than val
-    '''
-    if val < 1: return 1
-    d = len(str(val))
-    nt = int("1"+"0"*d)
-    if divide==1: return nt
-    ranges = int(nt/divide)
-    for r in range(0, nt+1, ranges):
-        if r < val:
-            continue
-        return(r)
-
+def autoround(val, digits=None, down=False, threshold=2) -> int:
+    if val < 1:
+        if down: return 0
+        else: return 1
+    if digits==None:
+        digits=len(str(int(val)))-threshold
+        if digits < 1:
+            digits = 1
+    div=10**digits
+    if down:
+        rounded=int(math.floor(val/div)*div)
+    else:
+        rounded=int(math.ceil(val/div)*div)
+    return rounded
 
 class sizeRange:
 
@@ -180,9 +185,7 @@ class sizeRange:
         return {"low": self.low, "high": self.high, "avg": self.avg}
 
 
-BANNER = "\n⚞ {0}SLoR{1} ⚟ (ver. {2})\n".format(
-    bcolors.BOLD, bcolors.ENDC, SLOR_VERSION
-)
+BANNER = "⚞ SLoR ⚟ (ver. {})".format(SLOR_VERSION)
 
 def parse_size(stringval: str) -> int:
 
@@ -213,9 +216,9 @@ def parse_size(stringval: str) -> int:
     return int(stringval)
 
 
-def human_readable(value, val_format="SI", print_units="bytes", precision=2):
+def human_readable(value, val_format="SI", print_units="bytes", precision=2) -> str:
     if not value:
-        return 0
+        return "0"
     if val_format == "SI":
         sipwr = 18
 
@@ -317,86 +320,8 @@ def mixed_ratio_perc(mixed_json):
     for op in mixed_json:
         percentages[op] = mixed_json[op]/rttl
     return percentages
-    
-    
-def histogram(values, partitions, height=8, min_val=None, max_val=None, trim=0.99000, units="", h_tickers=6, print=False):
-    data = histogram_data(values, partitions, min_val=min_val, max_val=max_val, trim=trim)
-    gr_text =  histogram_graph(data, height=height, units=units, h_tickers=h_tickers)
-
-    if print:
-        print(gr_text)
-        return None
-    else:
-        return gr_text
-
-def histogram_data(values:list, partitions:int, min_val=None, max_val=None, trim=0.99) -> dict:
-    """
-    Return a histogram object from list 'values' using 'partitions' number
-    of buckets. 'min_val' explicitly sets the smallest bucket clss rather than
-    using the min value in 'values', 'max_val' does the smame for the top of
-    the range. Trim specifies the bottom n percent to be present in the
-    histogram. This removes outliers that can make a visualization less
-    informativie.
-    """
-
-    if trim > 0:
-        values.sort()
-        values = values[:int(len(values)*trim)]
-
-    max_val = max(values) if max_val == None else max_val
-    min_val = min(values) if min_val == None else min_val
-
-    d_range = max_val-min_val
-    resolution = d_range/partitions
-
-    slot = lambda x:int((x-min_val)/resolution)
-    toms = lambda x:int(x*100000)/100
-
-    hist_data = []
-    ticker = min_val
-    for h in range(0, partitions):
-        hist_data.append({"val": toms(ticker), "count": 0})
-        ticker += resolution
-
-    for i in values:
-        s = (partitions-1) if i == max_val else slot(i)
-        hist_data[s]["count"] += 1
-
-    return(hist_data)
 
 
-def histogram_graph(values, height=8, units="", h_tickers=6) -> str:
-    """
-    Return a primitive console-based histogram graph from histogram object
-    'values' (created with histogram_data()).
-    """
-    
-    blocks = ("▁","▂","▃", "▄", "▆", "▆", "▇", "█") # eighth blocks
-    real_top = max(values, key=lambda x:x['count'])['count']
-    scale_top = int(next_tens(real_top, divide=4))
-    block_rez = int(scale_top/height)
-    ticker_width = int(len(values)/h_tickers)
 
-    text = ""
-    topval=scale_top
-    while topval > 0:
-        text += bcolors.GRAY+"{:>11}│".format(human_readable(topval, print_units="ops"))+bcolors.ENDC
-        text += bcolors.CYAN
-        for col in values:
-            if col["count"] >= topval:
-                text += "█"
-            elif col["count"] > (topval-block_rez):
-                text += blocks[int(((col["count"] % block_rez)/block_rez)*len(blocks))]
-            else:
-                text += " "
-        text += bcolors.ENDC
-        text += '\n'
-        topval -= block_rez
-        if topval <= 0:
-            text += bcolors.GRAY
-            for t in range(0, len(values), ticker_width):
-                text += "{:>9}ms┤".format(values[t]["val"])
-            text += "{:>9}ms┤".format(values[-1]["val"])
-    text += bcolors.ENDC+"\n"
 
-    return text
+

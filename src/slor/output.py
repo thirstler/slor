@@ -193,7 +193,36 @@ def indent(text, indent=1):
     for line in text_lines:
         sys.stdout.write(" "*indent + line + "\n")
     sys.stdout.flush()
+
+
+def table(table_data:list=[], row_width=8, justify='left', header=False, padding=0):
     
+    if type(row_width) == int:
+        row_width=[row_width]
+
+    output_str="\n"*padding
+
+    format_str = "{:>{}}" if justify=="right" else "{:<{}}"
+    for row in table_data:
+        rw_idx=0
+        output_str += " "*padding
+        for col in row:
+            output_str += format_str.format(col, row_width[rw_idx])
+            if len(row_width)-1 > rw_idx:
+                rw_idx+=1
+
+        if header:
+            hdr_width = sum(row_width)
+            if len(row_width) < len(table_data[0]):
+                hdr_width += row_width[-1] * (len(table_data[0])-len(row_width))
+
+            output_str += '\n' + " "*padding + "─"*hdr_width
+            header = False
+
+        output_str += '\n'
+
+    return output_str
+
 
 def format_row(content:list, newline=False, replace=False, padding=0) -> str:
     """
@@ -212,7 +241,7 @@ def format_row(content:list, newline=False, replace=False, padding=0) -> str:
     if replace:
         row_text += "\r"
     for i, item in enumerate(content):
-        format_str = item[2]+"{:"+item[3]+str(item[1])+"}"+"\033[0m"
+        format_str = item[2]+"{:"+item[3]+str(item[1])+"}"
         row_text += format_str.format(item[0])
         row_text += " "*padding
         

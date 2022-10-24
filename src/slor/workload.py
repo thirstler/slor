@@ -316,6 +316,7 @@ def classic_workload(args):
         "prepare_objects": args.prepare_objects,
         "key_prefix": args.key_prefix,
         "no_db": args.no_db,
+        "no_plot": args.no_plot,
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,

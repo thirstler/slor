@@ -1,3 +1,4 @@
+from slor.screen import ConsoleToSmall
 from slor.slor_c import *
 from slor.shared import *
 from slor.output import *
@@ -6,7 +7,7 @@ from slor.workload import *
 import argparse
 from multiprocessing.connection import Client
 from multiprocessing import Process
-
+from curses import wrapper
 
 def start_driver():
 
@@ -254,7 +255,14 @@ def run():
     parser.add_argument(
         "--no-db",
         action="store_true",
+        default=False,
         help="do not save workload data to database - appropriate for long-running tests",
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        default=False,
+        help="do not do any data visualization in the console",
     )
     parser.add_argument(
         "--force",
@@ -284,11 +292,17 @@ def run():
         args.driver_list = "127.0.0.1"
 
     root_config = classic_workload(args)
-
-    handle = SlorControl(root_config)
-    handle.exec()
+    
+    try:
+        handle = SlorControl(root_config)
+        wrapper(handle.exec)
+    except ConsoleToSmall:
+        sys.stderr.write('console too small, need {}x{}\n'.format(TERM_ROW_MIN,TERM_COL_MIN))
+    except PeerCheckFailure:
+        sys.stderr.write("driver check failed, make sure they're running and reachable\n")
 
     try:
+        driver.terminate()
         driver.join()
     except:
         pass
