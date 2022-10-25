@@ -532,8 +532,11 @@ class SlorAnalysis:
                 dateslot = self.get_tick(sec, STATS_QUANTA)
 
                 for op in stat["value"]["operations"]:
+
+                    # Rounded the wrong way
                     if dateslot not in series_master:
                         continue
+
                     if op not in series_master[dateslot]:
                         series_master[dateslot][op] = {
                             "bytes/s": 0,
@@ -625,7 +628,7 @@ class SlorAnalysis:
                 "ttl_bytes": master.get_metric("bytes", op),
                 "resp_perc": self.get_precentiles(iotimes),
                 "resp_stddiv": statistics.stdev(iotimes),
-                "histogram": histogram_data(iotimes, self.histogram_partitions, trim=self.histogram_percentile),
+                "histogram": histogram_data(list(map(lambda n: n*1000, iotimes)), self.histogram_partitions, trim=self.histogram_percentile),
                 "iotimes": iotimes
             }
         cur.close()
