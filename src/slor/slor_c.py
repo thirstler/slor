@@ -42,7 +42,10 @@ class SlorControl:
     def exec(self, stdscr):
         self.screen = SlorScreen(stdscr)
         self.screen.set_title("Startup")
-        self.screen.set_footer(BANNER)
+        if self.config["no_plot"]:
+            self.screen.set_footer(BANNER)
+        else:
+            self.screen.set_footer("reset (h)istogram scale, (a)bort" )
 
         # Label the stages in the load order
         indexes = {}
@@ -61,17 +64,17 @@ class SlorControl:
 
         time.sleep(1)
         
-        if not dr_status:
-            raise PeerCheckFailure
+        #if not dr_status:
+        #    raise PeerCheckFailure
 
         # Get database handler going
         if not self.config["no_db"]:
             self.db_sock, db_child_sock = Pipe()
-            db_proc = Process(
+            self.db_proc = Process(
                 target=_slor_db,
                 args=(db_child_sock, self.config),
             )
-            db_proc.start()
+            self.db_proc.start()
 
         for c, stage in enumerate(load_order):
             duration = self.config["run_time"]
@@ -109,7 +112,7 @@ class SlorControl:
             self.screen.set_message(message="stopping db handeler...")
             self.screen.refresh()
             self.db_sock.send({"command": "STOP"})
-            db_proc.join()
+            self.db_proc.join()
             sys.stdout.write("done\n")
 
         print("\ndone.\n")
@@ -336,7 +339,8 @@ class SlorControl:
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
             return
-        self.screen.set_data(str(message), append=True)
+        self.screen.data_win.addstr(str(message))
+        self.screen.refresh()
 
     def process_message(self, message):
         """
@@ -348,7 +352,12 @@ class SlorControl:
             # what a fucking mess
             if message["command"] == "abort":
                 if "message" in message:
-                    self.screen.set_data("\n "+message["message"], append=True)
+                    curses.endwin()
+                    sys.stderr.write("\n{}\n".format(message["message"]))
+                try:
+                    self.db_proc.kill()
+                except:
+                    pass
                 sys.exit(0)
 
         elif "type" in message and message["type"] == "readmap":
@@ -357,18 +366,18 @@ class SlorControl:
             if int(message["value"]) > self.reread:
                 self.reread = int(message["value"])
         elif "message" in message:
-            self.screen.set_data(
+            self.screen.data_win.addstr(
                 "\n message from {0}: {1}".format(
                     message["w_id"], message["message"]
-                ), append=True
+                )
             )
+            self.screen.refresh()
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             if not self.config["no_db"]:
                 self.db_sock.send(message)
         else:
             pass
-        self.screen.refresh()
 
     def check_status(self, mesg):
         if "status" in mesg and mesg["status"] == "done":
@@ -409,8 +418,8 @@ class SlorControl:
                                 cfg, self.config["use_readmap"]
                             )
                         )
-            self.screen.set_data("readmap restored from file:", append=True)
-            self.screen.set_data(cfg_out, append=True)
+            self.screen.data_win.addstr("readmap restored from file:")
+            self.screen.set_data(cfg_out, append=True) # use set_data since it might scroll
         else:
             objcount = self.get_readmap_len()
             for z in range(0, objcount):

@@ -54,6 +54,7 @@ class SlorScreen:
         self.data_win.bkgd(' ', curses.color_pair(2))
         self.footer_win = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
         self.footer_win.bkgd(' ', curses.color_pair(1) | curses.A_BOLD)
+        self.footer_win.nodelay(True)
 
 
     def clear_all(self):
@@ -84,31 +85,53 @@ class SlorScreen:
         self.data_win.addstr("{:10}\n".format("CV"))
         self.data_win.addstr(" "+"─"*90+"\n")
 
+        ios_t = 0
+        resp_t = 0
+        fail_t = 0
+        cv_t = 0
+
         for op in ops:
 
             iotime = sample.get_metric("iotime", op)  
+            ios = sample.get_rate("ios", op)
+            resp = sample.get_resp_avg(op)
+            fail = sample.get_metric("failures", op)
             try:
                 cv = statistics.stdev(iotime)/statistics.mean(iotime)
             except statistics.StatisticsError:
                 cv = 0
 
+            # gather some totals (only relevant if workload is mixed)
+            ios_t += ios
+            resp_t += resp
+            fail_t += fail
+            cv_t += cv
+
             # Warnings for coefficient of variation
             cv_c = curses.color_pair(7) if cv > 0.5 else 0
             cv_c = curses.color_pair(8) if cv > 0.75 else cv_c
             cv_c = curses.color_pair(8)|curses.A_BOLD if cv > 1.0 else cv_c
-
-            # Show failure rate in red when there are failures
-            fail_rate = sample.get_metric("failures", op)
-            fr_c = curses.color_pair(8)|curses.A_BOLD if fail_rate > 0 else 0
-
+            fr_c = curses.color_pair(8)|curses.A_BOLD if fail > 0 else 0
+            
             self.data_win.addstr(" ")
             self.data_win.addstr("{:<14}".format(op))
-            self.data_win.addstr("{:<12}".format(human_readable(sample.get_rate("ios", op), print_units="ops")), curses.A_BOLD)
+            self.data_win.addstr("{:<12}".format(human_readable(ios, print_units="ops")), curses.A_BOLD)
             self.data_win.addstr("{:<14}".format(human_readable(sample.get_rate("bytes", op))+"/s"), curses.A_BOLD)
-            self.data_win.addstr("{:<12.2f}".format(sample.get_resp_avg(op)*1000), curses.A_BOLD)
+            self.data_win.addstr("{:<12.2f}".format(resp*1000), curses.A_BOLD)
             self.data_win.addstr("{:<14.2f}".format(sample.get_perc(op, 0.99)*1000))
-            self.data_win.addstr("{:<12}".format(human_readable(fail_rate)), fr_c)
+            self.data_win.addstr("{:<12}".format(human_readable(fail)), fr_c)
             self.data_win.addstr("{:<10}\n".format("{:.4f}".format(cv)), cv_c)
+
+        if len(ops) > 1:
+            self.data_win.addstr(" ")
+            self.data_win.addstr("{:<14}".format("totals"))
+            self.data_win.addstr("{:<12}".format(human_readable(ios_t, print_units="ops")), curses.A_BOLD)
+            self.data_win.addstr("{:<14}".format("-"))
+            self.data_win.addstr("{:<12.2f}".format((resp_t/len(ops))*1000), curses.A_BOLD)
+            self.data_win.addstr("{:<14}".format("-"))
+            self.data_win.addstr("{:<12}".format(human_readable(fail_t)))
+            self.data_win.addstr("{:<10}\n".format("{:.4f}".format(cv_t/len(ops))), cv_c)
+
 
         self.data_win.noutrefresh()
 

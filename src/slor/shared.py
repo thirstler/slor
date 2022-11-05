@@ -8,7 +8,7 @@ import math
 from numpy import number
 import curses
 
-SLOR_VERSION = 0.49
+SLOR_VERSION = "0.50"
 
 ##
 # Defaults

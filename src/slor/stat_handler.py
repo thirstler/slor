@@ -11,6 +11,7 @@ class statHandler:
 
     config = None
     standing_sample = {}
+    sample_freshness = {}
     operations = None
     last_show = 0
     stage = None
@@ -35,6 +36,8 @@ class statHandler:
     graph_y_max = 0
     peak_optime = 0
     min_optime = MAX_MIN_MS
+    data_written = 0
+    data_read = 0
 
     def __del__(self):
         self.fh.close()
@@ -53,7 +56,8 @@ class statHandler:
         self.fh = open("/tmp/log.txt", "a")
         self.workload_index = workload_index
         self.all_checked_in = False
-
+        self.io_hist = []
+        self.peak_reset = time.time()
         if self.stage_class == "mixed":
             for s in config["mixed_profile"]:
                 self.operations += (s,)
@@ -80,12 +84,14 @@ class statHandler:
     def update_standing_sample(self, data):
 
         sample_addr = "{}:{}".format(data["w_id"], data["t_id"])
+        nownow = time.time()
         
         if sample_addr not in self.standing_sample:
             self.standing_sample[sample_addr] = perfSample(from_json=data["value"])
+            self.sample_freshness[sample_addr] = time.time()
         else:
             self.standing_sample[sample_addr].from_json(data["value"])
-            
+            self.sample_freshness[sample_addr] = time.time()
 
     def rotate_mixed_stat_func(self, final):
         if final:
@@ -126,6 +132,20 @@ class statHandler:
 
     def mk_merged_sample(self):
         now = time.time()
+
+        # Deal with stale samples
+        diediedie = []
+        for sid in self.sample_freshness:
+            if self.sample_freshness[sid] < (now - (DRIVER_REPORT_TIMER*2)):
+                diediedie.append(sid)
+
+        for sid in diediedie:
+            try:
+                del self.standing_sample[sid]
+                del self.sample_freshness[sid]
+            except:
+                pass
+
         if self.stage_class in PROGRESS_BY_COUNT:
             target = self.count_target
         else:
@@ -175,12 +195,26 @@ class statHandler:
             return
 
         # Check if all workers are reporting
-        if self.ttl_procs == len(self.standing_sample):
+        if len(self.standing_sample) >= self.ttl_procs:
             self.all_checked_in = True
+        else:
+            self.all_checked_in = False
+        
+        for op in stat_sample.operations:
+            if op == "write":
+                self.data_written += stat_sample.get_rate("bytes", op)
+            if op == "read":
+                self.data_read += stat_sample.get_rate("bytes", op)
 
-        # If we're in a cleaup stage override all this shit and do CYAN    
-        if self.stage == "cleanup":
-            color = bcolors.CYAN
+        screen.data_win.addstr("\n reporting processes: {}/{}, elapsed time: {}\n".format(
+            len(self.standing_sample), self.ttl_procs, self.elapsed_time(), ))
+        screen.data_win.addstr(" data written: {}, read: {}\n".format(
+            human_readable(self.data_written), human_readable(self.data_read)))
+
+        cmd = screen.footer_win.getch()
+        if cmd == 104:
+            self.graph_y_max = 0
+            self.graph_x_max = 0
 
         # Multiple operations in the sample (mixed)
         if len(stat_sample.operations) > 1:
@@ -196,32 +230,35 @@ class statHandler:
 
                 screen.set_progress(perc, final=final)
 
-            screen.data_win.addstr("\n Elapsed: {}\n".format(self.elapsed_time()))
             screen.show_bench_table(stat_sample, stat_sample.operations)
 
-        
             if show_plots:
-                io_time_ttl = []
-                for op in stat_sample.operations:
-                    io_time_ttl += stat_sample.get_metric("iotime", op)
+                # So much can go wrong here, best not to mess up a benchmark for it
+                try:
+                    io_time_ttl = []
+                    self.io_hist.append({"ts": time.time(), "ios": round(stat_sample.get_rate("ios"))})
+                    for op in stat_sample.operations:
+                        io_time_ttl += stat_sample.get_metric("iotime", op)
 
-                iotime_ms = list(map(lambda n: n*1000, io_time_ttl))
-                if self.all_checked_in:
-                    self.peak_optime =  max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
-                    self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
-                screen.data_win.addstr("\n "+"─"*90+"\n")
-                screen.data_win.addstr(" Operation time distribution (99% percentile):\n\n")
-                hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
-                this_max_x = max(hist_values, key=lambda x:x['val'])['val']
-                this_max_y = max(hist_values, key=lambda x:x['count'])['count']
-                if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
-                if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
-                histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
-                screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
-                screen.data_win.addstr("\n           ┍ min:{:.2f}ms ┿ median:{:.2f}ms ╋ mean:{:.2f}ms > peak:{:.2f}ms".format(
-                    self.min_optime if self.min_optime != MAX_MIN_MS else -1,
-                    statistics.median(iotime_ms), statistics.mean(iotime_ms), self.peak_optime), curses.A_DIM)
-                screen.data_win.noutrefresh()
+                    iotime_ms = list(map(lambda n: n*1000, io_time_ttl))
+                    if self.all_checked_in:
+                        self.peak_optime =  max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
+                        self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
+                    #screen.data_win.addstr("\n "+"─"*90+"\n")
+                    
+                    hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
+                    this_max_x = max(hist_values, key=lambda x:x['val'])['val']
+                    this_max_y = max(hist_values, key=lambda x:x['count'])['count']
+                    if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
+                    if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
+                    screen.data_win.addstr("\n")
+                    io_history(self.io_hist, screen.data_win, config=self.config, stage_class=self.stage_class, ready=self.all_checked_in)
+                    screen.data_win.addstr("\n")
+                    histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
+                    screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
+                    screen.data_win.noutrefresh()
+                except Exception as e:
+                    screen.data_win.addstr("problem generating plots\n")
 
         # Discrete operation
         else:
@@ -247,28 +284,33 @@ class statHandler:
             elif self.stage_class in UNKNOWN_PROGRESS:
                 screen.set_progress(None, final=final)
 
-            screen.data_win.addstr("\n Elapsed: {}\n".format(self.elapsed_time()))
             screen.show_bench_table(stat_sample, stat_sample.operations)
                 
             if show_plots:
-                iotime = stat_sample.get_metric("iotime", self.operations[0])
-                iotime_ms = list(map(lambda n: n*1000, iotime))
-                if self.all_checked_in:
-                    self.peak_optime = max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
-                    self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
-                screen.data_win.addstr("\n "+"─"*90+"\n")
-                screen.data_win.addstr(" Operation time distribution (99% percentile):\n\n")
-                hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
-                this_max_x = max(hist_values, key=lambda x:x['val'])['val']
-                this_max_y = max(hist_values, key=lambda x:x['count'])['count']
-                if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
-                if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
-                histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
-                screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
-                screen.data_win.addstr("\n           ┍ min:{:.2f}ms ┿ median:{:.2f}ms ╋ mean:{:.2f}ms > peak:{:.2f}ms".format(
-                    self.min_optime if self.min_optime != MAX_MIN_MS else -1,
-                    statistics.median(iotime_ms), statistics.mean(iotime_ms), self.peak_optime), curses.A_DIM)
-                screen.data_win.noutrefresh()
+                # So much can go wrong here, best not to mess up a benchmark for it
+                try:
+                    iotime = stat_sample.get_metric("iotime", self.operations[0])
+                    self.io_hist.append({"ts": time.time(), "ios": round(stat_sample.get_rate("ios"))})
+                    iotime_ms = list(map(lambda n: n*1000, iotime))
+                    if self.all_checked_in:
+                        self.peak_optime = max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
+                        self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
+                    #screen.data_win.addstr("\n "+"─"*90+"\n")
+                    
+                    hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
+                    this_max_x = max(hist_values, key=lambda x:x['val'])['val']
+                    this_max_y = max(hist_values, key=lambda x:x['count'])['count']
+                    if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
+                    if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
+                    screen.data_win.addstr("\n")
+                    io_history(self.io_hist, screen.data_win, config=self.config, stage_class=self.stage_class, ready=self.all_checked_in)
+                    screen.data_win.addstr("\n")
+                    histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
+                    screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
+                    screen.data_win.noutrefresh()
+                except Exception as e:
+                    screen.data_win.addstr("problem generating plots\n")
+                
 
         del stat_sample
 

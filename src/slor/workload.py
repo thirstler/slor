@@ -280,6 +280,7 @@ def classic_workload(args):
 
     if args.prepare_objects:
         ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
+        args.prepare_objects = int(parse_size(args.prepare_objects))
     else:
         ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.op_ceiling)
         args.prepare_objects = int(args.stage_time) * int(args.op_ceiling)

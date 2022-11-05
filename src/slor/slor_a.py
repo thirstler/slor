@@ -576,7 +576,7 @@ class SlorAnalysis:
 
     def get_stats(self, stage, start, stop):
         """
-        One giant pass to avoid running the same queries over and over again.
+        One giant gob of memory.
         """
         workers = self.get_workers()
         cur = self.conn.cursor()

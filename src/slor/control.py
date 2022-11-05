@@ -289,17 +289,18 @@ def run():
 
     if args.driver_list == "":
         driver = start_driver()
+        time.sleep(2)
         args.driver_list = "127.0.0.1"
 
     root_config = classic_workload(args)
     
-    try:
-        handle = SlorControl(root_config)
-        wrapper(handle.exec)
-    except ConsoleToSmall:
-        sys.stderr.write('console too small, need {}x{}\n'.format(TERM_ROW_MIN,TERM_COL_MIN))
-    except PeerCheckFailure:
-        sys.stderr.write("driver check failed, make sure they're running and reachable\n")
+    #try:
+    handle = SlorControl(root_config)
+    wrapper(handle.exec)
+    #except ConsoleToSmall:
+    #    sys.stderr.write('console too small, need {}x{}\n'.format(TERM_ROW_MIN,TERM_COL_MIN))
+    #except PeerCheckFailure:
+    #    sys.stderr.write("driver check failed, make sure they're running and reachable\n")
 
     try:
         driver.terminate()
