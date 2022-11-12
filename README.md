@@ -9,25 +9,24 @@ What does it do?
 
 Slor can be used to generate load and measure the performance capabilities of
 S3 storage systems. It will measure throughput, bandwidth and processing times
-of several basic S3 operations (read, write, head, delete, overwrite, reread
-and tagging) in discrete and mixed workload configurations. 
+of several basic S3 operations (read, write, head, delete, overwrite, reread,
+MPUs and read-ranges) in discrete and mixed workload configurations. 
 
 How does it do?
 ---------------
 It operates as a system of load-generators (drivers) that are instructed to do 
-"things" by a controller process. This is similar to other load generation
-systems:
+"things" by a controller process. This is similar to other distributed load
+generation systems:
 
     Controller ___ Driver1
                 \_ Driver2
                 \_ Driver3
                 \_ etc...
 
-You start load-generators (or drivers) on the systems you want to use for
-load generation. Then you will reference these servers when starting
-a workload with a slor "controller" process. The controller is responsible
-for sending workloads to driver processes and then collecting the returned
-performance data.
+You start drivers on the systems you want to use for load generation. Then
+you will reference these servers when starting a workload with a slor
+"controller" process. The controller is responsible for sending workloads to
+driver processes and then collecting the returned performance data.
 
 Where does it do?
 -----------------
@@ -41,23 +40,13 @@ major Python version and drivers with another.
 Installation
 ------------
 
-Slor can be installed by building the pip package and installing it. I like to
-create virtual environments so I can use recent python/module versions without
-messing up the system. This requires the venv, build and setuptools packages:
+Slor can be installed by building the pip package and installing it.
 
-    pip3 install venv # (or use your OS packages)
-    python3 -mvenv ~/slor_venv
-    source ~/slor_venv/bin/activate
-    pip install --upgrade pip
-    pip install pyjson pyyaml boto3 build
-    git clone https://github.com/thirstler/slor.git
-    cd slor
-    python -m build
-    pip install --upgrade ./dist/slor-[version].tgz
+    cd slor/
+    python -mbuild
+    pip install --user --upgrade ./dist/slor-[version].tgz
 
-If you want, you can tar-up ~/slor_venv and move it around. The venv approach
-is great for getting things installed in air-gapped environments where you
-can't pip yourself into success
+Python virtual environments are good practice in a lot of cases.
 
 
 Running a Workload
@@ -237,7 +226,7 @@ read the same data over and over again. This means you need to have _enough_
 data to sustain the IO rate for the length of time the benchmark takes to run. 
 
 If this sounds like you need to already know how the targeted platform can be
-expected to perform, then you're right. You may not really know, but changes
+expected to perform, then you're right. You may not really know, but chances
 are you can make some pretty good guesses.
 * What are the network limitations?
 * What are the IO limitations of the metadata
@@ -248,7 +237,7 @@ I know this system couldn't possibly take more than 10,000 IO/s of reads at
 256KB so let's assume a ceiling of 12,000 IO/s and call it a day. That would
 be 3.07 GB/s of bandwidth (256KB * 12,000)
 
-You can tell SLOR the amount of data to auto-prepare with the "--iop-limit"
+You can tell SLoR the amount of data to auto-prepare with the "--iop-limit"
 flag. It will use this in conjunction with the "--stage-time" flag which 
 specifies how long each stage will run (defaults to 300 seconds). Let's start
 a workload that can sustain 12,000 operations per second of reads for 15
@@ -320,10 +309,10 @@ Saving Data
 
 It's painful to see good data go to waste. If you're doing a lot of read-testing
 and _not_ deleting data as part for the workloads, you can reuse data with 
-the "--save-readmap" flag. If can also be useful if you're breaking down 
+the "--save-readmap" flag. It can also be useful if you're breaking down 
 workloads across controller commands.
 
-SLOR pre-generates all of the keys it's going to use for prepared data (this is
+SLoR pre-generates all of the keys it's going to use for prepared data (this is
 what's going on during the "readmap" stage). It's essentially a list of of 
 bucket/key pairs that's juggled between stages to keep the same drivers from
 handing the same objects over and over. If you don't clean-up or delete data
@@ -544,7 +533,7 @@ Command Line Arguments
 
     Time in seconds to run each stage. If you would like different lengths of time for each stage you may want to just issue separate generation commands with different lengths. You can reused data between runs with the "--save-readmap" flag.
 
---iop-limit
+--op-ceiling
 
     Used in tandem with "--stage-time" to determine the amount of data needed to be prepared for any read loads. Let's say you think there's no way your system will be able to sustain 5000 operations a second and that you want to run your stages for 300 seconds. Indicate "--stage-time 300 --iop-limit 5000" and slor will prepare 1.5 million objects ahead of any read workloads (pure read or mixed) to ensure you do not reread any data.
 
@@ -576,6 +565,23 @@ Command Line Arguments
 
     The object size you would like to use in benchmarking. Accepts suffixes (KB, MB, GB, TB, EB). Also accepts ranges like "64KB-4MB." Indicating ranges will will results in random object sizes within the range (inclusive).
 
+--random-from-pool
+
+    Use random data from a pool of data rather than generate on-the-fly. This could
+    be necessary if random data generation is using up too much CPU. Probably not,
+    but the option is here anyway.
+
+--compressible
+
+    Make data compressible by the percentage you indicate. Currently this is pretty
+    barbaric and will most likely get caught by data deduplication engines rather
+    than data compression.
+
+--get-range
+
+    Use get-range size (or size range) rather than get of whole objects during read
+    stages.
+
 --mpu-size
 
     Writes are always performed in a single PUT operation regardless of size. If, however, you indicate a multi-part upload (MPU) size, writes will always be executed as multi-part uploads. Timing data will cover the MPU creation, PUT operations (in serial) and MPU completion as a single time-to-complete value - per worker process.
@@ -593,6 +599,10 @@ Command Line Arguments
 
     Indicate how many processes will spawn per driver. Defaults to 10.
 
+--prepare-procs-per-driver
+
+    Use a different processes count for the prepare stage.
+
 --save-readmap
 
     Each workload requiring a "prepare" stage includes a "readmap" stage - during which a list of bucket/key values are computed before any data is written. If you pass "--save-readmap" a file name, it will save this key list in JSON format. This is useful if the workload you're executing does not have any DELETEs in it and you do not include the "--cleanup" flag. You can then use "--use-readmap" in subsequent
@@ -605,3 +615,8 @@ Command Line Arguments
 --no-db
 
     Do not save workload timing data to a database on the controller host. This is useful if your workload is long-running and/or you have no intention of running an analysis on the database to extract detailed load statistics. The stats database can get very large and shouldn't be generated when running multi-hour loads.
+
+--no-plot
+
+    Do not draw graphical plots in the terminal during workloads. You may need to do
+    this for UI performance reasons but probably not.
