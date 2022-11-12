@@ -103,6 +103,7 @@ class perfSample:
     def __del__(self):
         pass
 
+
     def get_operations(self) -> list:
         """
         Fetch list of operations represented in this sample. Will list more
@@ -112,6 +113,7 @@ class perfSample:
         for op in self.operations:
             operation_labels.append(op)
         return operation_labels
+
 
     def merge(self, sample):
         """
@@ -135,6 +137,7 @@ class perfSample:
         # This makes percent-finished by count work
         self.global_io_count += sample.global_io_count
 
+
     def from_json(self, from_json):
         """
         Build a sample object from JSON (as formatted in dump_json())
@@ -154,6 +157,7 @@ class perfSample:
             self.time_target = from_json["time_target"]
         if "final" in from_json:
             self.final = from_json["final"]
+
 
     def dump_json(self):
         """
@@ -179,6 +183,7 @@ class perfSample:
 
         return json.dumps(serialized_sample)
 
+
     def start(self, start_time=None):
         if start_time:
             self.window_start = start_time
@@ -190,6 +195,7 @@ class perfSample:
             self.window_end = stop_time
         else:
             self.window_end = time.time()
+
 
     def add_operation_class(self, opclass: str, label=None) -> None:
         if not label:
@@ -213,6 +219,7 @@ class perfSample:
         self.add_bytes(opclass=opclass, value=bytes)
         self.add_resp_time(opclass=opclass, value=resp_t)
 
+
     def add_ios(self, opclass: str, value: int = 1) -> None:
         """Interface for adding operations to this sample"""
 
@@ -220,6 +227,7 @@ class perfSample:
             self.add_operation_class(opclass)
         self.operations[opclass]["ios"] += value
         self.global_io_count += value
+
 
     def add_bytes(self, opclass: str, value: int = 0) -> None:
         """
@@ -229,6 +237,7 @@ class perfSample:
             self.add_operation_class(opclass)
         self.operations[opclass]["bytes"] += value
 
+
     def add_failures(self, opclass: str, value: int = 0) -> None:
         """
         Interface for adding failed operations to the sample
@@ -236,6 +245,7 @@ class perfSample:
         if opclass not in self.operations:
             self.add_operation_class(opclass)
         self.operations[opclass]["failures"] += value
+
 
     def add_resp_time(self, opclass: str, value) -> None:
         """
@@ -249,6 +259,7 @@ class perfSample:
         if type(value) == list:
             self.operations[opclass]["iotime"] += value
             self.global_io_time += sum(value)
+            
 
     ##########################################################################
     # Sample fetch metrics interfaces
@@ -292,6 +303,14 @@ class perfSample:
         else:
             return statistics.mean(self.operations[opclass]["iotime"])
 
+    def get_perc(self, opclass:str, perc:float=1.0) -> float:
+        if opclass not in self.operations:
+            return None
+        if len(self.operations[opclass]["iotime"]) == 0:
+            return 0
+        else:
+            self.operations[opclass]["iotime"].sort()
+            return self.operations[opclass]["iotime"][int(len(self.operations[opclass]["iotime"])*perc)]
 
     def get_workload_ios(self):
         io_ttl = 0

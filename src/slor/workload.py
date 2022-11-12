@@ -280,6 +280,7 @@ def classic_workload(args):
 
     if args.prepare_objects:
         ttl_prepare_sz = int(parse_size(args.prepare_objects) * sizeRange(range_arg=args.object_size).avg)+1
+        args.prepare_objects = int(parse_size(args.prepare_objects))
     else:
         ttl_prepare_sz = sizeRange(range_arg=args.object_size).avg * int(args.stage_time) * int(args.op_ceiling)
         args.prepare_objects = int(args.stage_time) * int(args.op_ceiling)
@@ -316,9 +317,12 @@ def classic_workload(args):
         "prepare_objects": args.prepare_objects,
         "key_prefix": args.key_prefix,
         "no_db": args.no_db,
+        "no_plot": args.no_plot,
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,
-        "get_range": sizeRange(range_arg=args.get_range).serialize() if args.get_range else None
+        "get_range": sizeRange(range_arg=args.get_range).serialize() if args.get_range else None,
+        "benchmark_start": time.time()
+
     }
     return root_config

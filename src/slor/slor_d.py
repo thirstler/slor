@@ -137,7 +137,7 @@ class SlorDriver:
         else:
             verify_tls = config["verify"]
 
-        # AWS is dependent on the endpoint to determin region and
+        # AWS is dependent on the endpoint to determine region and
         # location constraint.
         if config["endpoint"][-13:] == "amazonaws.com":
             client = boto3.Session(
@@ -147,9 +147,12 @@ class SlorDriver:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
-                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    self.log_to_controller("WARNING: bucket present ({0})".format(bn))
                     if not config["use_existing_buckets"]:
-                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        msg = "ERROR: target buckets exists ({}), exiting for safety (--use-existing if you're sure)\n".format(bn)
+                        msg += "\nRemember: if there's a cleanup stage it will DELETE THE ENTIRE BUCKET\n" +\
+                            "CONTENTS. For the love of all that is Holy, do not benchmark with an\n" +\
+                            "existing bucket that you care about. Just don't.\n"
                         self.log_to_controller({"command": "abort", "message": msg})
                         self.reset = True
                         return
@@ -159,7 +162,7 @@ class SlorDriver:
                             Bucket=bn
                         )
                         if not "Status" in resp or resp["Status"] != "Enabled":
-                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                            msg = "WARNING: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
                                 "Please delete the bucket or enable versioning on it to proceed (exiting)"
                             self.log_to_controller({"command": "abort", "message": msg})
                             self.reset = True
@@ -189,9 +192,12 @@ class SlorDriver:
             for bn in config["bucket_list"]:
                 try:
                     client.head_bucket(Bucket=bn) # raises an exception if it fails (WTF?)
-                    self.log_to_controller("Warning: bucket present ({0})".format(bn))
+                    self.log_to_controller("WARNING: bucket present ({0})".format(bn))
                     if not config["use_existing_buckets"]:
-                        msg = "Error: I won't use existing buckets unless you make me.\n".format(bn)
+                        msg = "ERROR: target buckets exists ({}), exiting for safety (--use-existing if you're sure)\n".format(bn)
+                        msg += "\nRemember: if there's a cleanup stage it will DELETE THE ENTIRE BUCKET\n" +\
+                            "CONTENTS. For the love of all that is Holy, do not benchmark with an\n" +\
+                            "existing bucket that you care about. Just don't.\n"
                         self.log_to_controller({"command": "abort", "message": msg})
                         self.reset = True
                         return
@@ -201,8 +207,8 @@ class SlorDriver:
                             Bucket=bn
                         )
                         if not "Status" in resp or resp["Status"] != "Enabled":
-                            msg = "Warning: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
-                                "Please delete the bucket or enable versioning on it to proceed (exiting)"
+                            msg = "WARNING: bucket present ({0}) but versioning not enabled.\n".format(bn) +\
+                                "Please delete the bucket or enable versioning on it to proceed (exiting)\n"
                             self.log_to_controller({"command": "abort", "message": msg})
                             self.reset = True
                             return

@@ -2,6 +2,8 @@ from slor.shared import *
 from slor.stat_handler import statHandler
 from slor.slor_db import _slor_db
 from slor.output import *
+from slor.screen import SlorScreen
+from slor.plots import *
 import sys
 from multiprocessing.connection import Client
 from multiprocessing import Process, Pipe
@@ -9,7 +11,10 @@ import random
 import time
 import json
 import copy
+import curses
 
+class PeerCheckFailure(Exception):
+    pass
 
 class SlorControl:
     """
@@ -23,6 +28,7 @@ class SlorControl:
     readmap = None
     stat_buf = None
     stage_itr = None
+    screen = None
 
     def __init__(self, root_config):
         self.config = root_config
@@ -32,7 +38,14 @@ class SlorControl:
         self.stage_itr = {}
         self.reread = 0
 
-    def exec(self):
+
+    def exec(self, stdscr):
+        self.screen = SlorScreen(stdscr)
+        self.screen.set_title("Startup")
+        if self.config["no_plot"]:
+            self.screen.set_footer(BANNER)
+        else:
+            self.screen.set_footer("reset (h)istogram scale" )
 
         # Label the stages in the load order
         indexes = {}
@@ -45,44 +58,39 @@ class SlorControl:
             load_order.append("{}:{}".format(task, indexes[task]))
         self.config["tasks"]["loadorder"] = load_order
 
-        # Print config
-        box_text(config_text(self.config))
+        dr_status, dr_status_text = self.connect_to_driver()
+        self.screen.set_data("\n "+dr_status_text, append=True)
+        self.screen.refresh()
 
-        # Gather and show driver info
-        print("")
-        if not self.connect_to_driver():
-            self.print_message("driver(s) failed check(s), I'm out")
-            sys.exit(1)
-
-        print("")
-        top_box()
-        sys.stdout.write("\u2502 STAGES ({}); ".format(len(load_order)))
-        sys.stdout.write("\n\u2502\n")
+        time.sleep(1)
+        
+        #if not dr_status:
+        #    raise PeerCheckFailure
 
         # Get database handler going
         if not self.config["no_db"]:
             self.db_sock, db_child_sock = Pipe()
-            db_proc = Process(
+            self.db_proc = Process(
                 target=_slor_db,
                 args=(db_child_sock, self.config),
             )
-            db_proc.start()
+            self.db_proc.start()
 
         for c, stage in enumerate(load_order):
             duration = self.config["run_time"]
             stage_class = opclass_from_label(stage)
 
             if stage_class in ("read", "delete", "head", "mixed", "tag"):
-                sys.stdout.write("\r\u2502   [   shuffling readmap...   ]   ")
-                sys.stdout.flush()
+                self.screen.set_message(message="shuffling readmap...")
+                self.screen.refresh()
                 random.shuffle(self.readmap)
 
             elif stage_class == "sleep":
-                box_line(
-                    "     [     sleeping ({})...     ]   ".format(duration),
-                    newline=False,
-                )
+                self.screen.set_message(message="sleeping ({})...".format(duration))
+                self.screen.refresh()
                 time.sleep(duration)
+                self.screen.clear_message()
+                self.screen.refresh()
                 continue
 
             elif stage_class == "readmap":
@@ -100,66 +108,60 @@ class SlorControl:
             c.close()
 
         if not self.config["no_db"]:
-            box_line("stopping db handler...")
+            self.screen.set_message(message="stopping db handeler...")
+            self.screen.refresh()
             self.db_sock.send({"command": "STOP"})
-            db_proc.join()
+            self.db_proc.join()
             sys.stdout.write("done\n")
-
-        bottom_box()
 
         print("\ndone.\n")
 
     def connect_to_driver(self):
         ret_val = True
         self.config["driver_node_names"] = []
-
-        top_box()
-        print("\u2502 DRIVERS ({})".format(len(self.config["driver_list"])))
-        print("\u2502")
+        status_text = ''
+        
+        status_text += "DRIVERS ({})\n".format(len(self.config["driver_list"]))
+        
         for i, hostport in enumerate(self.config["driver_list"]):
-            sys.stdout.write(
-                "\u2502 {0}) addr: {1}:{2};".format(
+            status_text += " {0}) addr: {1}:{2};".format(
                     i + 1, hostport["host"], hostport["port"]
                 )
-            )
             try:
                 self.conn.append(Client((hostport["host"], hostport["port"])))
                 self.conn[-1].send({"command": "sysinfo"})
                 resp = self.conn[-1].recv()
-                self.check_driver_info(resp)
+                status_text += " " + self.check_driver_info(resp)
 
             except Exception as e:
-                sys.stderr.write(
-                    "  unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
+                status_text += " unexpected exception ({2}) connecting to {0}:{1}, exiting\n".format(
                         hostport["host"], hostport["port"], e
                     )
-                )
                 ret_val = False
-        bottom_box()
 
-        return ret_val
+        return ret_val, status_text
 
     def check_driver_info(self, data):
+        return_text = ''
+
         self.config["driver_node_names"].append(data["uname"].node)
 
-        sys.stdout.write(" hostname: {0};".format(data["uname"].node))
-        sys.stdout.write(" OS: {0}".format(data["uname"].system))
+        return_text += " hostname: {0};".format(data["uname"].node)
+        return_text += " OS: {0}".format(data["uname"].system)
+        
         if data["slor_version"] != SLOR_VERSION:
-            sys.stdout.write("\n")
-            print(
-                "\u2502    {}warning{}} version mismatch; controller is {} driver is {}".format(
-                    bcolors.WARNING, bcolors.ENDC, SLOR_VERSION, data["slor_version"]
+            return_text += '\n'
+            return_text += "warning version mismatch; controller is {} driver is {}".format(
+                    SLOR_VERSION, data["slor_version"]
                 )
-            )
 
         if data["sysload"][0] >= 1:
-            sys.stdout.write("\n")
-            sys.stdout.write(
-                "\u2502    {}warning{} driver 1m sysload is > 1 ({:.2f})".format(
-                    bcolors.WARNING, bcolors.ENDC, data["sysload"][0]
+            return_text += '\n'
+            sreturn_text += "warning driver 1m sysload is > 1 ({:.2f})".format(
+                    data["sysload"][0]
                 )
-            )
-        sys.stdout.write("\n")
+        return_text += '\n'
+        return return_text
 
     def poll_for_response(self, all=True):
         return_msg = []
@@ -171,7 +173,8 @@ class SlorControl:
 
     def exec_stage(self, stage, duration, supplement):
         """
-        Contains the main loop communicating with driver processes
+        Contains the main loop communicating with driver processes. Presentation and
+        control logic: two great tastes that taste great together!
         """
         stage_class = opclass_from_label(stage)
         workload_index = int(stage[stage.find(":") + 1 :])
@@ -220,15 +223,13 @@ class SlorControl:
             sys.exit(1)
 
         self.block_until_ready()
-        resp = self.poll_for_response()
-
-        self.print_message("running stage ({0})".format(stage), verbose=True)
+        self.poll_for_response()
 
         # Replace mixed profile with the proper one
         stats_config = copy.deepcopy(self.config)
         stats_config["mixed_profile"] = self.config["mixed_profiles"][workload_index]
 
-        self.stats_h = statHandler(stats_config, stage, duration)
+        self.stats_h = statHandler(stats_config, stage, duration, workload_index=workload_index)
         if self.get_readmap_len() > 0 or stage_class == "blowout":
             if stage_class == "blowout":
                 self.stats_h.set_count_target(
@@ -246,8 +247,6 @@ class SlorControl:
         """
         donestack = len(workloads)
         while True:
-
-            sys.stdout.write("\r")
             for i, wl in enumerate(workloads):
                 while self.conn[i].poll():
                     try:
@@ -259,15 +258,19 @@ class SlorControl:
                         pass
             if donestack == 0:
                 time.sleep(1)
-                self.stats_h.show(final=True)
-                self.print_message(
-                    "threads complete for this stage ({0})".format(stage), verbose=True
-                )
+                self.stats_h.show(self.screen, final=True)
+                self.screen.refresh()
                 break
+
             if self.reread > 0:
                 self.stats_h.reread = self.reread
-            self.stats_h.show()
-            time.sleep(0.01)
+
+            self.stats_h.show(self.screen)
+            self.screen.refresh()
+            
+            # Doesn't really matter how long, just long enough to keep the loop
+            # from getting wrapped tight.
+            time.sleep(0.01) 
 
         # Replace readmap with a versioned one, save it if "save_readmap"
         # is specified and shuffle
@@ -301,8 +304,8 @@ class SlorControl:
 
     def block_until_ready(self):
 
-        sys.stdout.write("\r\u2502 [waiting on worker processes...]")
-        sys.stdout.flush()
+        self.screen.set_message(" waiting on worker processes...")
+        self.screen.refresh()
         global_ready = True
         failure = False
 
@@ -320,11 +323,10 @@ class SlorControl:
             for i in range(0, len(self.config["driver_list"])):
                 self.conn[i].send({"exec": True})
 
-        sys.stdout.write("\r \u2502                                  ")
-        sys.stdout.flush()
+        #self.screen.clear_message()
+        #self.screen.refresh()
 
     def get_readmap_len(self):
-
         blksz = self.config["driver_proc"] * len(self.config["driver_list"])
         objcount = int(self.config["prepare_objects"]) + 1
 
@@ -333,7 +335,8 @@ class SlorControl:
     def print_message(self, message, verbose=False):
         if verbose == True and self.config["verbose"] != True:
             return
-        print("\u2502 " + str(message))
+        self.screen.data_win.addstr(str(message))
+        self.screen.refresh()
 
     def process_message(self, message):
         """
@@ -342,10 +345,15 @@ class SlorControl:
         if type(message) == str:
             print(message)
         elif "command" in message:
-            # what a mess
+            # what a fucking mess
             if message["command"] == "abort":
                 if "message" in message:
-                    print(message["message"])
+                    curses.endwin()
+                    sys.stderr.write("\n{}\n".format(message["message"]))
+                try:
+                    self.db_proc.kill()
+                except:
+                    pass
                 sys.exit(0)
 
         elif "type" in message and message["type"] == "readmap":
@@ -354,11 +362,12 @@ class SlorControl:
             if int(message["value"]) > self.reread:
                 self.reread = int(message["value"])
         elif "message" in message:
-            print(
-                "\u2502 message from {0}: {1}".format(
+            self.screen.data_win.addstr(
+                "\n message from {0}: {1}".format(
                     message["w_id"], message["message"]
                 )
             )
+            self.screen.refresh()
         elif "type" in message and message["type"] == "stat":
             self.stats_h.update_standing_sample(message)
             if not self.config["no_db"]:
@@ -376,6 +385,20 @@ class SlorControl:
         """
         Generate bucket/key paths needed for prepared data
         """
+        self.screen.data_win.clear()
+        self.screen.title_win.clear()
+        self.screen.title_win.addstr(BANNER + " Startup")
+        self.screen.data_win.addstr(" stages: ")
+        for n, s in enumerate(self.config["tasks"]["loadorder"]):
+            if s == "readmap:0":
+                self.screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_BOLD)
+            else: 
+                self.screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_DIM)
+            if s != self.config["tasks"]["loadorder"][-1]:
+                self.screen.data_win.addstr(" -> ")
+        self.screen.data_win.addstr("\n")
+        self.screen.data_win.noutrefresh()
+        self.screen.title_win.noutrefresh()
 
         # config items that need to be saved/restored with the readmap
         cfg_keys = (
@@ -405,13 +428,11 @@ class SlorControl:
                                 cfg, self.config["use_readmap"]
                             )
                         )
-            sys.stdout.write("\r\u2502" + " readmap restored from file:\n")
-            sys.stdout.write(cfg_out)
+            self.screen.data_win.addstr("readmap restored from file:")
+            self.screen.set_data(cfg_out, append=True) # use set_data since it might scroll
+
         else:
-            sys.stdout.write("C" + "{}{:<15}".format(" " * 26, "throughput"))
             objcount = self.get_readmap_len()
-            stat_h = statHandler(self.config, "readmap", 0)
-            fin = False
             for z in range(0, objcount):
 
                 self.readmap.append(
@@ -432,9 +453,10 @@ class SlorControl:
                         [],
                     )
                 )
-                if (z + 1) == objcount:
-                    fin = True
-                stat_h.readmap_progress(z, objcount, final=fin)
+                if z % 1000 == 0 or (z + 1) == objcount:
+                    self.screen.set_progress(percent=(z/objcount))
+                    self.screen.refresh()
+
 
     def mk_stage(self, target, stage, wid, duration, supplement):
         """
@@ -485,6 +507,8 @@ class SlorControl:
             "use_existing_buckets": self.config["use_existing_buckets"],
             "get_range": self.config["get_range"],
             "label": stage,
+            "no_plot": self.config["no_plot"],
+            "benchmark_start": self.config["benchmark_start"]
         }
 
         # Work out the readmap slices

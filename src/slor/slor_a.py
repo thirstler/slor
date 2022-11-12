@@ -1,6 +1,7 @@
 from slor.shared import *
 from slor.sample import *
 from slor.output import *
+from slor.plots import *
 import sqlite3
 import json
 import datetime
@@ -296,13 +297,26 @@ class SlorAnalysis:
                 
                 alias = stats[stage]["operations"][operation]
 
-                text += "Operation class: {}{}{}\n".format(
-                    bcolors.BOLD, operation, bcolors.ENDC
-                )
+                if stage[:5] == "mixed":
+                    t_ops = 0
+                    for o in s_config[0]["mixed_profile"]:
+                        t_ops += s_config[0]["mixed_profile"][o]
+                    ratio = "{:.1f}".format( (s_config[0]["mixed_profile"][operation]/t_ops)*100)
+                    text += "Operation class: mixed->{}{}{} {}%\n".format(
+                        bcolors.BOLD, operation, bcolors.ENDC, ratio 
+                    )
+                else:
+                    text += "Operation class: {}{}{}\n".format(
+                        bcolors.BOLD, operation, bcolors.ENDC
+                    )
+                left.append("Mixed profile config:")
+                left.append("  " + json.dumps(s_config[0]["mixed_profile"]))
+
+                
 
                 text += "\nResponse time distribution, ({:.2f}% percentile):\n\n".format(self.histogram_percentile*100)
-                text += histogram_graph(alias["histogram"], height=10, units="ms", h_tickers=6)
-                text += "\n"
+                text += histogram_graph_str(alias["histogram"], height=10, units="ms")
+                text += "\n\n"
 
                 left = []
                 left.append(
@@ -457,7 +471,7 @@ class SlorAnalysis:
             stage_range = self.get_stage_range(stage)
             series = self.get_series(stage, stage_range[0], stage_range[1])
             stats = self.get_stats(stage, stage_range[0], stage_range[1])
-            
+
             row = "ts,"
             for col in list(series.values())[0]:
                 row += col+":ios/s,"+col+":bytes/s,"+col+":resp_ms,"
@@ -466,7 +480,11 @@ class SlorAnalysis:
             for ts in series:
                 row = datetime.fromtimestamp(ts).isoformat() + ","
                 for op in series[ts]:
-                    row += str(series[ts][op]["ios/s"]) + "," + str(series[ts][op]["bytes/s"]) + "," + str(series[ts][op]["res_t"]) + ","
+                    try:
+                        rtm = str(series[ts][op]["res_t"])
+                    except:
+                        rtm = ""
+                    row += str(series[ts][op]["ios/s"]) + "," + str(series[ts][op]["bytes/s"]) + "," + rtm + ","
                 
                 sys.stdout.write(row[:-1]+"\n")
 
@@ -514,8 +532,11 @@ class SlorAnalysis:
                 dateslot = self.get_tick(sec, STATS_QUANTA)
 
                 for op in stat["value"]["operations"]:
+
+                    # Rounded the wrong way
                     if dateslot not in series_master:
                         continue
+
                     if op not in series_master[dateslot]:
                         series_master[dateslot][op] = {
                             "bytes/s": 0,
@@ -527,8 +548,11 @@ class SlorAnalysis:
                     series_master[dateslot][op]["ios/s"] += \
                             stat["value"]["operations"][op]["ios"]/(stat["value"]["window_end"]-stat["value"]["window_start"])
                     if len(stat["value"]["operations"][op]["iotime"]) > 0:
-                        series_master[dateslot][op]["res_t"] += \
-                            statistics.mean(stat["value"]["operations"][op]["iotime"])
+                        try:
+                            series_master[dateslot][op]["res_t"] += \
+                                statistics.mean(list(map(lambda n: n*1000, stat["value"]["operations"][op]["iotime"])))
+                        except TypeError:
+                            pass
                     else:
                         series_master[dateslot][op]["res_t"] = None
                         
@@ -552,7 +576,7 @@ class SlorAnalysis:
 
     def get_stats(self, stage, start, stop):
         """
-        One giant pass to avoid running the same queries over and over again.
+        One giant gob of memory.
         """
         workers = self.get_workers()
         cur = self.conn.cursor()
@@ -592,7 +616,7 @@ class SlorAnalysis:
 
         returnval = {"global": globals, "operations": {}}
         for op in master.get_operations():
-            iotimes = master.get_metric("iotime", op)
+            iotimes = master.get_metric("iotime", op) 
             returnval["operations"][op] = {
                 "ios/s": master.get_rate("ios", op),
                 "bytes/s": master.get_rate("bytes", op),
@@ -604,7 +628,7 @@ class SlorAnalysis:
                 "ttl_bytes": master.get_metric("bytes", op),
                 "resp_perc": self.get_precentiles(iotimes),
                 "resp_stddiv": statistics.stdev(iotimes),
-                "histogram": histogram_data(iotimes, self.histogram_partitions, min_val=0, trim=self.histogram_percentile),
+                "histogram": histogram_data(list(map(lambda n: n*1000, iotimes)), self.histogram_partitions, trim=self.histogram_percentile),
                 "iotimes": iotimes
             }
         cur.close()
