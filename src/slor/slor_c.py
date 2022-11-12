@@ -45,7 +45,7 @@ class SlorControl:
         if self.config["no_plot"]:
             self.screen.set_footer(BANNER)
         else:
-            self.screen.set_footer("reset (h)istogram scale, (a)bort" )
+            self.screen.set_footer("reset (h)istogram scale" )
 
         # Label the stages in the load order
         indexes = {}
@@ -79,7 +79,6 @@ class SlorControl:
         for c, stage in enumerate(load_order):
             duration = self.config["run_time"]
             stage_class = opclass_from_label(stage)
-            self.screen.set_title("Run stage {}: {}".format(c, stage))
 
             if stage_class in ("read", "delete", "head", "mixed", "tag"):
                 self.screen.set_message(message="shuffling readmap...")
@@ -225,9 +224,6 @@ class SlorControl:
 
         self.block_until_ready()
         self.poll_for_response()
-
-        self.screen.set_title(stage)
-        self.screen.refresh()
 
         # Replace mixed profile with the proper one
         stats_config = copy.deepcopy(self.config)
@@ -389,6 +385,20 @@ class SlorControl:
         """
         Generate bucket/key paths needed for prepared data
         """
+        self.screen.data_win.clear()
+        self.screen.title_win.clear()
+        self.screen.title_win.addstr(BANNER + " Startup")
+        self.screen.data_win.addstr(" stages: ")
+        for n, s in enumerate(self.config["tasks"]["loadorder"]):
+            if s == "readmap:0":
+                self.screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_BOLD)
+            else: 
+                self.screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_DIM)
+            if s != self.config["tasks"]["loadorder"][-1]:
+                self.screen.data_win.addstr(" -> ")
+        self.screen.data_win.addstr("\n")
+        self.screen.data_win.noutrefresh()
+        self.screen.title_win.noutrefresh()
 
         # config items that need to be saved/restored with the readmap
         cfg_keys = (
@@ -420,6 +430,7 @@ class SlorControl:
                         )
             self.screen.data_win.addstr("readmap restored from file:")
             self.screen.set_data(cfg_out, append=True) # use set_data since it might scroll
+
         else:
             objcount = self.get_readmap_len()
             for z in range(0, objcount):
@@ -442,7 +453,6 @@ class SlorControl:
                         [],
                     )
                 )
-
                 if z % 1000 == 0 or (z + 1) == objcount:
                     self.screen.set_progress(percent=(z/objcount))
                     self.screen.refresh()
@@ -497,7 +507,8 @@ class SlorControl:
             "use_existing_buckets": self.config["use_existing_buckets"],
             "get_range": self.config["get_range"],
             "label": stage,
-            "no_plot": self.config["no_plot"]
+            "no_plot": self.config["no_plot"],
+            "benchmark_start": self.config["benchmark_start"]
         }
 
         # Work out the readmap slices

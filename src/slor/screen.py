@@ -47,13 +47,13 @@ class SlorScreen:
 
     def init_windows(self):
         self.title_win = curses.newwin(1, curses.COLS, 0, 0)
-        self.title_win.bkgd(' ', curses.color_pair(1) | curses.A_BOLD)
+        self.title_win.bkgd(' ', curses.color_pair(1))
         self.progress_win = curses.newwin(1, curses.COLS, 1, 0)
         self.progress_win.bkgd(' ', curses.color_pair(4))
         self.data_win = curses.newwin(curses.LINES-3, curses.COLS, 2, 0)
         self.data_win.bkgd(' ', curses.color_pair(2))
         self.footer_win = curses.newwin(1, curses.COLS, curses.LINES-1, 0)
-        self.footer_win.bkgd(' ', curses.color_pair(1) | curses.A_BOLD)
+        self.footer_win.bkgd(' ', curses.color_pair(1))
         self.footer_win.nodelay(True)
 
 

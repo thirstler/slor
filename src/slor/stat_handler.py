@@ -77,7 +77,6 @@ class statHandler:
             if "processes" in self.config["tasks"]["config_supplements"][self.stage_class]:
                 self.ttl_procs = self.config["tasks"]["config_supplements"][self.stage_class]["processes"]
 
-
     def set_count_target(self, count):
         self.count_target = count
 
@@ -178,16 +177,20 @@ class statHandler:
         if (self.last_show + SHOW_STATS_RATE) >= now and final != True:
             return
 
-        screen.clear_data()
-        title_text = "Running stage: {}".format(opclass_from_label(self.stage))
-        if int(self.stage[self.stage.find(":")+1:]) > 0:
-            title_text += "({})".format(self.stage[self.stage.find(":")+1:])
-        screen.set_title(title_text)
+        screen.data_win.clear()
+        screen.title_win.clear()
+        screen.title_win.addstr(BANNER + " ")
+        screen.data_win.addstr(" stages: ")
+        for n, s in enumerate(self.config["tasks"]["loadorder"]):
+            if s == self.stage:
+                screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_BOLD)
+            else: 
+                screen.data_win.addstr("{}".format(opclass_from_label(s)), curses.A_DIM)
+            if s != self.config["tasks"]["loadorder"][-1]:
+                screen.data_win.addstr(" -> ")
+        screen.data_win.addstr("\n")
+        screen.data_win.noutrefresh()
 
-        if self.stage == "init":
-            if final:
-                screen.data_win.addstr("done.\n")
-            return
 
         stat_sample = self.mk_merged_sample()
 
@@ -206,111 +209,74 @@ class statHandler:
             if op == "read":
                 self.data_read += stat_sample.get_rate("bytes", op)
 
-        screen.data_win.addstr("\n reporting processes: {}/{}, elapsed time: {}\n".format(
-            len(self.standing_sample), self.ttl_procs, self.elapsed_time(), ))
-        screen.data_win.addstr(" data written: {}, read: {}\n".format(
-            human_readable(self.data_written), human_readable(self.data_read)))
+        screen.title_win.addstr("reporting processes: {}/{}, elapsed time: {}".format(
+            len(self.standing_sample), self.ttl_procs, self.elapsed_benchmark()))
+        screen.title_win.noutrefresh()
+
+        screen.data_win.addstr(" data written: {}, read: {}, stage time: {}\n".format(
+            human_readable(self.data_written), human_readable(self.data_read), self.elapsed_time()))
 
         cmd = screen.footer_win.getch()
         if cmd == 104:
             self.graph_y_max = 0
             self.graph_x_max = 0
-
-        # Multiple operations in the sample (mixed)
-        if len(stat_sample.operations) > 1:
-
-            # Workloads with time limit (any benchmark workload)
-            if self.stage_class in PROGRESS_BY_TIME:
-                perc = 0
-                # Nothing reported in yet set values
-                if stat_sample.sample_seq == 0:
-                    self.progress_start_time = time.time()
-                else:
-                    perc = (time.time() - self.progress_start_time) / self.duration
-
-                screen.set_progress(perc, final=final)
-
-            screen.show_bench_table(stat_sample, stat_sample.operations)
-
-            if show_plots:
-                # So much can go wrong here, best not to mess up a benchmark for it
-                try:
-                    io_time_ttl = []
-                    self.io_hist.append({"ts": time.time(), "ios": round(stat_sample.get_rate("ios"))})
-                    for op in stat_sample.operations:
-                        io_time_ttl += stat_sample.get_metric("iotime", op)
-
-                    iotime_ms = list(map(lambda n: n*1000, io_time_ttl))
-                    if self.all_checked_in:
-                        self.peak_optime =  max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
-                        self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
-                    #screen.data_win.addstr("\n "+"─"*90+"\n")
-                    
-                    hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
-                    this_max_x = max(hist_values, key=lambda x:x['val'])['val']
-                    this_max_y = max(hist_values, key=lambda x:x['count'])['count']
-                    if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
-                    if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
-                    screen.data_win.addstr("\n")
-                    io_history(self.io_hist, screen.data_win, config=self.config, stage_class=self.stage_class, ready=self.all_checked_in)
-                    screen.data_win.addstr("\n")
-                    histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
-                    screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
-                    screen.data_win.noutrefresh()
-                except Exception as e:
-                    screen.data_win.addstr("problem generating plots\n")
-
-        # Discrete operation
-        else:
             
-            if self.stage_class in PROGRESS_BY_TIME:
-                perc = 0
-                # Nothing to report,set  dummy values
-                if stat_sample.global_io_count == 0:
-                    self.progress_start_time = time.time()
-                else:
-                    perc = (time.time() - self.progress_start_time) / (
-                        self.duration + (DRIVER_REPORT_TIMER * 2)
-                    )
-                if perc > 1:
-                    perc = 1
-                screen.set_progress(perc, final=final)
+        # Workloads with time limit (any benchmark workload)
+        if self.stage_class in PROGRESS_BY_TIME:
+            perc = 0
+            # Nothing to report,set  dummy values
+            if stat_sample.global_io_count == 0:
+                self.progress_start_time = time.time()
+            else:
+                perc = (time.time() - self.progress_start_time) / (
+                    self.duration + (DRIVER_REPORT_TIMER * 2)
+                )
+            if perc > 1:
+                perc = 1
+            screen.set_progress(perc, final=final)
 
-            # Work-to-finish workloads (prepare, blowout)
-            elif self.stage_class in PROGRESS_BY_COUNT:
-                screen.set_progress(stat_sample.percent_complete(), final=final)
+        # Work-to-finish workloads (prepare, blowout)
+        elif self.stage_class in PROGRESS_BY_COUNT:
+            screen.set_progress(stat_sample.percent_complete(), final=final)
+        
+        # Unknown terminus (cleanup)
+        elif self.stage_class in UNKNOWN_PROGRESS:
+            screen.set_progress(None, final=final)
 
-            # Unknown terminus (cleanup)
-            elif self.stage_class in UNKNOWN_PROGRESS:
-                screen.set_progress(None, final=final)
 
-            screen.show_bench_table(stat_sample, stat_sample.operations)
+        screen.show_bench_table(stat_sample, stat_sample.operations)
+
+        if show_plots:
+            # So much can go wrong here, best not to mess up a benchmark for it
+            try:
+                io_time_ttl = []
+                self.io_hist.append({"ts": time.time(), "ios": round(stat_sample.get_rate("ios"))})
+                for op in stat_sample.operations:
+                    io_time_ttl += stat_sample.get_metric("iotime", op)
+
+                iotime_ms = list(map(lambda n: n*1000, io_time_ttl))
+                plot_color=7
+                if self.all_checked_in:
+                    self.peak_optime =  max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
+                    self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
+                    plot_color=6
+                #screen.data_win.addstr("\n "+"─"*90+"\n")
                 
-            if show_plots:
-                # So much can go wrong here, best not to mess up a benchmark for it
-                try:
-                    iotime = stat_sample.get_metric("iotime", self.operations[0])
-                    self.io_hist.append({"ts": time.time(), "ios": round(stat_sample.get_rate("ios"))})
-                    iotime_ms = list(map(lambda n: n*1000, iotime))
-                    if self.all_checked_in:
-                        self.peak_optime = max(iotime_ms) if max(iotime_ms) > self.peak_optime else self.peak_optime
-                        self.min_optime = min(iotime_ms) if min(iotime_ms) < self.min_optime else self.min_optime
-                    #screen.data_win.addstr("\n "+"─"*90+"\n")
-                    
-                    hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
-                    this_max_x = max(hist_values, key=lambda x:x['val'])['val']
-                    this_max_y = max(hist_values, key=lambda x:x['count'])['count']
-                    if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
-                    if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
-                    screen.data_win.addstr("\n")
-                    io_history(self.io_hist, screen.data_win, config=self.config, stage_class=self.stage_class, ready=self.all_checked_in)
-                    screen.data_win.addstr("\n")
-                    histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms")
-                    screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
-                    screen.data_win.noutrefresh()
-                except Exception as e:
-                    screen.data_win.addstr("problem generating plots\n")
-                
+                hist_values = histogram_data(iotime_ms, 72, trim=0.99, max_x=self.graph_x_max)
+                this_max_x = max(hist_values, key=lambda x:x['val'])['val']
+                this_max_y = max(hist_values, key=lambda x:x['count'])['count']
+                if this_max_x > self.graph_x_max: self.graph_x_max = this_max_x
+                if this_max_y > self.graph_y_max: self.graph_y_max = this_max_y
+                screen.data_win.addstr("\n")
+                io_history(self.io_hist, screen.data_win, config=self.config, stage_class=self.stage_class, color=plot_color)
+                screen.data_win.addstr("\n")
+                histogram_graph_curses(hist_values, screen.data_win, height=8, max_y=self.graph_y_max, units="ms", color=plot_color)
+                screen.data_win.addstr("\n"+average_plot(iotime_ms, 72, trim=0.99, min_x=self.min_optime, max_x=self.graph_x_max))
+                screen.data_win.noutrefresh()
+            except Exception as e:
+                screen.data_win.addstr("problem generating plots\n")
+            
+        screen.refresh()
 
         del stat_sample
 
@@ -403,6 +369,16 @@ class statHandler:
             "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
         )
 
+    def elapsed_benchmark(self):
+        try:
+            elapsed = time.time() - self.config["benchmark_start"]
+            hours, remainder = divmod(elapsed, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            elapsed_str = "{:02}:{:02}:{:02}".format(int(hours), int(minutes), int(seconds))
+        except:
+            elapsed_str = "unknown"
+        
+        return elapsed_str
 
     def disp_bytes_sec(self, bytes_sec):
         return "{}/s".format(human_readable(bytes_sec))

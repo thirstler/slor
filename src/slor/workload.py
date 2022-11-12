@@ -321,6 +321,8 @@ def classic_workload(args):
         "versioning": args.versioning,
         "remove_buckets": args.remove_buckets,
         "use_existing_buckets": args.use_existing_buckets,
-        "get_range": sizeRange(range_arg=args.get_range).serialize() if args.get_range else None
+        "get_range": sizeRange(range_arg=args.get_range).serialize() if args.get_range else None,
+        "benchmark_start": time.time()
+
     }
     return root_config

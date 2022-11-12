@@ -55,15 +55,12 @@ def average_plot(values:list, width:int=72, trim=1, auto_scale=True, max_x=-1, m
 
 
 
-def io_history(values:dict, curses_win, min_y=-1, max_y=-1, width=72, height=5, sample_density=1, bg=" ", config=None, stage_class=None, ready=True):
+def io_history(values:dict, curses_win, min_y=-1, max_y=-1, width=72, height=5, sample_density=1, bg=" ", config=None, stage_class=None, color=6):
     time_range = width*sample_density
     blocks = (bg, "▁","▂","▃", "▄", "▅", "▆", "▇")
     start_sec = int(values[0]["ts"])
 
-    if ready:
-        plot_color = curses.color_pair(6)
-    else:
-        plot_color = curses.color_pair(7)
+    plot_color = curses.color_pair(color)
 
     peak = max(map(lambda x:x['ios'], values))
 
@@ -120,7 +117,7 @@ def io_history(values:dict, curses_win, min_y=-1, max_y=-1, width=72, height=5, 
             elif c == end_point:
                 curses_win.addstr("│", curses.A_DIM)
             else:
-                curses_win.addstr(bg)
+                curses_win.addstr(bg, plot_color)
         curses_win.addstr('│\n')
     gr = "{:>11}│".format("seconds")
 
@@ -217,11 +214,11 @@ def histogram_graph_str(values:dict, height:int=10, max_y=0, min_y=0, label:str=
     return text
 
 
-def histogram_graph_curses(values:dict, curses_win, height:int=10, max_y=0, min_y=0, label:str=None, bg=" ", units=""):
+def histogram_graph_curses(values:dict, curses_win, height:int=10, max_y=0, min_y=0, label:str=None, bg=" ", units="", color=6):
     """
     Output to an ncurses window 
     """
-
+    plot_color = curses.color_pair(color)
     blocks = (bg, "▁","▂","▃", "▄", "▆", "▆", "▇")
 
     if max_y > 0:
@@ -254,7 +251,7 @@ def histogram_graph_curses(values:dict, curses_win, height:int=10, max_y=0, min_
             else:
                 tb = bg
             
-            curses_win.addstr(tb, curses.color_pair(6))
+            curses_win.addstr(tb, plot_color)
 
         curses_win.addstr('│\n')
 

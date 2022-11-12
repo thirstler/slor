@@ -34,27 +34,30 @@ def input_checks(args):
         keepgoing = False
         errors += "check mixed-profiles JSON string, it's busted: {}\n".format(e)
 
+    # Fuck in. Let's go
     if args.force:
         return True
 
     # Confirm before saving a readmap file that will have missing objects
     # on the storage system due to delete workload.
     if args.save_readmap and (
-        any(args.loads.find(x) for x in ("cleanup", "delete"))
-        or (args.loads.find("mixed") and args.mixed_profiles.find("delete"))
+        any(x in args.loads for x in ("cleanup", "delete"))
+        or
+        ("mixed" in args.loads and "delete" in args.mixed_profiles)
     ):
         sys.stdout.write(
             "It looks like you're saving the readmap but have delete operations in your\n" +
             "workload. If you try to use this readmap for subsequent loads there will be\n" +
             "objects missing. ")
         yn = input("You sure you mean this? (y/n): ")
-        if yn[0].upper == "N":
+        if yn[0].strip().upper() == "N":
             keepgoing = False # Error
+        else:
+            sys.stdout.write("Ooooookay, then...\n")
 
     # You specified a "blowout" stage but no cacheme-size?
     if "blowout" in args.loads.split(",") and args.cachemem_size == "0":
         warnings += "blowout specified but no data amount defined (--cachemem-size), skipping blowout.\n"
-        keepgoing = True # Warning
 
     # MPU side too small for soe reason?
     if args.mpu_size and parse_size(args.mpu_size) <= MINIMUM_MPU_CHUNK_SIZE:
@@ -285,6 +288,7 @@ def run():
     print(BANNER)
     
     if not input_checks(args):
+        sys.stdout.write("input checks failed, exiting.\n")
         sys.exit(1)
 
     if args.driver_list == "":
